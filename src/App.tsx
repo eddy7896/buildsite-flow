@@ -26,6 +26,7 @@ import MyLeave from "./pages/MyLeave";
 import Ledger from "./pages/Ledger";
 import Clients from "./pages/Clients";
 import Reports from "./pages/Reports";
+import CreateEmployee from "./pages/CreateEmployee";
 
 const queryClient = new QueryClient();
 
@@ -218,6 +219,16 @@ const App = () => (
                 <ProtectedRoute>
                   <DashboardLayout>
                     <Reports />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/create-employee" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <DashboardLayout>
+                    <CreateEmployee />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

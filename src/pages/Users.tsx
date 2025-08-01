@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Link } from "react-router-dom";
 import { Plus, Edit, Trash2 } from "lucide-react";
 
 const Users = () => {
@@ -18,9 +19,11 @@ const Users = () => {
           <h1 className="text-3xl font-bold">Users</h1>
           <p className="text-muted-foreground">Manage system users and their roles</p>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add User
+        <Button asChild>
+          <Link to="/create-employee">
+            <Plus className="mr-2 h-4 w-4" />
+            Add User
+          </Link>
         </Button>
       </div>
 
