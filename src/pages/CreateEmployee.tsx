@@ -29,7 +29,7 @@ const formSchema = z.object({
   dateOfBirth: z.date({
     required_error: "Date of birth is required",
   }),
-  socialSecurityNumber: z.string().min(9, "SSN must be at least 9 characters"),
+  panCardNumber: z.string().min(10, "PAN card number must be 10 characters").max(10, "PAN card number must be 10 characters").regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, "Invalid PAN card format (e.g., ABCDE1234F)"),
   nationality: z.string().min(2, "Nationality is required"),
   maritalStatus: z.enum(["single", "married", "divorced", "widowed"]),
   
@@ -80,7 +80,7 @@ const CreateEmployee = () => {
       email: "",
       phone: "",
       address: "",
-      socialSecurityNumber: "",
+      panCardNumber: "",
       nationality: "",
       maritalStatus: "single",
       employeeId: "",
@@ -146,7 +146,7 @@ const CreateEmployee = () => {
           first_name: values.firstName,
           last_name: values.lastName,
           date_of_birth: values.dateOfBirth.toISOString().split('T')[0],
-          social_security_number: values.socialSecurityNumber,
+          social_security_number: values.panCardNumber,
           nationality: values.nationality,
           marital_status: values.maritalStatus,
           address: values.address,
@@ -449,12 +449,12 @@ const CreateEmployee = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="socialSecurityNumber"
+                      name="panCardNumber"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Social Security Number</FormLabel>
+                          <FormLabel>PAN Card Number</FormLabel>
                           <FormControl>
-                            <Input placeholder="XXX-XX-XXXX" {...field} />
+                            <Input placeholder="ABCDE1234F" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
