@@ -13,7 +13,9 @@ import {
   Clock,
   UserCheck,
   CreditCard,
-  Receipt
+  Receipt,
+  BookOpen,
+  Building2
 } from 'lucide-react';
 import {
   Sidebar,
@@ -32,6 +34,7 @@ const navigationItems = {
   admin: [
     { title: 'Dashboard', url: '/', icon: BarChart3 },
     { title: 'Users', url: '/users', icon: Users },
+    { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
@@ -40,6 +43,7 @@ const navigationItems = {
     { title: 'Invoices', url: '/invoices', icon: FileText },
     { title: 'Payments', url: '/payments', icon: CreditCard },
     { title: 'Receipts', url: '/receipts', icon: Receipt },
+    { title: 'Ledger', url: '/ledger', icon: BookOpen },
     { title: 'Settings', url: '/settings', icon: Settings },
   ],
   hr: [
@@ -58,6 +62,7 @@ const navigationItems = {
     { title: 'Invoices', url: '/invoices', icon: FileText },
     { title: 'Payments', url: '/payments', icon: CreditCard },
     { title: 'Receipts', url: '/receipts', icon: Receipt },
+    { title: 'Ledger', url: '/ledger', icon: BookOpen },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
     { title: 'My Leave', url: '/my-leave', icon: Calendar },

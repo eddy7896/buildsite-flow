@@ -23,6 +23,8 @@ import Receipts from "./pages/Receipts";
 import MyProfile from "./pages/MyProfile";
 import MyAttendance from "./pages/MyAttendance";
 import MyLeave from "./pages/MyLeave";
+import Ledger from "./pages/Ledger";
+import Clients from "./pages/Clients";
 
 const queryClient = new QueryClient();
 
@@ -185,6 +187,26 @@ const App = () => (
                 <ProtectedRoute>
                   <DashboardLayout>
                     <MyLeave />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/ledger" 
+              element={
+                <ProtectedRoute requiredRole="finance_manager">
+                  <DashboardLayout>
+                    <Ledger />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/clients" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <DashboardLayout>
+                    <Clients />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 
