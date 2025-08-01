@@ -46,7 +46,6 @@ const navigationItems = {
     { title: 'Receipts', url: '/receipts', icon: Receipt },
     { title: 'Ledger', url: '/ledger', icon: BookOpen },
     { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'Settings', url: '/settings', icon: Settings },
   ],
   hr: [
     { title: 'Dashboard', url: '/', icon: BarChart3 },
@@ -57,7 +56,6 @@ const navigationItems = {
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
-    { title: 'Settings', url: '/settings', icon: Settings },
   ],
   finance_manager: [
     { title: 'Dashboard', url: '/', icon: BarChart3 },
@@ -70,14 +68,12 @@ const navigationItems = {
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
-    { title: 'Settings', url: '/settings', icon: Settings },
   ],
   employee: [
     { title: 'Dashboard', url: '/', icon: BarChart3 },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
-    { title: 'Settings', url: '/settings', icon: Settings },
   ],
 };
 
@@ -105,8 +101,8 @@ export function AppSidebar() {
       className={collapsed ? "w-14" : "w-60"}
       collapsible="icon"
     >
-      <SidebarContent>
-        <SidebarGroup>
+      <SidebarContent className="flex flex-col">
+        <SidebarGroup className="flex-1">
           <SidebarGroupLabel>
             <div className="flex items-center space-x-2">
               <Building className="h-5 w-5" />
@@ -130,6 +126,25 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        
+        {/* Settings at bottom */}
+        <SidebarGroup className="mt-auto">
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild>
+                  <NavLink 
+                    to="/settings" 
+                    className={({ isActive }) => getNavCls({ isActive })}
+                  >
+                    <Settings className="h-4 w-4" />
+                    {!collapsed && <span>Settings</span>}
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
