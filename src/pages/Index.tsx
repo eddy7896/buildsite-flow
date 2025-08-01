@@ -334,6 +334,65 @@ const Index = () => {
               </CardContent>
             </Card>
           )}
+
+          {/* Upcoming Deadlines Card - Always visible */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-orange-500" />
+                Upcoming Deadlines
+              </CardTitle>
+              <CardDescription>Projects and tasks due in the next 30 days</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-[268px] overflow-y-auto">
+                {assignedProjects
+                  .filter(project => {
+                    const daysLeft = getDaysUntilDeadline(project.deadline);
+                    return daysLeft <= 30 && daysLeft >= 0;
+                  })
+                  .sort((a, b) => getDaysUntilDeadline(a.deadline) - getDaysUntilDeadline(b.deadline))
+                  .map((project) => {
+                    const daysLeft = getDaysUntilDeadline(project.deadline);
+                    const urgencyColor = daysLeft <= 3 ? 'text-red-600' : daysLeft <= 7 ? 'text-orange-600' : 'text-yellow-600';
+                    const urgencyBg = daysLeft <= 3 ? 'bg-red-50 border-red-200' : daysLeft <= 7 ? 'bg-orange-50 border-orange-200' : 'bg-yellow-50 border-yellow-200';
+                    
+                    return (
+                      <div key={project.id} className={`p-3 rounded-lg border ${urgencyBg}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-sm">{project.name}</h4>
+                          <Badge variant="outline" className={`text-xs ${urgencyColor} border-current`}>
+                            {daysLeft === 0 ? 'Due Today' : daysLeft === 1 ? '1 day' : `${daysLeft} days`}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>{project.client}</span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                              <div className={`w-2 h-2 rounded-full ${getStatusColor(project.status)}`}></div>
+                              <span className="capitalize">{project.status}</span>
+                            </div>
+                            <span>{project.progress}%</span>
+                          </div>
+                        </div>
+                        <div className="mt-2">
+                          <Progress value={project.progress} className="h-1" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                {assignedProjects.filter(project => {
+                  const daysLeft = getDaysUntilDeadline(project.deadline);
+                  return daysLeft <= 30 && daysLeft >= 0;
+                }).length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Calendar className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No upcoming deadlines in the next 30 days</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Project Timeline Section */}
