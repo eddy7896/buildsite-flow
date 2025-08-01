@@ -118,8 +118,10 @@ export function AppSidebar() {
         <SidebarGroup className="flex-1">
           <SidebarGroupLabel>
             <div className="flex items-center space-x-2">
-              <Building className="h-5 w-5" />
-              {!collapsed && <span>Construction ERP</span>}
+              <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                <Building className="h-5 w-5 text-primary" />
+              </div>
+              {!collapsed && <span className="font-semibold">BuildFlow</span>}
             </div>
           </SidebarGroupLabel>
           
