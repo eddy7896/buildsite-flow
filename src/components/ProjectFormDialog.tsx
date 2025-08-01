@@ -94,16 +94,16 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-auto">
         <DialogHeader>
-          <DialogTitle>{project?.id ? 'Edit Project' : 'Create New Project'}</DialogTitle>
-          <DialogDescription>
+          <DialogTitle className="text-lg sm:text-xl">{project?.id ? 'Edit Project' : 'Create New Project'}</DialogTitle>
+          <DialogDescription className="text-sm sm:text-base">
             {project?.id ? 'Update project details below.' : 'Fill in the details to create a new project.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Project Name *</Label>
               <Input
@@ -140,7 +140,7 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="start_date">Start Date</Label>
               <Input
@@ -161,7 +161,7 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="budget">Budget (₹)</Label>
               <Input
@@ -184,7 +184,7 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="client_id">Client ID</Label>
               <Input
@@ -205,11 +205,11 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
             </div>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto">
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading} className="w-full sm:w-auto">
               {loading ? 'Saving...' : project?.id ? 'Update Project' : 'Create Project'}
             </Button>
           </DialogFooter>

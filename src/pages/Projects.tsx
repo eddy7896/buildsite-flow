@@ -22,28 +22,28 @@ const Projects = () => {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 lg:p-6">
+      <div className="flex flex-col space-y-4 sm:flex-row sm:justify-between sm:items-center sm:space-y-0 mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Projects</h1>
-          <p className="text-muted-foreground">Manage and track project progress</p>
+          <h1 className="text-2xl lg:text-3xl font-bold">Projects</h1>
+          <p className="text-sm lg:text-base text-muted-foreground">Manage and track project progress</p>
         </div>
-        <Button>
+        <Button className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           New Project
         </Button>
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-4 lg:gap-6">
         {projects.map((project) => (
           <Card key={project.id}>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle>{project.name}</CardTitle>
-                  <CardDescription>{project.description}</CardDescription>
+            <CardHeader className="pb-4">
+              <div className="flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-start sm:space-y-0">
+                <div className="flex-1">
+                  <CardTitle className="text-lg lg:text-xl">{project.name}</CardTitle>
+                  <CardDescription className="text-sm lg:text-base mt-1">{project.description}</CardDescription>
                 </div>
-                <Badge variant={getStatusColor(project.status)}>
+                <Badge variant={getStatusColor(project.status)} className="self-start">
                   {project.status}
                 </Badge>
               </div>
@@ -53,18 +53,18 @@ const Projects = () => {
                 <div>
                   <div className="flex justify-between text-sm mb-2">
                     <span>Progress</span>
-                    <span>{project.progress}%</span>
+                    <span className="font-medium">{project.progress}%</span>
                   </div>
-                  <Progress value={project.progress} className="w-full" />
+                  <Progress value={project.progress} className="w-full h-2" />
                 </div>
-                <div className="flex gap-6 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    Due: {project.deadline}
+                <div className="flex flex-col space-y-2 sm:flex-row sm:gap-6 sm:space-y-0 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 flex-shrink-0" />
+                    <span>Due: {project.deadline}</span>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Users className="h-4 w-4" />
-                    {project.team} team members
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 flex-shrink-0" />
+                    <span>{project.team} team members</span>
                   </div>
                 </div>
               </div>
