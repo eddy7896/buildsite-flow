@@ -246,17 +246,17 @@ const CreateEmployee = () => {
 
   return (
     <div className="p-6">
-      <div className="flex items-center gap-4 mb-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-3xl font-bold">Create New Employee</h1>
+          <p className="text-muted-foreground">Add a new employee to the system</p>
+        </div>
         <Button asChild variant="outline" size="sm">
           <Link to="/users">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Users
           </Link>
         </Button>
-        <div>
-          <h1 className="text-3xl font-bold">Create New Employee</h1>
-          <p className="text-muted-foreground">Add a new employee to the system</p>
-        </div>
       </div>
 
       <Form {...form}>
