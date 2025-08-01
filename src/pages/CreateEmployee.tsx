@@ -435,11 +435,30 @@ const CreateEmployee = () => {
                       control={form.control}
                       name="nationality"
                       render={({ field }) => (
-                        <FormItem>
+                        <FormItem className="flex flex-col">
                           <FormLabel>Nationality</FormLabel>
-                          <FormControl>
-                            <Input placeholder="American" {...field} />
-                          </FormControl>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select nationality" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent className="z-50 bg-popover">
+                              <SelectItem value="Indian">Indian</SelectItem>
+                              <SelectItem value="American">American</SelectItem>
+                              <SelectItem value="British">British</SelectItem>
+                              <SelectItem value="Canadian">Canadian</SelectItem>
+                              <SelectItem value="Australian">Australian</SelectItem>
+                              <SelectItem value="German">German</SelectItem>
+                              <SelectItem value="French">French</SelectItem>
+                              <SelectItem value="Japanese">Japanese</SelectItem>
+                              <SelectItem value="Chinese">Chinese</SelectItem>
+                              <SelectItem value="Brazilian">Brazilian</SelectItem>
+                              <SelectItem value="Mexican">Mexican</SelectItem>
+                              <SelectItem value="South African">South African</SelectItem>
+                              <SelectItem value="Other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
