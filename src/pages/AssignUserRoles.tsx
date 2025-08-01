@@ -38,7 +38,29 @@ const AssignUserRoles = () => {
 
   useEffect(() => {
     fetchEmployees();
+    fetchAgencySettings();
   }, []);
+
+  const fetchAgencySettings = async () => {
+    try {
+      const { data: agencyData, error } = await supabase
+        .from('agency_settings')
+        .select('domain')
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching agency settings:', error);
+        return;
+      }
+
+      if (agencyData?.domain) {
+        setEmailDomain(`@${agencyData.domain}`);
+      }
+    } catch (error) {
+      console.error('Error fetching agency settings:', error);
+    }
+  };
 
   const fetchEmployees = async () => {
     try {
@@ -302,13 +324,17 @@ const AssignUserRoles = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="emailDomain">Email Domain</Label>
+                <Label htmlFor="emailDomain">Email Domain (Auto-loaded from Agency Settings)</Label>
                 <Input
                   id="emailDomain"
                   value={emailDomain}
                   onChange={(e) => setEmailDomain(e.target.value)}
                   placeholder="@company.com"
+                  className="bg-muted/50"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Domain automatically loaded from agency settings. You can override if needed.
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
