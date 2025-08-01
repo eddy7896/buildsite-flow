@@ -146,13 +146,13 @@ const CRM = () => {
   );
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="container mx-auto p-4 lg:p-6 space-y-6">
+      <div className="flex flex-col space-y-4 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold">CRM</h1>
-          <p className="text-muted-foreground">Manage customer relationships and sales pipeline</p>
+          <h1 className="text-2xl lg:text-3xl font-bold">CRM</h1>
+          <p className="text-sm lg:text-base text-muted-foreground">Manage customer relationships and sales pipeline</p>
         </div>
-        <Button onClick={handleNewLead}>
+        <Button onClick={handleNewLead} className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
           New Lead
         </Button>
@@ -207,7 +207,7 @@ const CRM = () => {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex gap-4">
+      <div className="flex flex-col space-y-2 sm:flex-row sm:gap-4 sm:space-y-0">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
@@ -217,7 +217,7 @@ const CRM = () => {
             className="pl-10"
           />
         </div>
-        <Button variant="outline">
+        <Button variant="outline" className="w-full sm:w-auto">
           <Filter className="h-4 w-4 mr-2" />
           Filter
         </Button>
@@ -244,14 +244,14 @@ const CRM = () => {
                 filteredLeads.map((lead) => (
                   <Card key={lead.id} className="hover:shadow-md transition-shadow">
                     <CardHeader className="pb-3">
-                      <div className="flex justify-between items-start">
-                        <div>
+                      <div className="flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-start sm:space-y-0">
+                        <div className="flex-1">
                           <CardTitle className="text-lg">{lead.company_name}</CardTitle>
                           <p className="text-sm text-muted-foreground">
                             {lead.lead_number} • {lead.contact_name}
                           </p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 self-start">
                           <Badge className={getStatusColor(lead.status)}>
                             {lead.status}
                           </Badge>
@@ -283,17 +283,17 @@ const CRM = () => {
                           </div>
                         </div>
                       </div>
-                      <div className="flex justify-between items-center">
+                      <div className="flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
                         <div className="text-sm text-muted-foreground">
                           Created: {new Date(lead.created_at).toLocaleDateString()}
                         </div>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm" onClick={() => handleEditLead(lead)}>
+                        <div className="flex flex-col space-y-2 sm:flex-row sm:gap-2 sm:space-y-0">
+                          <Button variant="outline" size="sm" onClick={() => handleEditLead(lead)} className="w-full sm:w-auto">
                             <Edit className="h-4 w-4 mr-1" />
                             Edit
                           </Button>
-                          <Button variant="outline" size="sm">Add Activity</Button>
-                          <Button variant="outline" size="sm" onClick={() => handleDeleteLead(lead)}>
+                          <Button variant="outline" size="sm" className="w-full sm:w-auto">Add Activity</Button>
+                          <Button variant="outline" size="sm" onClick={() => handleDeleteLead(lead)} className="w-full sm:w-auto">
                             <Trash2 className="h-4 w-4 mr-1" />
                             Delete
                           </Button>

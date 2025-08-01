@@ -67,18 +67,18 @@ const Invoices = () => {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 lg:p-6">
+      <div className="flex flex-col space-y-4 sm:flex-row sm:justify-between sm:items-center sm:space-y-0 mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Invoices</h1>
-          <p className="text-muted-foreground">Manage client invoices and billing</p>
+          <h1 className="text-2xl lg:text-3xl font-bold">Invoices</h1>
+          <p className="text-sm lg:text-base text-muted-foreground">Manage client invoices and billing</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
+        <div className="flex flex-col space-y-2 sm:flex-row sm:gap-2 sm:space-y-0">
+          <Button variant="outline" className="w-full sm:w-auto">
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <Button>
+          <Button className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" />
             New Invoice
           </Button>
@@ -155,9 +155,9 @@ const Invoices = () => {
         <CardContent>
           <div className="space-y-4">
             {invoices.map((invoice) => (
-              <div key={invoice.id} className="flex items-center justify-between p-4 border rounded-lg">
+              <div key={invoice.id} className="flex flex-col lg:flex-row lg:items-center lg:justify-between p-4 border rounded-lg space-y-4 lg:space-y-0">
                 <div className="flex-1">
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-col space-y-2">
                     <div>
                       <h3 className="font-semibold">{invoice.id}</h3>
                       <p className="text-sm text-muted-foreground">{invoice.client}</p>
@@ -165,26 +165,28 @@ const Invoices = () => {
                     </div>
                   </div>
                 </div>
-                <div className="text-right mr-4">
-                  <p className="font-bold text-lg">₹{invoice.amount.toLocaleString()}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Due: {new Date(invoice.dueDate).toLocaleDateString()}
-                  </p>
-                  {isOverdue(invoice.dueDate, invoice.status) && (
-                    <p className="text-xs text-red-600">Overdue</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <Badge variant={getStatusColor(invoice.status)}>
-                    {invoice.status}
-                  </Badge>
-                  <div className="flex gap-1">
-                    <Button variant="outline" size="sm">
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      <Download className="h-4 w-4" />
-                    </Button>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4 lg:text-right space-y-3 sm:space-y-0">
+                  <div className="text-center sm:text-right">
+                    <p className="font-bold text-lg">₹{invoice.amount.toLocaleString()}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Due: {new Date(invoice.dueDate).toLocaleDateString()}
+                    </p>
+                    {isOverdue(invoice.dueDate, invoice.status) && (
+                      <p className="text-xs text-red-600">Overdue</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 space-y-2 sm:space-y-0">
+                    <Badge variant={getStatusColor(invoice.status)}>
+                      {invoice.status}
+                    </Badge>
+                    <div className="flex gap-1">
+                      <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
