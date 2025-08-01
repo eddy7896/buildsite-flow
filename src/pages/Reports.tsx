@@ -139,7 +139,7 @@ const Reports = () => {
                   <DollarSign className="h-8 w-8 text-green-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-muted-foreground">Revenue</p>
-                    <p className="text-2xl font-bold text-green-600">${monthlyData.revenue.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-green-600">₹{monthlyData.revenue.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">+12% from last month</p>
                   </div>
                 </div>
@@ -151,7 +151,7 @@ const Reports = () => {
                   <TrendingDown className="h-8 w-8 text-red-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-muted-foreground">Expenses</p>
-                    <p className="text-2xl font-bold text-red-600">${monthlyData.expenses.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-red-600">₹{monthlyData.expenses.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">-5% from last month</p>
                   </div>
                 </div>
@@ -163,7 +163,7 @@ const Reports = () => {
                   <TrendingUp className="h-8 w-8 text-blue-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-muted-foreground">Net Profit</p>
-                    <p className="text-2xl font-bold text-blue-600">${monthlyData.profit.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-blue-600">₹{monthlyData.profit.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">+25% from last month</p>
                   </div>
                 </div>
@@ -226,9 +226,9 @@ const Reports = () => {
                     <div key={index} className="flex justify-between items-center text-sm">
                       <span className="font-medium">{trend.month}</span>
                       <div className="flex gap-4">
-                        <span className="text-green-600">${(trend.revenue / 1000).toFixed(0)}k</span>
-                        <span className="text-red-600">${(trend.expenses / 1000).toFixed(0)}k</span>
-                        <span className="text-blue-600">${(trend.profit / 1000).toFixed(0)}k</span>
+                        <span className="text-green-600">₹{(trend.revenue / 1000).toFixed(0)}k</span>
+                        <span className="text-red-600">₹{(trend.expenses / 1000).toFixed(0)}k</span>
+                        <span className="text-blue-600">₹{(trend.profit / 1000).toFixed(0)}k</span>
                       </div>
                     </div>
                   ))}
@@ -260,7 +260,7 @@ const Reports = () => {
                   <DollarSign className="h-8 w-8 text-green-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-muted-foreground">Annual Revenue</p>
-                    <p className="text-2xl font-bold text-green-600">${yearlyData.revenue.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-green-600">₹{yearlyData.revenue.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">+18% from last year</p>
                   </div>
                 </div>
@@ -272,7 +272,7 @@ const Reports = () => {
                   <TrendingDown className="h-8 w-8 text-red-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-muted-foreground">Annual Expenses</p>
-                    <p className="text-2xl font-bold text-red-600">${yearlyData.expenses.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-red-600">₹{yearlyData.expenses.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">+8% from last year</p>
                   </div>
                 </div>
@@ -284,7 +284,7 @@ const Reports = () => {
                   <TrendingUp className="h-8 w-8 text-blue-600" />
                   <div className="ml-4">
                     <p className="text-sm font-medium text-muted-foreground">Annual Profit</p>
-                    <p className="text-2xl font-bold text-blue-600">${yearlyData.profit.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-blue-600">₹{yearlyData.profit.toLocaleString()}</p>
                     <p className="text-xs text-muted-foreground">+35% from last year</p>
                   </div>
                 </div>
@@ -347,8 +347,8 @@ const Reports = () => {
                     <div key={index} className="flex justify-between items-center text-sm">
                       <span className="font-medium">{trend.month}</span>
                       <div className="flex gap-4">
-                        <span className="text-green-600">${(trend.revenue / 1000).toFixed(0)}k</span>
-                        <span className="text-blue-600">${(trend.profit / 1000).toFixed(0)}k</span>
+                        <span className="text-green-600">₹{(trend.revenue / 1000).toFixed(0)}k</span>
+                        <span className="text-blue-600">₹{(trend.profit / 1000).toFixed(0)}k</span>
                       </div>
                     </div>
                   ))}
@@ -378,7 +378,7 @@ const Reports = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">${dept.budget.toLocaleString()}</p>
+                      <p className="font-medium">₹{dept.budget.toLocaleString()}</p>
                       <p className="text-sm text-muted-foreground">Budget</p>
                     </div>
                     <div className="text-right">
@@ -412,11 +412,11 @@ const Reports = () => {
                       <div className="grid grid-cols-3 gap-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Budget</p>
-                          <p className="font-medium">${project.budget.toLocaleString()}</p>
+                          <p className="font-medium">₹{project.budget.toLocaleString()}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Actual Cost</p>
-                          <p className="font-medium">${project.actual.toLocaleString()}</p>
+                          <p className="font-medium">₹{project.actual.toLocaleString()}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Margin</p>
