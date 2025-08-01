@@ -3,8 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Filter, Mail, Phone } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const Employees = () => {
+  const navigate = useNavigate();
+  
   // Mock data - replace with actual API calls
   const employees = [
     { id: 1, name: "John Doe", email: "john@company.com", phone: "+1-555-0101", department: "Engineering", position: "Senior Developer", status: "active", hireDate: "2023-01-15" },
@@ -29,7 +32,7 @@ const Employees = () => {
           <h1 className="text-3xl font-bold">Employees</h1>
           <p className="text-muted-foreground">Manage employee information and records</p>
         </div>
-        <Button>
+        <Button onClick={() => navigate('/create-employee')}>
           <Plus className="mr-2 h-4 w-4" />
           Add Employee
         </Button>
