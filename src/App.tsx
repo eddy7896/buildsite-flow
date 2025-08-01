@@ -10,6 +10,19 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import Users from "./pages/Users";
+import Projects from "./pages/Projects";
+import Settings from "./pages/Settings";
+import Employees from "./pages/Employees";
+import Attendance from "./pages/Attendance";
+import LeaveRequests from "./pages/LeaveRequests";
+import Payroll from "./pages/Payroll";
+import Invoices from "./pages/Invoices";
+import Payments from "./pages/Payments";
+import Receipts from "./pages/Receipts";
+import MyProfile from "./pages/MyProfile";
+import MyAttendance from "./pages/MyAttendance";
+import MyLeave from "./pages/MyLeave";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +55,136 @@ const App = () => (
                 <ProtectedRoute>
                   <DashboardLayout>
                     <Index />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/users" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <DashboardLayout>
+                    <Users />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/projects" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <DashboardLayout>
+                    <Projects />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/settings" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <Settings />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/employees" 
+              element={
+                <ProtectedRoute requiredRole="hr">
+                  <DashboardLayout>
+                    <Employees />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/attendance" 
+              element={
+                <ProtectedRoute requiredRole="hr">
+                  <DashboardLayout>
+                    <Attendance />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/leave-requests" 
+              element={
+                <ProtectedRoute requiredRole="hr">
+                  <DashboardLayout>
+                    <LeaveRequests />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/payroll" 
+              element={
+                <ProtectedRoute requiredRole="finance_manager">
+                  <DashboardLayout>
+                    <Payroll />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/invoices" 
+              element={
+                <ProtectedRoute requiredRole="finance_manager">
+                  <DashboardLayout>
+                    <Invoices />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/payments" 
+              element={
+                <ProtectedRoute requiredRole="finance_manager">
+                  <DashboardLayout>
+                    <Payments />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/receipts" 
+              element={
+                <ProtectedRoute requiredRole="finance_manager">
+                  <DashboardLayout>
+                    <Receipts />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/my-profile" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <MyProfile />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/my-attendance" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <MyAttendance />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/my-leave" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <MyLeave />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 
