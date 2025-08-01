@@ -2,6 +2,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Link } from 'react-router-dom';
 import { LogOut, User, Building, Users, Calculator, DollarSign } from 'lucide-react';
 
 const Index = () => {
@@ -168,55 +169,119 @@ const Index = () => {
               <CardDescription>Common tasks for your role</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">{/* Changed from grid-cols-2 to accommodate 4 buttons per role */}
                 {userRole === 'admin' && (
                   <>
-                    <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                      <Users className="h-6 w-6" />
-                      <span className="text-sm">Manage Users</span>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/users">
+                        <Users className="h-6 w-6" />
+                        <span className="text-sm">Manage Users</span>
+                      </Link>
                     </Button>
-                    <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                      <Building className="h-6 w-6" />
-                      <span className="text-sm">View Projects</span>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/projects">
+                        <Building className="h-6 w-6" />
+                        <span className="text-sm">View Projects</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/clients">
+                        <Building className="h-6 w-6" />
+                        <span className="text-sm">Manage Clients</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/reports">
+                        <DollarSign className="h-6 w-6" />
+                        <span className="text-sm">View Reports</span>
+                      </Link>
                     </Button>
                   </>
                 )}
                 
                 {userRole === 'hr' && (
                   <>
-                    <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                      <Users className="h-6 w-6" />
-                      <span className="text-sm">Employee Records</span>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/employees">
+                        <Users className="h-6 w-6" />
+                        <span className="text-sm">Employee Records</span>
+                      </Link>
                     </Button>
-                    <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                      <Calculator className="h-6 w-6" />
-                      <span className="text-sm">Process Payroll</span>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/payroll">
+                        <Calculator className="h-6 w-6" />
+                        <span className="text-sm">Process Payroll</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/attendance">
+                        <Users className="h-6 w-6" />
+                        <span className="text-sm">Track Attendance</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/leave-requests">
+                        <Calculator className="h-6 w-6" />
+                        <span className="text-sm">Leave Requests</span>
+                      </Link>
                     </Button>
                   </>
                 )}
 
                 {userRole === 'finance_manager' && (
                   <>
-                    <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                      <DollarSign className="h-6 w-6" />
-                      <span className="text-sm">Create Invoice</span>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/invoices">
+                        <DollarSign className="h-6 w-6" />
+                        <span className="text-sm">Create Invoice</span>
+                      </Link>
                     </Button>
-                    <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                      <Calculator className="h-6 w-6" />
-                      <span className="text-sm">View Ledger</span>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/ledger">
+                        <Calculator className="h-6 w-6" />
+                        <span className="text-sm">View Ledger</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/payments">
+                        <DollarSign className="h-6 w-6" />
+                        <span className="text-sm">Track Payments</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/reports">
+                        <Calculator className="h-6 w-6" />
+                        <span className="text-sm">View Reports</span>
+                      </Link>
                     </Button>
                   </>
                 )}
 
                 {userRole === 'employee' && (
                   <>
-                    <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                      <Building className="h-6 w-6" />
-                      <span className="text-sm">My Projects</span>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/my-profile">
+                        <User className="h-6 w-6" />
+                        <span className="text-sm">My Profile</span>
+                      </Link>
                     </Button>
-                    <Button variant="outline" className="h-20 flex flex-col space-y-2">
-                      <User className="h-6 w-6" />
-                      <span className="text-sm">Attendance</span>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/my-attendance">
+                        <Building className="h-6 w-6" />
+                        <span className="text-sm">My Attendance</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/my-leave">
+                        <User className="h-6 w-6" />
+                        <span className="text-sm">My Leave</span>
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                      <Link to="/settings">
+                        <Calculator className="h-6 w-6" />
+                        <span className="text-sm">Settings</span>
+                      </Link>
                     </Button>
                   </>
                 )}
