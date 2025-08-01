@@ -119,6 +119,15 @@ export function AppSidebar() {
       side={isMobile ? "left" : "left"}
     >
       <SidebarContent className="flex flex-col">
+        {/* Logo placeholder when collapsed */}
+        {collapsed && !isMobile && (
+          <div className="p-3 border-b border-sidebar-border">
+            <div className="h-10 w-10 bg-primary/10 rounded-lg flex items-center justify-center mx-auto">
+              <Building className="h-6 w-6 text-primary" />
+            </div>
+          </div>
+        )}
+        
         <SidebarGroup className="flex-1 mt-6">
           <SidebarGroupLabel>
             <div className="flex items-center space-x-3">
