@@ -125,7 +125,7 @@ export function AppSidebar() {
             </div>
           </SidebarGroupLabel>
           
-          <SidebarGroupContent>
+          <SidebarGroupContent className="mt-8">
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
