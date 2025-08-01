@@ -27,6 +27,7 @@ import Ledger from "./pages/Ledger";
 import Clients from "./pages/Clients";
 import Reports from "./pages/Reports";
 import CreateEmployee from "./pages/CreateEmployee";
+import AssignUserRoles from "./pages/AssignUserRoles";
 
 const queryClient = new QueryClient();
 
@@ -229,6 +230,16 @@ const App = () => (
                 <ProtectedRoute requiredRole="admin">
                   <DashboardLayout>
                     <CreateEmployee />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/assign-user-roles" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <DashboardLayout>
+                    <AssignUserRoles />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

@@ -20,7 +20,7 @@ const Users = () => {
           <p className="text-muted-foreground">Manage system users and their roles</p>
         </div>
         <Button asChild>
-          <Link to="/create-employee">
+          <Link to="/assign-user-roles">
             <Plus className="mr-2 h-4 w-4" />
             Add User
           </Link>
