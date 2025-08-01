@@ -30,6 +30,7 @@ export const AgencyHeader = () => {
       }
 
       if (data) {
+        console.log('Agency data fetched:', data);
         setAgencyInfo({
           agency_name: data.agency_name,
           logo_url: data.logo_url
