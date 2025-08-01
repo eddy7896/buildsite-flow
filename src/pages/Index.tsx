@@ -210,7 +210,7 @@ const Index = () => {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">$125,000</div>
+              <div className="text-2xl font-bold">₹125,000</div>
               <p className="text-xs text-muted-foreground">+8% from last month</p>
             </CardContent>
           </Card>
@@ -222,7 +222,7 @@ const Index = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">7</div>
-              <p className="text-xs text-muted-foreground">$24,500 total</p>
+              <p className="text-xs text-muted-foreground">₹24,500 total</p>
             </CardContent>
           </Card>
         </div>
@@ -241,7 +241,7 @@ const Index = () => {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
                     <YAxis />
-                    <Tooltip formatter={(value) => [`$${value.toLocaleString()}`, '']} />
+                    <Tooltip formatter={(value) => [`₹${value.toLocaleString()}`, '']} />
                     <Area type="monotone" dataKey="revenue" stackId="1" stroke="#22c55e" fill="#22c55e" fillOpacity={0.6} />
                     <Area type="monotone" dataKey="expenses" stackId="1" stroke="#ef4444" fill="#ef4444" fillOpacity={0.6} />
                   </AreaChart>
