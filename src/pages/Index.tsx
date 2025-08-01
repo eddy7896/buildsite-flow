@@ -43,45 +43,39 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="bg-background">
       {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Building className="h-8 w-8 text-primary" />
-              <div>
-                <h1 className="text-2xl font-bold">Construction ERP</h1>
-                <p className="text-sm text-muted-foreground">Project Management System</p>
+      <div className="border-b bg-card px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <div>
+              <h1 className="text-2xl font-bold">Dashboard</h1>
+              <p className="text-sm text-muted-foreground">Welcome back, {profile?.full_name || 'User'}</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            <div className="text-right">
+              <p className="font-medium">{profile?.full_name || user?.email}</p>
+              <div className="flex items-center justify-end space-x-2">
+                {getRoleIcon(userRole || 'employee')}
+                <Badge variant="secondary">
+                  {getRoleDisplay(userRole || 'employee')}
+                </Badge>
               </div>
             </div>
             
-            <div className="flex items-center space-x-4">
-              <div className="text-right">
-                <p className="font-medium">{profile?.full_name || user?.email}</p>
-                <div className="flex items-center justify-end space-x-2">
-                  {getRoleIcon(userRole || 'employee')}
-                  <Badge variant="secondary">
-                    {getRoleDisplay(userRole || 'employee')}
-                  </Badge>
-                </div>
-              </div>
-              
-              <Button variant="outline" size="sm" onClick={signOut}>
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </div>
+            <Button variant="outline" size="sm" onClick={signOut}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="p-6">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2">
-            Welcome, {profile?.full_name || 'User'}!
-          </h2>
           <p className="text-muted-foreground">
             {getDashboardMessage(userRole || 'employee')}
           </p>
