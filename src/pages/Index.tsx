@@ -415,17 +415,17 @@ const Index = () => {
                 {assignedProjects.map((project) => {
                   const daysLeft = getDaysUntilDeadline(project.deadline);
                   return (
-                    <div key={project.id} className="border rounded-lg p-4">
-                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between mb-3 space-y-3 lg:space-y-0">
-                        <div className="flex-1">
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                    <div key={project.id} className="border rounded-lg p-3 lg:p-4">
+                      <div className="flex flex-col space-y-3 mb-4">
+                        <div className="flex flex-col space-y-2">
+                          <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                             <h3 className="font-semibold text-base lg:text-lg">{project.name}</h3>
                             <div className="flex items-center gap-2">
                               <Badge 
                                 variant="secondary" 
                                 className={`text-xs ${getPriorityColor(project.priority)}`}
                               >
-                                {project.priority} priority
+                                {project.priority}
                               </Badge>
                               <div className="flex items-center gap-1">
                                 <div className={`w-2 h-2 rounded-full ${getStatusColor(project.status)}`}></div>
@@ -433,54 +433,73 @@ const Index = () => {
                               </div>
                             </div>
                           </div>
-                          <p className="text-sm text-muted-foreground mb-2">Client: {project.client}</p>
-                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-muted-foreground mb-3">
-                            <div className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              <span>Due: {new Date(project.deadline).toLocaleDateString()}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              <span className={daysLeft < 7 ? 'text-red-600' : daysLeft < 14 ? 'text-yellow-600' : 'text-green-600'}>
-                                {daysLeft > 0 ? `${daysLeft} days left` : `${Math.abs(daysLeft)} days overdue`}
-                              </span>
-                              {daysLeft < 7 && daysLeft > 0 && <AlertCircle className="h-3 w-3 text-red-600" />}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Users className="h-3 w-3" />
-                              <span>{project.team.length} team members</span>
+                          <p className="text-sm text-muted-foreground">Client: {project.client}</p>
+                        </div>
+                        
+                        {/* Progress Section */}
+                        <div className="bg-muted/30 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium">Progress</span>
+                            <span className="text-lg font-bold text-primary">{project.progress}%</span>
+                          </div>
+                          <Progress value={project.progress} className="w-full h-2" />
+                        </div>
+                        
+                        {/* Project Details Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                          <div className="flex items-center gap-2 p-2 bg-muted/30 rounded">
+                            <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            <div>
+                              <p className="font-medium">Due Date</p>
+                              <p className="text-muted-foreground">{new Date(project.deadline).toLocaleDateString()}</p>
                             </div>
                           </div>
-                        </div>
-                        <div className="flex lg:flex-col lg:text-right items-center lg:items-end gap-3 lg:gap-1">
-                          <div className="text-xl lg:text-2xl font-bold">{project.progress}%</div>
-                          <Progress value={project.progress} className="w-24 lg:w-32 h-2" />
+                          <div className="flex items-center gap-2 p-2 bg-muted/30 rounded">
+                            <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            <div>
+                              <p className="font-medium">Time Left</p>
+                              <p className={`${daysLeft < 7 ? 'text-red-600' : daysLeft < 14 ? 'text-yellow-600' : 'text-green-600'}`}>
+                                {daysLeft > 0 ? `${daysLeft} days` : `${Math.abs(daysLeft)} overdue`}
+                                {daysLeft < 7 && daysLeft > 0 && <AlertCircle className="inline h-3 w-3 ml-1" />}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 p-2 bg-muted/30 rounded">
+                            <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            <div>
+                              <p className="font-medium">Team</p>
+                              <p className="text-muted-foreground">{project.team.length} members</p>
+                            </div>
+                          </div>
                         </div>
                       </div>
                       
-                      <div className="border-t pt-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-muted-foreground">Team:</span>
-                            <div className="flex gap-1">
-                              {project.team.slice(0, 3).map((member, index) => (
-                                <div key={index} className="w-6 h-6 bg-primary/10 rounded-full flex items-center justify-center text-xs font-medium">
-                                  {member.charAt(0)}
-                                </div>
-                              ))}
-                              {project.team.length > 3 && (
-                                <div className="w-6 h-6 bg-muted rounded-full flex items-center justify-center text-xs">
-                                  +{project.team.length - 3}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="outline" size="sm">View Details</Button>
-                            {userRole !== 'employee' && (
-                              <Button variant="outline" size="sm">Edit</Button>
+                      {/* Team Members & Actions */}
+                      <div className="border-t pt-3 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">Team:</span>
+                          <div className="flex gap-1">
+                            {project.team.slice(0, 4).map((member, index) => (
+                              <div key={index} className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center text-xs font-medium">
+                                {member.charAt(0)}
+                              </div>
+                            ))}
+                            {project.team.length > 4 && (
+                              <div className="w-7 h-7 bg-muted rounded-full flex items-center justify-center text-xs">
+                                +{project.team.length - 4}
+                              </div>
                             )}
                           </div>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                            View Details
+                          </Button>
+                          {userRole !== 'employee' && (
+                            <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                              Edit Project
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
