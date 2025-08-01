@@ -33,6 +33,7 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const navigationItems = {
   admin: [
@@ -95,6 +96,7 @@ export function AppSidebar() {
   const { userRole } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
+  const isMobile = useIsMobile();
 
   const items = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.employee;
   const collapsed = state === 'collapsed';
@@ -111,9 +113,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar
-      className={collapsed ? "w-14" : "w-60"}
-      collapsible="icon"
-      variant="sidebar"
+      className={isMobile ? "w-full" : collapsed ? "w-14" : "w-60"}
+      collapsible={isMobile ? "offcanvas" : "icon"}
+      variant={isMobile ? "floating" : "sidebar"}
+      side={isMobile ? "left" : "left"}
     >
       <SidebarContent className="flex flex-col">
         <SidebarGroup className="flex-1 mt-6">
@@ -122,7 +125,7 @@ export function AppSidebar() {
               <div className="h-12 w-12 bg-primary/10 rounded-lg flex items-center justify-center">
                 <Building className="h-8 w-8 text-primary" />
               </div>
-              {!collapsed && <span className="text-xl font-bold">BuildFlow</span>}
+              {(!collapsed || isMobile) && <span className="text-xl font-bold">BuildFlow</span>}
             </div>
           </SidebarGroupLabel>
           
@@ -137,7 +140,7 @@ export function AppSidebar() {
                       className={({ isActive }) => getNavCls({ isActive })}
                     >
                       <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
+                      {(!collapsed || isMobile) && <span>{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -155,10 +158,10 @@ export function AppSidebar() {
                   <NavLink 
                     to="/settings" 
                     className={({ isActive }) => getNavCls({ isActive })}
-                  >
-                    <Settings className="h-4 w-4" />
-                    {!collapsed && <span>Settings</span>}
-                  </NavLink>
+                    >
+                      <Settings className="h-4 w-4" />
+                      {(!collapsed || isMobile) && <span>Settings</span>}
+                    </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
