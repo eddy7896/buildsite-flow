@@ -8,46 +8,39 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
-interface Job {
+interface Project {
   id?: string;
-  job_number?: string;
-  title: string;
+  name: string;
   description: string;
-  client_id: string;
-  category_id: string;
   status: string;
   start_date: string;
   end_date: string;
-  estimated_hours: number;
-  estimated_cost: number;
   budget: number;
-  profit_margin: number;
-  assigned_to: string;
+  client_id?: string;
+  assigned_team?: string;
+  progress: number;
 }
 
-interface JobFormDialogProps {
+interface ProjectFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  job?: Job | null;
-  onJobSaved: () => void;
+  project?: Project | null;
+  onProjectSaved: () => void;
 }
 
-const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJobSaved }) => {
+const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, project, onProjectSaved }) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<Job>({
-    title: job?.title || '',
-    description: job?.description || '',
-    client_id: job?.client_id || '',
-    category_id: job?.category_id || '',
-    status: job?.status || 'planning',
-    start_date: job?.start_date || '',
-    end_date: job?.end_date || '',
-    estimated_hours: job?.estimated_hours || 0,
-    estimated_cost: job?.estimated_cost || 0,
-    budget: job?.budget || 0,
-    profit_margin: job?.profit_margin || 0,
-    assigned_to: job?.assigned_to || '',
+  const [formData, setFormData] = useState<Project>({
+    name: project?.name || '',
+    description: project?.description || '',
+    status: project?.status || 'planning',
+    start_date: project?.start_date || '',
+    end_date: project?.end_date || '',
+    budget: project?.budget || 0,
+    client_id: project?.client_id || '',
+    assigned_team: project?.assigned_team || '',
+    progress: project?.progress || 0,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,49 +48,43 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
     setLoading(true);
 
     try {
-      // Clean up empty string values for UUID fields
       const cleanedData = {
         ...formData,
         client_id: formData.client_id || null,
-        category_id: formData.category_id || null,
-        assigned_to: formData.assigned_to || null,
       };
 
-      if (job?.id) {
-        // Update existing job
+      if (project?.id) {
         const { error } = await supabase
-          .from('jobs')
+          .from('projects')
           .update(cleanedData)
-          .eq('id', job.id);
+          .eq('id', project.id);
 
         if (error) throw error;
 
         toast({
           title: 'Success',
-          description: 'Job updated successfully',
+          description: 'Project updated successfully',
         });
       } else {
-        // Create new job
-        const jobNumber = `J-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
         const { error } = await supabase
-          .from('jobs')
-          .insert([{ ...cleanedData, job_number: jobNumber }]);
+          .from('projects')
+          .insert([cleanedData]);
 
         if (error) throw error;
 
         toast({
           title: 'Success',
-          description: 'Job created successfully',
+          description: 'Project created successfully',
         });
       }
 
-      onJobSaved();
+      onProjectSaved();
       onClose();
     } catch (error) {
-      console.error('Error saving job:', error);
+      console.error('Error saving project:', error);
       toast({
         title: 'Error',
-        description: 'Failed to save job',
+        description: 'Failed to save project',
         variant: 'destructive',
       });
     } finally {
@@ -109,20 +96,20 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{job?.id ? 'Edit Job' : 'Create New Job'}</DialogTitle>
+          <DialogTitle>{project?.id ? 'Edit Project' : 'Create New Project'}</DialogTitle>
           <DialogDescription>
-            {job?.id ? 'Update job details below.' : 'Fill in the details to create a new job.'}
+            {project?.id ? 'Update project details below.' : 'Fill in the details to create a new project.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="title">Job Title *</Label>
+              <Label htmlFor="name">Project Name *</Label>
               <Input
-                id="title"
-                value={formData.title}
-                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 required
               />
             </div>
@@ -134,8 +121,9 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="planning">Planning</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="in-progress">In Progress</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="on-hold">On Hold</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
@@ -175,27 +163,6 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="estimated_hours">Estimated Hours</Label>
-              <Input
-                id="estimated_hours"
-                type="number"
-                value={formData.estimated_hours}
-                onChange={(e) => setFormData(prev => ({ ...prev, estimated_hours: Number(e.target.value) }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="estimated_cost">Estimated Cost (₹)</Label>
-              <Input
-                id="estimated_cost"
-                type="number"
-                value={formData.estimated_cost}
-                onChange={(e) => setFormData(prev => ({ ...prev, estimated_cost: Number(e.target.value) }))}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
               <Label htmlFor="budget">Budget (₹)</Label>
               <Input
                 id="budget"
@@ -205,12 +172,35 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="profit_margin">Profit Margin (%)</Label>
+              <Label htmlFor="progress">Progress (%)</Label>
               <Input
-                id="profit_margin"
+                id="progress"
                 type="number"
-                value={formData.profit_margin}
-                onChange={(e) => setFormData(prev => ({ ...prev, profit_margin: Number(e.target.value) }))}
+                min="0"
+                max="100"
+                value={formData.progress}
+                onChange={(e) => setFormData(prev => ({ ...prev, progress: Number(e.target.value) }))}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="client_id">Client ID</Label>
+              <Input
+                id="client_id"
+                value={formData.client_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, client_id: e.target.value }))}
+                placeholder="Enter client ID"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="assigned_team">Assigned Team</Label>
+              <Input
+                id="assigned_team"
+                value={formData.assigned_team}
+                onChange={(e) => setFormData(prev => ({ ...prev, assigned_team: e.target.value }))}
+                placeholder="Team members"
               />
             </div>
           </div>
@@ -220,7 +210,7 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Saving...' : job?.id ? 'Update Job' : 'Create Job'}
+              {loading ? 'Saving...' : project?.id ? 'Update Project' : 'Create Project'}
             </Button>
           </DialogFooter>
         </form>
@@ -229,4 +219,4 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
   );
 };
 
-export default JobFormDialog;
+export default ProjectFormDialog;

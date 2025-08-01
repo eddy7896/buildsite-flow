@@ -8,46 +8,42 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
-interface Job {
+interface Invoice {
   id?: string;
-  job_number?: string;
-  title: string;
-  description: string;
+  invoice_number?: string;
   client_id: string;
-  category_id: string;
+  title: string;
+  description?: string;
   status: string;
-  start_date: string;
-  end_date: string;
-  estimated_hours: number;
-  estimated_cost: number;
-  budget: number;
-  profit_margin: number;
-  assigned_to: string;
+  issue_date: string;
+  due_date: string;
+  subtotal: number;
+  tax_rate: number;
+  discount?: number;
+  notes?: string;
 }
 
-interface JobFormDialogProps {
+interface InvoiceFormDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  job?: Job | null;
-  onJobSaved: () => void;
+  invoice?: Invoice | null;
+  onInvoiceSaved: () => void;
 }
 
-const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJobSaved }) => {
+const InvoiceFormDialog: React.FC<InvoiceFormDialogProps> = ({ isOpen, onClose, invoice, onInvoiceSaved }) => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<Job>({
-    title: job?.title || '',
-    description: job?.description || '',
-    client_id: job?.client_id || '',
-    category_id: job?.category_id || '',
-    status: job?.status || 'planning',
-    start_date: job?.start_date || '',
-    end_date: job?.end_date || '',
-    estimated_hours: job?.estimated_hours || 0,
-    estimated_cost: job?.estimated_cost || 0,
-    budget: job?.budget || 0,
-    profit_margin: job?.profit_margin || 0,
-    assigned_to: job?.assigned_to || '',
+  const [formData, setFormData] = useState<Invoice>({
+    client_id: invoice?.client_id || '',
+    title: invoice?.title || '',
+    description: invoice?.description || '',
+    status: invoice?.status || 'draft',
+    issue_date: invoice?.issue_date || new Date().toISOString().split('T')[0],
+    due_date: invoice?.due_date || '',
+    subtotal: invoice?.subtotal || 0,
+    tax_rate: invoice?.tax_rate || 18,
+    discount: invoice?.discount || 0,
+    notes: invoice?.notes || '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,49 +51,44 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
     setLoading(true);
 
     try {
-      // Clean up empty string values for UUID fields
       const cleanedData = {
         ...formData,
         client_id: formData.client_id || null,
-        category_id: formData.category_id || null,
-        assigned_to: formData.assigned_to || null,
       };
 
-      if (job?.id) {
-        // Update existing job
+      if (invoice?.id) {
         const { error } = await supabase
-          .from('jobs')
+          .from('invoices')
           .update(cleanedData)
-          .eq('id', job.id);
+          .eq('id', invoice.id);
 
         if (error) throw error;
 
         toast({
           title: 'Success',
-          description: 'Job updated successfully',
+          description: 'Invoice updated successfully',
         });
       } else {
-        // Create new job
-        const jobNumber = `J-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
+        const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
         const { error } = await supabase
-          .from('jobs')
-          .insert([{ ...cleanedData, job_number: jobNumber }]);
+          .from('invoices')
+          .insert([{ ...cleanedData, invoice_number: invoiceNumber }]);
 
         if (error) throw error;
 
         toast({
           title: 'Success',
-          description: 'Job created successfully',
+          description: 'Invoice created successfully',
         });
       }
 
-      onJobSaved();
+      onInvoiceSaved();
       onClose();
     } catch (error) {
-      console.error('Error saving job:', error);
+      console.error('Error saving invoice:', error);
       toast({
         title: 'Error',
-        description: 'Failed to save job',
+        description: 'Failed to save invoice',
         variant: 'destructive',
       });
     } finally {
@@ -109,16 +100,16 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{job?.id ? 'Edit Job' : 'Create New Job'}</DialogTitle>
+          <DialogTitle>{invoice?.id ? 'Edit Invoice' : 'Create New Invoice'}</DialogTitle>
           <DialogDescription>
-            {job?.id ? 'Update job details below.' : 'Fill in the details to create a new job.'}
+            {invoice?.id ? 'Update invoice details below.' : 'Fill in the details to create a new invoice.'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="title">Job Title *</Label>
+              <Label htmlFor="title">Invoice Title *</Label>
               <Input
                 id="title"
                 value={formData.title}
@@ -133,9 +124,10 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="planning">Planning</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="sent">Sent</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="overdue">Overdue</SelectItem>
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
@@ -154,65 +146,63 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="start_date">Start Date</Label>
+              <Label htmlFor="client_id">Client ID</Label>
               <Input
-                id="start_date"
-                type="date"
-                value={formData.start_date}
-                onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
+                id="client_id"
+                value={formData.client_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, client_id: e.target.value }))}
+                placeholder="Enter client ID"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="end_date">End Date</Label>
+              <Label htmlFor="due_date">Due Date</Label>
               <Input
-                id="end_date"
+                id="due_date"
                 type="date"
-                value={formData.end_date}
-                onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
+                value={formData.due_date}
+                onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="estimated_hours">Estimated Hours</Label>
+              <Label htmlFor="subtotal">Subtotal (₹)</Label>
               <Input
-                id="estimated_hours"
+                id="subtotal"
                 type="number"
-                value={formData.estimated_hours}
-                onChange={(e) => setFormData(prev => ({ ...prev, estimated_hours: Number(e.target.value) }))}
+                value={formData.subtotal}
+                onChange={(e) => setFormData(prev => ({ ...prev, subtotal: Number(e.target.value) }))}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="estimated_cost">Estimated Cost (₹)</Label>
+              <Label htmlFor="tax_rate">Tax Rate (%)</Label>
               <Input
-                id="estimated_cost"
+                id="tax_rate"
                 type="number"
-                value={formData.estimated_cost}
-                onChange={(e) => setFormData(prev => ({ ...prev, estimated_cost: Number(e.target.value) }))}
+                value={formData.tax_rate}
+                onChange={(e) => setFormData(prev => ({ ...prev, tax_rate: Number(e.target.value) }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="discount">Discount (₹)</Label>
+              <Input
+                id="discount"
+                type="number"
+                value={formData.discount}
+                onChange={(e) => setFormData(prev => ({ ...prev, discount: Number(e.target.value) }))}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="budget">Budget (₹)</Label>
-              <Input
-                id="budget"
-                type="number"
-                value={formData.budget}
-                onChange={(e) => setFormData(prev => ({ ...prev, budget: Number(e.target.value) }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="profit_margin">Profit Margin (%)</Label>
-              <Input
-                id="profit_margin"
-                type="number"
-                value={formData.profit_margin}
-                onChange={(e) => setFormData(prev => ({ ...prev, profit_margin: Number(e.target.value) }))}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea
+              id="notes"
+              value={formData.notes}
+              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+              rows={2}
+            />
           </div>
 
           <DialogFooter>
@@ -220,7 +210,7 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Saving...' : job?.id ? 'Update Job' : 'Create Job'}
+              {loading ? 'Saving...' : invoice?.id ? 'Update Invoice' : 'Create Invoice'}
             </Button>
           </DialogFooter>
         </form>
@@ -229,4 +219,4 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
   );
 };
 
-export default JobFormDialog;
+export default InvoiceFormDialog;
