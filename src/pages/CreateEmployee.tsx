@@ -16,6 +16,8 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, CalendarIcon, Save, User, Mail, Phone, Building, MapPin, Upload, FileText, X, Eye } from "lucide-react";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
   // Personal Information
@@ -64,6 +66,7 @@ interface UploadedFile {
 }
 
 const CreateEmployee = () => {
+  const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [profileImage, setProfileImage] = useState<File | null>(null);
@@ -98,15 +101,98 @@ const CreateEmployee = () => {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
     try {
-      console.log("Creating employee:", values);
-      console.log("Uploaded files:", uploadedFiles);
-      console.log("Profile image:", profileImage);
-      // TODO: Add actual API call here including file uploads
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate API call
-      alert("Employee created successfully!");
+      // First create the user account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: values.email,
+        password: 'TempPassword123!', // You might want to generate a temporary password
+        options: {
+          data: {
+            full_name: `${values.firstName} ${values.lastName}`
+          }
+        }
+      });
+
+      if (authError) {
+        throw authError;
+      }
+
+      const userId = authData.user?.id;
+      if (!userId) {
+        throw new Error('Failed to create user account');
+      }
+
+      // Create profile entry
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          user_id: userId,
+          full_name: `${values.firstName} ${values.lastName}`,
+          phone: values.phone,
+          department: values.department,
+          position: values.position,
+          hire_date: values.hireDate.toISOString().split('T')[0]
+        });
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      // Create employee details entry
+      const { error: employeeError } = await supabase
+        .from('employee_details')
+        .insert({
+          user_id: userId,
+          employee_id: values.employeeId,
+          first_name: values.firstName,
+          last_name: values.lastName,
+          date_of_birth: values.dateOfBirth.toISOString().split('T')[0],
+          social_security_number: values.socialSecurityNumber,
+          nationality: values.nationality,
+          marital_status: values.maritalStatus,
+          address: values.address,
+          salary: parseFloat(values.salary),
+          employment_type: values.employmentType,
+          work_location: values.workLocation,
+          emergency_contact_name: values.emergencyContactName,
+          emergency_contact_phone: values.emergencyContactPhone,
+          emergency_contact_relationship: values.emergencyContactRelationship,
+          notes: values.notes
+        });
+
+      if (employeeError) {
+        throw employeeError;
+      }
+
+      // Set user role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert({
+          user_id: userId,
+          role: values.role
+        });
+
+      if (roleError) {
+        throw roleError;
+      }
+
+      toast({
+        title: "Success",
+        description: "Employee created successfully!",
+      });
+
+      // Reset form
+      form.reset();
+      setUploadedFiles([]);
+      setProfileImage(null);
+      setProfileImagePreview(null);
+      
     } catch (error) {
       console.error("Error creating employee:", error);
-      alert("Error creating employee. Please try again.");
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Error creating employee. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }

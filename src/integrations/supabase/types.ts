@@ -141,6 +141,128 @@ export type Database = {
           },
         ]
       }
+      employee_details: {
+        Row: {
+          address: string | null
+          created_at: string
+          created_by: string | null
+          date_of_birth: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          emergency_contact_relationship: string | null
+          employee_id: string
+          employment_type: string | null
+          first_name: string
+          id: string
+          is_active: boolean | null
+          last_name: string
+          marital_status: string | null
+          nationality: string | null
+          notes: string | null
+          salary: number | null
+          skills: Json | null
+          social_security_number: string | null
+          supervisor_id: string | null
+          updated_at: string
+          user_id: string
+          work_location: string | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          created_by?: string | null
+          date_of_birth?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          emergency_contact_relationship?: string | null
+          employee_id: string
+          employment_type?: string | null
+          first_name: string
+          id?: string
+          is_active?: boolean | null
+          last_name: string
+          marital_status?: string | null
+          nationality?: string | null
+          notes?: string | null
+          salary?: number | null
+          skills?: Json | null
+          social_security_number?: string | null
+          supervisor_id?: string | null
+          updated_at?: string
+          user_id: string
+          work_location?: string | null
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          created_by?: string | null
+          date_of_birth?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          emergency_contact_relationship?: string | null
+          employee_id?: string
+          employment_type?: string | null
+          first_name?: string
+          id?: string
+          is_active?: boolean | null
+          last_name?: string
+          marital_status?: string | null
+          nationality?: string | null
+          notes?: string | null
+          salary?: number | null
+          skills?: Json | null
+          social_security_number?: string | null
+          supervisor_id?: string | null
+          updated_at?: string
+          user_id?: string
+          work_location?: string | null
+        }
+        Relationships: []
+      }
+      employee_files: {
+        Row: {
+          category: string
+          created_at: string
+          employee_id: string
+          file_name: string
+          file_path: string
+          file_size: number
+          file_type: string
+          id: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          employee_id: string
+          file_name: string
+          file_path: string
+          file_size: number
+          file_type: string
+          id?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          employee_id?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          file_type?: string
+          id?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_files_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employee_details"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           client_id: string | null
