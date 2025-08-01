@@ -103,7 +103,7 @@ const Invoices = () => {
               <DollarSign className="h-8 w-8 text-green-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Total Amount</p>
-                <p className="text-2xl font-bold">${invoiceStats.totalAmount.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{invoiceStats.totalAmount.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -114,7 +114,7 @@ const Invoices = () => {
               <Calendar className="h-8 w-8 text-yellow-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold">${invoiceStats.pendingAmount.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{invoiceStats.pendingAmount.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -125,7 +125,7 @@ const Invoices = () => {
               <TrendingUp className="h-8 w-8 text-red-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Overdue</p>
-                <p className="text-2xl font-bold">${invoiceStats.overdueAmount.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{invoiceStats.overdueAmount.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -166,7 +166,7 @@ const Invoices = () => {
                   </div>
                 </div>
                 <div className="text-right mr-4">
-                  <p className="font-bold text-lg">${invoice.amount.toLocaleString()}</p>
+                  <p className="font-bold text-lg">₹{invoice.amount.toLocaleString()}</p>
                   <p className="text-sm text-muted-foreground">
                     Due: {new Date(invoice.dueDate).toLocaleDateString()}
                   </p>

@@ -114,7 +114,7 @@ const Ledger = () => {
               <DollarSign className="h-8 w-8 text-blue-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Total Balance</p>
-                <p className="text-2xl font-bold">${ledgerSummary.totalBalance.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{ledgerSummary.totalBalance.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -125,7 +125,7 @@ const Ledger = () => {
               <TrendingUp className="h-8 w-8 text-green-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Monthly Income</p>
-                <p className="text-2xl font-bold text-green-600">${ledgerSummary.monthlyIncome.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-green-600">₹{ledgerSummary.monthlyIncome.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -136,7 +136,7 @@ const Ledger = () => {
               <TrendingDown className="h-8 w-8 text-red-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Monthly Expenses</p>
-                <p className="text-2xl font-bold text-red-600">${ledgerSummary.monthlyExpenses.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-red-600">₹{ledgerSummary.monthlyExpenses.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -147,7 +147,7 @@ const Ledger = () => {
               <Calendar className="h-8 w-8 text-purple-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Net Profit</p>
-                <p className="text-2xl font-bold text-purple-600">${ledgerSummary.netProfit.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-purple-600">₹{ledgerSummary.netProfit.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -205,10 +205,10 @@ const Ledger = () => {
                     </div>
                     <div className="text-right">
                       <p className={`font-bold text-lg ${getTransactionColor(transaction.type)}`}>
-                        {transaction.type === 'credit' ? '+' : '-'}${transaction.amount.toLocaleString()}
+                        {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Balance: ${transaction.balance.toLocaleString()}
+                        Balance: ₹{transaction.balance.toLocaleString()}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(transaction.date).toLocaleDateString()}
@@ -249,10 +249,10 @@ const Ledger = () => {
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-lg text-green-600">
-                        +${transaction.amount.toLocaleString()}
+                        +₹{transaction.amount.toLocaleString()}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Balance: ${transaction.balance.toLocaleString()}
+                        Balance: ₹{transaction.balance.toLocaleString()}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(transaction.date).toLocaleDateString()}
@@ -293,10 +293,10 @@ const Ledger = () => {
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-lg text-red-600">
-                        -${transaction.amount.toLocaleString()}
+                        -₹{transaction.amount.toLocaleString()}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Balance: ${transaction.balance.toLocaleString()}
+                        Balance: ₹{transaction.balance.toLocaleString()}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(transaction.date).toLocaleDateString()}
@@ -320,17 +320,17 @@ const Ledger = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="text-center p-4 border rounded-lg">
                     <h3 className="font-semibold text-lg">Revenue</h3>
-                    <p className="text-3xl font-bold text-green-600">$23,500</p>
+                    <p className="text-3xl font-bold text-green-600">₹23,500</p>
                     <p className="text-sm text-muted-foreground">This month</p>
                   </div>
                   <div className="text-center p-4 border rounded-lg">
                     <h3 className="font-semibold text-lg">Expenses</h3>
-                    <p className="text-3xl font-bold text-red-600">$29,700</p>
+                    <p className="text-3xl font-bold text-red-600">₹29,700</p>
                     <p className="text-sm text-muted-foreground">This month</p>
                   </div>
                   <div className="text-center p-4 border rounded-lg">
                     <h3 className="font-semibold text-lg">Net Income</h3>
-                    <p className="text-3xl font-bold text-blue-600">$17,000</p>
+                    <p className="text-3xl font-bold text-blue-600">₹17,000</p>
                     <p className="text-sm text-muted-foreground">This month</p>
                   </div>
                 </div>

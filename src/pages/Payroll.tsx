@@ -95,7 +95,7 @@ const Payroll = () => {
               <DollarSign className="h-8 w-8 text-green-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Total Payroll</p>
-                <p className="text-2xl font-bold">${payrollSummary.totalPayroll.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{payrollSummary.totalPayroll.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -106,7 +106,7 @@ const Payroll = () => {
               <Calculator className="h-8 w-8 text-purple-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Average Salary</p>
-                <p className="text-2xl font-bold">${payrollSummary.averageSalary.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{payrollSummary.averageSalary.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -147,19 +147,19 @@ const Payroll = () => {
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">Base Salary</p>
-                    <p className="font-medium">${record.baseSalary.toLocaleString()}</p>
+                    <p className="font-medium">₹{record.baseSalary.toLocaleString()}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Overtime</p>
-                    <p className="font-medium text-green-600">+${record.overtime}</p>
+                    <p className="font-medium text-green-600">+₹{record.overtime}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Deductions</p>
-                    <p className="font-medium text-red-600">-${record.deductions}</p>
+                    <p className="font-medium text-red-600">-₹{record.deductions}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Net Pay</p>
-                    <p className="font-bold text-lg">${record.netPay.toLocaleString()}</p>
+                    <p className="font-bold text-lg">₹{record.netPay.toLocaleString()}</p>
                   </div>
                   <div className="flex justify-end">
                     <Button size="sm" variant="outline">

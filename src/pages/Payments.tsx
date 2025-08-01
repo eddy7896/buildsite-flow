@@ -92,7 +92,7 @@ const Payments = () => {
               <DollarSign className="h-8 w-8 text-green-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Total Received</p>
-                <p className="text-2xl font-bold">${paymentStats.totalReceived.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{paymentStats.totalReceived.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -103,7 +103,7 @@ const Payments = () => {
               <Calendar className="h-8 w-8 text-yellow-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold">${paymentStats.pendingPayments.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{paymentStats.pendingPayments.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -114,7 +114,7 @@ const Payments = () => {
               <TrendingUp className="h-8 w-8 text-blue-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">This Month</p>
-                <p className="text-2xl font-bold">${paymentStats.thisMonth.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{paymentStats.thisMonth.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -180,7 +180,7 @@ const Payments = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-lg">${payment.amount.toLocaleString()}</p>
+                      <p className="font-bold text-lg">₹{payment.amount.toLocaleString()}</p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(payment.paymentDate).toLocaleDateString()}
                       </p>
@@ -222,7 +222,7 @@ const Payments = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-lg">${payment.amount.toLocaleString()}</p>
+                       <p className="font-bold text-lg">₹{payment.amount.toLocaleString()}</p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(payment.paymentDate).toLocaleDateString()}
                       </p>
@@ -264,7 +264,7 @@ const Payments = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-lg">${payment.amount.toLocaleString()}</p>
+                      <p className="font-bold text-lg">₹{payment.amount.toLocaleString()}</p>
                       <p className="text-sm text-muted-foreground">
                         {new Date(payment.paymentDate).toLocaleDateString()}
                       </p>
