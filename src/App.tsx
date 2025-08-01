@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppSidebar } from "@/components/AppSidebar";
+import { AgencyHeader } from "@/components/AgencyHeader";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -38,6 +39,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
       <main className="flex-1">
         <header className="h-14 flex items-center border-b bg-card px-4">
           <SidebarTrigger />
+          <AgencyHeader />
         </header>
         {children}
       </main>

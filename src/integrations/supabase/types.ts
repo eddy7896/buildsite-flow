@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      agency_settings: {
+        Row: {
+          agency_name: string | null
+          created_at: string
+          id: string
+          logo_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          agency_name?: string | null
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agency_name?: string | null
+          created_at?: string
+          id?: string
+          logo_url?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
