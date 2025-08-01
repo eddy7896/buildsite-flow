@@ -41,6 +41,60 @@ export type Database = {
         }
         Relationships: []
       }
+      attendance: {
+        Row: {
+          break_end_time: string | null
+          break_start_time: string | null
+          check_in_time: string | null
+          check_out_time: string | null
+          created_at: string
+          date: string
+          employee_id: string
+          id: string
+          ip_address: unknown | null
+          location: string | null
+          notes: string | null
+          overtime_hours: number | null
+          status: string
+          total_hours: number | null
+          updated_at: string
+        }
+        Insert: {
+          break_end_time?: string | null
+          break_start_time?: string | null
+          check_in_time?: string | null
+          check_out_time?: string | null
+          created_at?: string
+          date: string
+          employee_id: string
+          id?: string
+          ip_address?: unknown | null
+          location?: string | null
+          notes?: string | null
+          overtime_hours?: number | null
+          status?: string
+          total_hours?: number | null
+          updated_at?: string
+        }
+        Update: {
+          break_end_time?: string | null
+          break_start_time?: string | null
+          check_in_time?: string | null
+          check_out_time?: string | null
+          created_at?: string
+          date?: string
+          employee_id?: string
+          id?: string
+          ip_address?: unknown | null
+          location?: string | null
+          notes?: string | null
+          overtime_hours?: number | null
+          status?: string
+          total_hours?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       chart_of_accounts: {
         Row: {
           account_code: string
@@ -653,6 +707,202 @@ export type Database = {
           },
         ]
       }
+      leave_requests: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          employee_id: string
+          end_date: string
+          id: string
+          leave_type_id: string
+          reason: string | null
+          rejection_reason: string | null
+          start_date: string
+          status: string
+          total_days: number
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          employee_id: string
+          end_date: string
+          id?: string
+          leave_type_id: string
+          reason?: string | null
+          rejection_reason?: string | null
+          start_date: string
+          status?: string
+          total_days: number
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          employee_id?: string
+          end_date?: string
+          id?: string
+          leave_type_id?: string
+          reason?: string | null
+          rejection_reason?: string | null
+          start_date?: string
+          status?: string
+          total_days?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_requests_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leave_types: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          is_paid: boolean | null
+          max_days_per_year: number | null
+          name: string
+          requires_approval: boolean | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_paid?: boolean | null
+          max_days_per_year?: number | null
+          name: string
+          requires_approval?: boolean | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          is_paid?: boolean | null
+          max_days_per_year?: number | null
+          name?: string
+          requires_approval?: boolean | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payroll: {
+        Row: {
+          base_salary: number
+          bonuses: number | null
+          created_at: string
+          created_by: string | null
+          deductions: number | null
+          employee_id: string
+          gross_pay: number
+          hours_worked: number | null
+          id: string
+          net_pay: number
+          notes: string | null
+          overtime_hours: number | null
+          overtime_pay: number | null
+          payroll_period_id: string
+          status: string
+          tax_deductions: number | null
+          updated_at: string
+        }
+        Insert: {
+          base_salary?: number
+          bonuses?: number | null
+          created_at?: string
+          created_by?: string | null
+          deductions?: number | null
+          employee_id: string
+          gross_pay?: number
+          hours_worked?: number | null
+          id?: string
+          net_pay?: number
+          notes?: string | null
+          overtime_hours?: number | null
+          overtime_pay?: number | null
+          payroll_period_id: string
+          status?: string
+          tax_deductions?: number | null
+          updated_at?: string
+        }
+        Update: {
+          base_salary?: number
+          bonuses?: number | null
+          created_at?: string
+          created_by?: string | null
+          deductions?: number | null
+          employee_id?: string
+          gross_pay?: number
+          hours_worked?: number | null
+          id?: string
+          net_pay?: number
+          notes?: string | null
+          overtime_hours?: number | null
+          overtime_pay?: number | null
+          payroll_period_id?: string
+          status?: string
+          tax_deductions?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payroll_payroll_period_id_fkey"
+            columns: ["payroll_period_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payroll_periods: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          end_date: string
+          id: string
+          name: string
+          pay_date: string | null
+          start_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          end_date: string
+          id?: string
+          name: string
+          pay_date?: string | null
+          start_date: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          end_date?: string
+          id?: string
+          name?: string
+          pay_date?: string | null
+          start_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -890,6 +1140,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      reports: {
+        Row: {
+          created_at: string
+          description: string | null
+          expires_at: string | null
+          file_name: string | null
+          file_path: string | null
+          file_size: number | null
+          generated_at: string
+          generated_by: string | null
+          id: string
+          is_public: boolean | null
+          name: string
+          parameters: Json | null
+          report_type: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          expires_at?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          is_public?: boolean | null
+          name: string
+          parameters?: Json | null
+          report_type: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          expires_at?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          is_public?: boolean | null
+          name?: string
+          parameters?: Json | null
+          report_type?: string
+        }
+        Relationships: []
       }
       sales_pipeline: {
         Row: {
