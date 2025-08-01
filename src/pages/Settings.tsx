@@ -15,7 +15,8 @@ const Settings = () => {
   const { toast } = useToast();
   const [agencySettings, setAgencySettings] = useState({
     agency_name: '',
-    logo_url: ''
+    logo_url: '',
+    domain: ''
   });
   const [loading, setLoading] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -41,7 +42,8 @@ const Settings = () => {
       if (data) {
         setAgencySettings({
           agency_name: data.agency_name || '',
-          logo_url: data.logo_url || ''
+          logo_url: data.logo_url || '',
+          domain: data.domain || ''
         });
         setLogoPreview(data.logo_url || '');
       }
@@ -110,7 +112,8 @@ const Settings = () => {
           .from('agency_settings')
           .update({
             agency_name: agencySettings.agency_name,
-            logo_url: logoUrl
+            logo_url: logoUrl,
+            domain: agencySettings.domain
           })
           .eq('id', existingData.id);
 
@@ -121,7 +124,8 @@ const Settings = () => {
           .from('agency_settings')
           .insert({
             agency_name: agencySettings.agency_name,
-            logo_url: logoUrl
+            logo_url: logoUrl,
+            domain: agencySettings.domain
           });
 
         if (error) throw error;
@@ -210,6 +214,19 @@ const Settings = () => {
                     </div>
                   )}
                 </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="agencyDomain">Agency Email Domain</Label>
+                <Input
+                  id="agencyDomain"
+                  value={agencySettings.domain}
+                  onChange={(e) => setAgencySettings(prev => ({ ...prev, domain: e.target.value }))}
+                  placeholder="company.com (without @)"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Domain used for auto-generating employee email addresses
+                </p>
               </div>
               
               <Button onClick={saveAgencySettings} disabled={loading}>

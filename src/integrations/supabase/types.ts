@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           agency_name: string | null
           created_at: string
+          domain: string | null
           id: string
           logo_url: string | null
           updated_at: string
@@ -25,6 +26,7 @@ export type Database = {
         Insert: {
           agency_name?: string | null
           created_at?: string
+          domain?: string | null
           id?: string
           logo_url?: string | null
           updated_at?: string
@@ -32,6 +34,7 @@ export type Database = {
         Update: {
           agency_name?: string | null
           created_at?: string
+          domain?: string | null
           id?: string
           logo_url?: string | null
           updated_at?: string
