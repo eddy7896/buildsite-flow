@@ -144,7 +144,7 @@ const Clients = () => {
               <DollarSign className="h-8 w-8 text-purple-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Total Revenue</p>
-                <p className="text-2xl font-bold">${clientStats.totalRevenue.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{clientStats.totalRevenue.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -155,7 +155,7 @@ const Clients = () => {
               <Calendar className="h-8 w-8 text-orange-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Avg Project Value</p>
-                <p className="text-2xl font-bold">${clientStats.avgProjectValue.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{clientStats.avgProjectValue.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -232,7 +232,7 @@ const Clients = () => {
                             </div>
                             <div>
                               <p className="text-muted-foreground">Total Revenue</p>
-                              <p className="font-medium">${client.totalRevenue.toLocaleString()}</p>
+                              <p className="font-medium">₹{client.totalRevenue.toLocaleString()}</p>
                             </div>
                             <div>
                               <p className="text-muted-foreground">Joined</p>
@@ -310,7 +310,7 @@ const Clients = () => {
                             </div>
                             <div>
                               <p className="text-muted-foreground">Total Revenue</p>
-                              <p className="font-medium">${client.totalRevenue.toLocaleString()}</p>
+                              <p className="font-medium">₹{client.totalRevenue.toLocaleString()}</p>
                             </div>
                             <div>
                               <p className="text-muted-foreground">Joined</p>
@@ -388,7 +388,7 @@ const Clients = () => {
                             </div>
                             <div>
                               <p className="text-muted-foreground">Total Revenue</p>
-                              <p className="font-medium">${client.totalRevenue.toLocaleString()}</p>
+                              <p className="font-medium">₹{client.totalRevenue.toLocaleString()}</p>
                             </div>
                             <div>
                               <p className="text-muted-foreground">Joined</p>

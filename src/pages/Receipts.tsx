@@ -112,7 +112,7 @@ const Receipts = () => {
               <DollarSign className="h-8 w-8 text-green-600" />
               <div className="ml-4">
                 <p className="text-sm font-medium text-muted-foreground">Total Amount</p>
-                <p className="text-2xl font-bold">${receiptStats.totalAmount.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{receiptStats.totalAmount.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -181,7 +181,7 @@ const Receipts = () => {
                   </div>
                 </div>
                 <div className="text-right mr-4">
-                  <p className="font-bold text-lg">${receipt.amount.toFixed(2)}</p>
+                  <p className="font-bold text-lg">₹{receipt.amount.toFixed(2)}</p>
                   <p className="text-sm text-muted-foreground">
                     {new Date(receipt.date).toLocaleDateString()}
                   </p>
