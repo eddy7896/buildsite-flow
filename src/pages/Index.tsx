@@ -144,27 +144,27 @@ const Index = () => {
   return (
     <div className="bg-background">
       {/* Header */}
-      <div className="border-b bg-card px-6 py-4">
-        <div className="flex items-center justify-between">
+      <div className="border-b bg-card px-4 lg:px-6 py-4">
+        <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
           <div className="flex items-center space-x-4">
             <div>
-              <h1 className="text-2xl font-bold">Dashboard</h1>
+              <h1 className="text-xl lg:text-2xl font-bold">Dashboard</h1>
               <p className="text-sm text-muted-foreground">Welcome back, {profile?.full_name || 'User'}</p>
             </div>
           </div>
           
-          <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <p className="font-medium">{profile?.full_name || user?.email}</p>
-              <div className="flex items-center justify-end space-x-2">
+          <div className="flex flex-col space-y-2 lg:flex-row lg:items-center lg:space-y-0 lg:space-x-4">
+            <div className="text-left lg:text-right">
+              <p className="font-medium text-sm lg:text-base">{profile?.full_name || user?.email}</p>
+              <div className="flex items-center lg:justify-end space-x-2">
                 {getRoleIcon(userRole || 'employee')}
-                <Badge variant="secondary">
+                <Badge variant="secondary" className="text-xs">
                   {getRoleDisplay(userRole || 'employee')}
                 </Badge>
               </div>
             </div>
             
-            <Button variant="outline" size="sm" onClick={signOut}>
+            <Button variant="outline" size="sm" onClick={signOut} className="w-full lg:w-auto">
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out
             </Button>
@@ -173,9 +173,9 @@ const Index = () => {
       </div>
 
       {/* Main Content */}
-      <main className="p-6">
-        <div className="mb-8">
-          <p className="text-muted-foreground">
+      <main className="p-4 lg:p-6">
+        <div className="mb-6 lg:mb-8">
+          <p className="text-sm lg:text-base text-muted-foreground">
             {getDashboardMessage(userRole || 'employee')}
           </p>
         </div>
@@ -416,23 +416,25 @@ const Index = () => {
                   const daysLeft = getDaysUntilDeadline(project.deadline);
                   return (
                     <div key={project.id} className="border rounded-lg p-4">
-                      <div className="flex items-start justify-between mb-3">
+                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between mb-3 space-y-3 lg:space-y-0">
                         <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="font-semibold text-lg">{project.name}</h3>
-                            <Badge 
-                              variant="secondary" 
-                              className={`text-xs ${getPriorityColor(project.priority)}`}
-                            >
-                              {project.priority} priority
-                            </Badge>
-                            <div className="flex items-center gap-1">
-                              <div className={`w-2 h-2 rounded-full ${getStatusColor(project.status)}`}></div>
-                              <span className="text-sm text-muted-foreground capitalize">{project.status}</span>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                            <h3 className="font-semibold text-base lg:text-lg">{project.name}</h3>
+                            <div className="flex items-center gap-2">
+                              <Badge 
+                                variant="secondary" 
+                                className={`text-xs ${getPriorityColor(project.priority)}`}
+                              >
+                                {project.priority} priority
+                              </Badge>
+                              <div className="flex items-center gap-1">
+                                <div className={`w-2 h-2 rounded-full ${getStatusColor(project.status)}`}></div>
+                                <span className="text-sm text-muted-foreground capitalize">{project.status}</span>
+                              </div>
                             </div>
                           </div>
                           <p className="text-sm text-muted-foreground mb-2">Client: {project.client}</p>
-                          <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-muted-foreground mb-3">
                             <div className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
                               <span>Due: {new Date(project.deadline).toLocaleDateString()}</span>
@@ -450,9 +452,9 @@ const Index = () => {
                             </div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-2xl font-bold mb-1">{project.progress}%</div>
-                          <Progress value={project.progress} className="w-32 h-2" />
+                        <div className="flex lg:flex-col lg:text-right items-center lg:items-end gap-3 lg:gap-1">
+                          <div className="text-xl lg:text-2xl font-bold">{project.progress}%</div>
+                          <Progress value={project.progress} className="w-24 lg:w-32 h-2" />
                         </div>
                       </div>
                       

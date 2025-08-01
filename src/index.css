@@ -101,5 +101,24 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    /* Improve mobile performance and prevent bounce scrolling */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Touch-friendly interactions */
+  button, [role="button"], a {
+    @apply touch-manipulation;
+  }
+
+  /* Prevent text selection on interactive elements */
+  .sidebar-trigger {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Improve scrolling performance on mobile */
+  * {
+    -webkit-overflow-scrolling: touch;
   }
 }

@@ -113,6 +113,7 @@ export function AppSidebar() {
     <Sidebar
       className={collapsed ? "w-14" : "w-60"}
       collapsible="icon"
+      variant="sidebar"
     >
       <SidebarContent className="flex flex-col">
         <SidebarGroup className="flex-1 mt-6">

@@ -37,15 +37,22 @@ import Accounting from "./pages/Accounting";
 const queryClient = new QueryClient();
 
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
-  <SidebarProvider>
+  <SidebarProvider defaultOpen={false}>
     <div className="min-h-screen flex w-full">
       <AppSidebar />
-      <main className="flex-1">
-        <header className="h-14 flex items-center border-b bg-card px-4">
-          <SidebarTrigger />
-          <AgencyHeader />
+      <main className="flex-1 flex flex-col">
+        <header className="h-14 flex items-center border-b bg-card px-4 lg:px-6">
+          <SidebarTrigger className="lg:hidden" />
+          <div className="hidden lg:block">
+            <SidebarTrigger />
+          </div>
+          <div className="flex-1">
+            <AgencyHeader />
+          </div>
         </header>
-        {children}
+        <div className="flex-1 p-4 lg:p-6">
+          {children}
+        </div>
       </main>
     </div>
   </SidebarProvider>
