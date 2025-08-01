@@ -25,6 +25,7 @@ import MyAttendance from "./pages/MyAttendance";
 import MyLeave from "./pages/MyLeave";
 import Ledger from "./pages/Ledger";
 import Clients from "./pages/Clients";
+import Reports from "./pages/Reports";
 
 const queryClient = new QueryClient();
 
@@ -207,6 +208,16 @@ const App = () => (
                 <ProtectedRoute requiredRole="admin">
                   <DashboardLayout>
                     <Clients />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/reports" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <Reports />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

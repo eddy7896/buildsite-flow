@@ -15,7 +15,8 @@ import {
   CreditCard,
   Receipt,
   BookOpen,
-  Building2
+  Building2,
+  ChartLine
 } from 'lucide-react';
 import {
   Sidebar,
@@ -44,6 +45,7 @@ const navigationItems = {
     { title: 'Payments', url: '/payments', icon: CreditCard },
     { title: 'Receipts', url: '/receipts', icon: Receipt },
     { title: 'Ledger', url: '/ledger', icon: BookOpen },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'Settings', url: '/settings', icon: Settings },
   ],
   hr: [
@@ -51,6 +53,7 @@ const navigationItems = {
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
     { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
@@ -63,6 +66,7 @@ const navigationItems = {
     { title: 'Payments', url: '/payments', icon: CreditCard },
     { title: 'Receipts', url: '/receipts', icon: Receipt },
     { title: 'Ledger', url: '/ledger', icon: BookOpen },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
