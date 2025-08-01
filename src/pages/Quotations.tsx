@@ -1,68 +1,81 @@
-import React, { useState } from 'react';
-import { Plus, Search, Filter, FileCheck, Send, DollarSign, Calendar } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Filter, FileCheck, Send, DollarSign, Calendar, Edit, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import QuotationFormDialog from '@/components/QuotationFormDialog';
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 
 const Quotations = () => {
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
+  const [quotations, setQuotations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [quotationFormOpen, setQuotationFormOpen] = useState(false);
+  const [selectedQuotation, setSelectedQuotation] = useState<any>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [quotationToDelete, setQuotationToDelete] = useState<any>(null);
 
-  // Mock data for demonstration
-  const quotationStats = {
-    totalQuotations: 87,
-    pending: 23,
-    accepted: 45,
-    totalValue: 5200000,
+  useEffect(() => {
+    fetchQuotations();
+  }, []);
+
+  const fetchQuotations = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('quotations')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setQuotations(data || []);
+    } catch (error) {
+      console.error('Error fetching quotations:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch quotations',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const quotations = [
-    {
-      id: '1',
-      quoteNumber: 'Q-2024-001',
-      title: 'Office Building Construction Quote',
-      client: 'ABC Corp',
-      status: 'sent',
-      totalAmount: 500000,
-      validUntil: '2024-02-15',
-      createdDate: '2024-01-15',
-      items: 5,
-    },
-    {
-      id: '2',
-      quoteNumber: 'Q-2024-002',
-      title: 'Warehouse Renovation Estimate',
-      client: 'XYZ Industries',
-      status: 'draft',
-      totalAmount: 300000,
-      validUntil: '2024-02-20',
-      createdDate: '2024-01-18',
-      items: 3,
-    },
-    {
-      id: '3',
-      quoteNumber: 'Q-2024-003',
-      title: 'Residential Complex Quote',
-      client: 'Housing Ltd',
-      status: 'accepted',
-      totalAmount: 800000,
-      validUntil: '2024-01-30',
-      createdDate: '2024-01-05',
-      items: 8,
-    },
-    {
-      id: '4',
-      quoteNumber: 'Q-2024-004',
-      title: 'Commercial Fit-out',
-      client: 'Retail Corp',
-      status: 'rejected',
-      totalAmount: 150000,
-      validUntil: '2024-01-25',
-      createdDate: '2024-01-10',
-      items: 4,
-    },
-  ];
+  const handleNewQuotation = () => {
+    setSelectedQuotation(null);
+    setQuotationFormOpen(true);
+  };
+
+  const handleEditQuotation = (quotation: any) => {
+    setSelectedQuotation(quotation);
+    setQuotationFormOpen(true);
+  };
+
+  const handleDeleteQuotation = (quotation: any) => {
+    setQuotationToDelete(quotation);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleQuotationSaved = () => {
+    fetchQuotations();
+  };
+
+  const handleQuotationDeleted = () => {
+    fetchQuotations();
+  };
+
+  // Calculate stats from real data
+  const quotationStats = {
+    totalQuotations: quotations.length,
+    pending: quotations.filter(q => q.status === 'sent').length,
+    accepted: quotations.filter(q => q.status === 'accepted').length,
+    totalValue: quotations.reduce((sum, q) => sum + (q.total_amount || 0), 0),
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -76,9 +89,9 @@ const Quotations = () => {
   };
 
   const filteredQuotations = quotations.filter(quote => 
-    quote.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    quote.quoteNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    quote.client.toLowerCase().includes(searchTerm.toLowerCase())
+    quote.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    quote.quote_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    quote.client_id?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const templates = [
@@ -109,7 +122,7 @@ const Quotations = () => {
           <h1 className="text-3xl font-bold">Quotations</h1>
           <p className="text-muted-foreground">Manage quotes and estimates for potential clients</p>
         </div>
-        <Button>
+        <Button onClick={handleNewQuotation}>
           <Plus className="h-4 w-4 mr-2" />
           New Quotation
         </Button>
@@ -188,54 +201,73 @@ const Quotations = () => {
         </TabsList>
         
         <TabsContent value="quotations" className="space-y-4">
-          <div className="grid gap-4">
-            {filteredQuotations.map((quote) => (
-              <Card key={quote.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-lg">{quote.title}</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {quote.quoteNumber} • {quote.client}
-                      </p>
-                    </div>
-                    <Badge className={getStatusColor(quote.status)}>
-                      {quote.status}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Amount</p>
-                      <p className="font-semibold">₹{quote.totalAmount.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Items</p>
-                      <p className="font-semibold">{quote.items}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Valid Until</p>
-                      <p className="font-semibold">{new Date(quote.validUntil).toLocaleDateString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Created</p>
-                      <p className="font-semibold">{new Date(quote.createdDate).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex justify-between items-center">
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm">Edit</Button>
-                      {quote.status === 'draft' && (
-                        <Button size="sm">Send Quote</Button>
-                      )}
-                      <Button variant="outline" size="sm">Download PDF</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          {loading ? (
+            <div className="text-center py-8">Loading quotations...</div>
+          ) : (
+            <div className="grid gap-4">
+              {filteredQuotations.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No quotations found. Create your first quotation to get started.
+                </div>
+              ) : (
+                filteredQuotations.map((quote) => (
+                  <Card key={quote.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <CardTitle className="text-lg">{quote.title}</CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            {quote.quote_number} • {quote.client_id || 'No client'}
+                          </p>
+                        </div>
+                        <Badge className={getStatusColor(quote.status)}>
+                          {quote.status}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Total Amount</p>
+                          <p className="font-semibold">₹{(quote.total_amount || 0).toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Subtotal</p>
+                          <p className="font-semibold">₹{(quote.subtotal || 0).toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Valid Until</p>
+                          <p className="font-semibold">
+                            {quote.valid_until ? new Date(quote.valid_until).toLocaleDateString() : 'Not set'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Created</p>
+                          <p className="font-semibold">{new Date(quote.created_at).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex justify-between items-center">
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleEditQuotation(quote)}>
+                            <Edit className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                          {quote.status === 'draft' && (
+                            <Button size="sm">Send Quote</Button>
+                          )}
+                          <Button variant="outline" size="sm">Download PDF</Button>
+                          <Button variant="outline" size="sm" onClick={() => handleDeleteQuotation(quote)}>
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          )}
         </TabsContent>
         
         <TabsContent value="templates" className="space-y-4">
@@ -270,6 +302,23 @@ const Quotations = () => {
           </div>
         </TabsContent>
       </Tabs>
+
+      <QuotationFormDialog
+        isOpen={quotationFormOpen}
+        onClose={() => setQuotationFormOpen(false)}
+        quotation={selectedQuotation}
+        onQuotationSaved={handleQuotationSaved}
+      />
+
+      <DeleteConfirmDialog
+        isOpen={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onDeleted={handleQuotationDeleted}
+        itemType="Quotation"
+        itemName={quotationToDelete?.title || ''}
+        itemId={quotationToDelete?.id || ''}
+        tableName="quotations"
+      />
     </div>
   );
 };

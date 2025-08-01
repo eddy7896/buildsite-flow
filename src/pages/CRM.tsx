@@ -1,70 +1,82 @@
-import React, { useState } from 'react';
-import { Plus, Search, Filter, Users2, Phone, Mail, Target, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Search, Filter, Users2, Phone, Mail, Target, TrendingUp, Edit, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import LeadFormDialog from '@/components/LeadFormDialog';
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 
 const CRM = () => {
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
+  const [leads, setLeads] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [leadFormOpen, setLeadFormOpen] = useState(false);
+  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [leadToDelete, setLeadToDelete] = useState<any>(null);
 
-  // Mock data for demonstration
-  const crmStats = {
-    totalLeads: 156,
-    activeLeads: 89,
-    conversionRate: 18.5,
-    pipelineValue: 3500000,
+  useEffect(() => {
+    fetchLeads();
+  }, []);
+
+  const fetchLeads = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setLeads(data || []);
+    } catch (error) {
+      console.error('Error fetching leads:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch leads',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const leads = [
-    {
-      id: '1',
-      leadNumber: 'L-2024-001',
-      company: 'Tech Solutions Inc',
-      contactName: 'John Doe',
-      email: 'john@techsolutions.com',
-      phone: '+91 98765 43210',
-      status: 'qualified',
-      priority: 'high',
-      estimatedValue: 500000,
-      probability: 75,
-      expectedCloseDate: '2024-02-28',
-      source: 'Website',
-      assignedTo: 'Sarah Manager',
-    },
-    {
-      id: '2',
-      leadNumber: 'L-2024-002',
-      company: 'Industrial Corp',
-      contactName: 'Jane Smith',
-      email: 'jane@industrial.com',
-      phone: '+91 87654 32109',
-      status: 'proposal',
-      priority: 'medium',
-      estimatedValue: 300000,
-      probability: 50,
-      expectedCloseDate: '2024-03-15',
-      source: 'Referral',
-      assignedTo: 'Mike Sales',
-    },
-    {
-      id: '3',
-      leadNumber: 'L-2024-003',
-      company: 'Retail Ventures',
-      contactName: 'Bob Johnson',
-      email: 'bob@retail.com',
-      phone: '+91 76543 21098',
-      status: 'new',
-      priority: 'low',
-      estimatedValue: 150000,
-      probability: 25,
-      expectedCloseDate: '2024-04-01',
-      source: 'Cold Call',
-      assignedTo: 'Alex Rep',
-    },
-  ];
+  const handleNewLead = () => {
+    setSelectedLead(null);
+    setLeadFormOpen(true);
+  };
+
+  const handleEditLead = (lead: any) => {
+    setSelectedLead(lead);
+    setLeadFormOpen(true);
+  };
+
+  const handleDeleteLead = (lead: any) => {
+    setLeadToDelete(lead);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleLeadSaved = () => {
+    fetchLeads();
+  };
+
+  const handleLeadDeleted = () => {
+    fetchLeads();
+  };
+
+  // Calculate stats from real data
+  const crmStats = {
+    totalLeads: leads.length,
+    activeLeads: leads.filter(lead => ['new', 'contacted', 'qualified', 'proposal', 'negotiation'].includes(lead.status)).length,
+    conversionRate: leads.length > 0 ? ((leads.filter(lead => lead.status === 'won').length / leads.length) * 100).toFixed(1) : 0,
+    pipelineValue: leads.reduce((sum, lead) => sum + (lead.estimated_value || 0), 0),
+  };
 
   const activities = [
     {
@@ -128,9 +140,9 @@ const CRM = () => {
   };
 
   const filteredLeads = leads.filter(lead => 
-    lead.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lead.contactName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lead.leadNumber.toLowerCase().includes(searchTerm.toLowerCase())
+    lead.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lead.contact_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    lead.lead_number?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -140,7 +152,7 @@ const CRM = () => {
           <h1 className="text-3xl font-bold">CRM</h1>
           <p className="text-muted-foreground">Manage customer relationships and sales pipeline</p>
         </div>
-        <Button>
+        <Button onClick={handleNewLead}>
           <Plus className="h-4 w-4 mr-2" />
           New Lead
         </Button>
@@ -220,60 +232,79 @@ const CRM = () => {
         </TabsList>
         
         <TabsContent value="leads" className="space-y-4">
-          <div className="grid gap-4">
-            {filteredLeads.map((lead) => (
-              <Card key={lead.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-lg">{lead.company}</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {lead.leadNumber} • {lead.contactName}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Badge className={getStatusColor(lead.status)}>
-                        {lead.status}
-                      </Badge>
-                      <Badge className={getPriorityColor(lead.priority)}>
-                        {lead.priority}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Contact</p>
-                      <p className="font-medium">{lead.email}</p>
-                      <p className="text-sm">{lead.phone}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Estimated Value</p>
-                      <p className="font-semibold">₹{lead.estimatedValue.toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground">Close: {new Date(lead.expectedCloseDate).toLocaleDateString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Probability</p>
-                      <div className="flex items-center gap-2">
-                        <Progress value={lead.probability} className="flex-1" />
-                        <span className="text-sm font-medium">{lead.probability}%</span>
+          {loading ? (
+            <div className="text-center py-8">Loading leads...</div>
+          ) : (
+            <div className="grid gap-4">
+              {filteredLeads.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No leads found. Create your first lead to get started.
+                </div>
+              ) : (
+                filteredLeads.map((lead) => (
+                  <Card key={lead.id} className="hover:shadow-md transition-shadow">
+                    <CardHeader className="pb-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <CardTitle className="text-lg">{lead.company_name}</CardTitle>
+                          <p className="text-sm text-muted-foreground">
+                            {lead.lead_number} • {lead.contact_name}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Badge className={getStatusColor(lead.status)}>
+                            {lead.status}
+                          </Badge>
+                          <Badge className={getPriorityColor(lead.priority)}>
+                            {lead.priority}
+                          </Badge>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <div className="text-sm text-muted-foreground">
-                      Source: {lead.source} • Assigned to: {lead.assignedTo}
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm">View Details</Button>
-                      <Button variant="outline" size="sm">Add Activity</Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                          <p className="text-sm text-muted-foreground">Contact</p>
+                          <p className="font-medium">{lead.email || 'No email'}</p>
+                          <p className="text-sm">{lead.phone || 'No phone'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Estimated Value</p>
+                          <p className="font-semibold">₹{(lead.estimated_value || 0).toLocaleString()}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Close: {lead.expected_close_date ? new Date(lead.expected_close_date).toLocaleDateString() : 'Not set'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm text-muted-foreground">Probability</p>
+                          <div className="flex items-center gap-2">
+                            <Progress value={lead.probability || 0} className="flex-1" />
+                            <span className="text-sm font-medium">{lead.probability || 0}%</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <div className="text-sm text-muted-foreground">
+                          Created: {new Date(lead.created_at).toLocaleDateString()}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={() => handleEditLead(lead)}>
+                            <Edit className="h-4 w-4 mr-1" />
+                            Edit
+                          </Button>
+                          <Button variant="outline" size="sm">Add Activity</Button>
+                          <Button variant="outline" size="sm" onClick={() => handleDeleteLead(lead)}>
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Delete
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
+          )}
         </TabsContent>
         
         <TabsContent value="activities" className="space-y-4">
@@ -325,6 +356,23 @@ const CRM = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <LeadFormDialog
+        isOpen={leadFormOpen}
+        onClose={() => setLeadFormOpen(false)}
+        lead={selectedLead}
+        onLeadSaved={handleLeadSaved}
+      />
+
+      <DeleteConfirmDialog
+        isOpen={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onDeleted={handleLeadDeleted}
+        itemType="Lead"
+        itemName={leadToDelete?.company_name || ''}
+        itemId={leadToDelete?.id || ''}
+        tableName="leads"
+      />
     </div>
   );
 };
