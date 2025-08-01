@@ -29,6 +29,10 @@ import Clients from "./pages/Clients";
 import Reports from "./pages/Reports";
 import CreateEmployee from "./pages/CreateEmployee";
 import AssignUserRoles from "./pages/AssignUserRoles";
+import JobCosting from "./pages/JobCosting";
+import Quotations from "./pages/Quotations";
+import CRM from "./pages/CRM";
+import Accounting from "./pages/Accounting";
 
 const queryClient = new QueryClient();
 
@@ -242,6 +246,46 @@ const App = () => (
                 <ProtectedRoute requiredRole="admin">
                   <DashboardLayout>
                     <AssignUserRoles />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/jobs" 
+              element={
+                <ProtectedRoute requiredRole="hr">
+                  <DashboardLayout>
+                    <JobCosting />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/quotations" 
+              element={
+                <ProtectedRoute requiredRole="hr">
+                  <DashboardLayout>
+                    <Quotations />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/crm" 
+              element={
+                <ProtectedRoute requiredRole="hr">
+                  <DashboardLayout>
+                    <CRM />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/accounting" 
+              element={
+                <ProtectedRoute requiredRole="finance_manager">
+                  <DashboardLayout>
+                    <Accounting />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

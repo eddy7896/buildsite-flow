@@ -16,7 +16,10 @@ import {
   Receipt,
   BookOpen,
   Building2,
-  ChartLine
+  ChartLine,
+  Briefcase,
+  Users2,
+  FileCheck
 } from 'lucide-react';
 import {
   Sidebar,
@@ -35,7 +38,10 @@ const navigationItems = {
   admin: [
     { title: 'Dashboard', url: '/', icon: BarChart3 },
     { title: 'Users', url: '/users', icon: Users },
+    { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
+    { title: 'Jobs', url: '/jobs', icon: Briefcase },
+    { title: 'Quotations', url: '/quotations', icon: FileCheck },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
@@ -45,10 +51,14 @@ const navigationItems = {
     { title: 'Payments', url: '/payments', icon: CreditCard },
     { title: 'Receipts', url: '/receipts', icon: Receipt },
     { title: 'Ledger', url: '/ledger', icon: BookOpen },
+    { title: 'Accounting', url: '/accounting', icon: Calculator },
     { title: 'Reports', url: '/reports', icon: ChartLine },
   ],
   hr: [
     { title: 'Dashboard', url: '/', icon: BarChart3 },
+    { title: 'CRM', url: '/crm', icon: Users2 },
+    { title: 'Jobs', url: '/jobs', icon: Briefcase },
+    { title: 'Quotations', url: '/quotations', icon: FileCheck },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
     { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
@@ -59,11 +69,14 @@ const navigationItems = {
   ],
   finance_manager: [
     { title: 'Dashboard', url: '/', icon: BarChart3 },
+    { title: 'Jobs', url: '/jobs', icon: Briefcase },
+    { title: 'Quotations', url: '/quotations', icon: FileCheck },
     { title: 'Payroll', url: '/payroll', icon: Calculator },
     { title: 'Invoices', url: '/invoices', icon: FileText },
     { title: 'Payments', url: '/payments', icon: CreditCard },
     { title: 'Receipts', url: '/receipts', icon: Receipt },
     { title: 'Ledger', url: '/ledger', icon: BookOpen },
+    { title: 'Accounting', url: '/accounting', icon: Calculator },
     { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
