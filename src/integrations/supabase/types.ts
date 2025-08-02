@@ -139,6 +139,102 @@ export type Database = {
           },
         ]
       }
+      clients: {
+        Row: {
+          address: string | null
+          billing_address: string | null
+          billing_city: string | null
+          billing_country: string | null
+          billing_postal_code: string | null
+          billing_state: string | null
+          city: string | null
+          client_number: string
+          company_name: string | null
+          contact_email: string | null
+          contact_person: string | null
+          contact_phone: string | null
+          contact_position: string | null
+          country: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          id: string
+          industry: string | null
+          name: string
+          notes: string | null
+          payment_terms: number | null
+          phone: string | null
+          postal_code: string | null
+          state: string | null
+          status: string
+          tax_id: string | null
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          address?: string | null
+          billing_address?: string | null
+          billing_city?: string | null
+          billing_country?: string | null
+          billing_postal_code?: string | null
+          billing_state?: string | null
+          city?: string | null
+          client_number: string
+          company_name?: string | null
+          contact_email?: string | null
+          contact_person?: string | null
+          contact_phone?: string | null
+          contact_position?: string | null
+          country?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          industry?: string | null
+          name: string
+          notes?: string | null
+          payment_terms?: number | null
+          phone?: string | null
+          postal_code?: string | null
+          state?: string | null
+          status?: string
+          tax_id?: string | null
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          address?: string | null
+          billing_address?: string | null
+          billing_city?: string | null
+          billing_country?: string | null
+          billing_postal_code?: string | null
+          billing_state?: string | null
+          city?: string | null
+          client_number?: string
+          company_name?: string | null
+          contact_email?: string | null
+          contact_person?: string | null
+          contact_phone?: string | null
+          contact_position?: string | null
+          country?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          industry?: string | null
+          name?: string
+          notes?: string | null
+          payment_terms?: number | null
+          phone?: string | null
+          postal_code?: string | null
+          state?: string | null
+          status?: string
+          tax_id?: string | null
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       crm_activities: {
         Row: {
           activity_type: string
@@ -1245,6 +1341,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      generate_client_number: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
