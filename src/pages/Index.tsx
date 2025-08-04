@@ -227,9 +227,9 @@ const Index = () => {
           </Card>
         </div>
 
-        {/* Charts and Analytics Section */}
-        <div className="space-y-6 mb-8">
-          {/* Financial Chart - Mobile Optimized */}
+        {/* Charts and Analytics Section - 2x2 Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Monthly Revenue vs Expenses */}
           {(userRole === 'admin' || userRole === 'finance_manager') && (
             <Card>
               <CardHeader className="pb-3">
@@ -275,138 +275,134 @@ const Index = () => {
             </Card>
           )}
 
-          {/* Grid for other charts */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Weekly Attendance - Mobile Optimized */}
-            {(userRole === 'admin' || userRole === 'hr') && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base lg:text-lg">Weekly Attendance</CardTitle>
-                  <CardDescription className="text-sm">Employee attendance for this week</CardDescription>
-                </CardHeader>
-                <CardContent className="px-2 lg:px-6">
-                  <div className="w-full overflow-x-auto">
-                    <ResponsiveContainer width="100%" height={220} minWidth={250}>
-                      <BarChart data={attendanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                          dataKey="day" 
-                          tick={{ fontSize: 12 }}
-                        />
-                        <YAxis 
-                          tick={{ fontSize: 12 }}
-                        />
+          {/* Weekly Attendance */}
+          {(userRole === 'admin' || userRole === 'hr') && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base lg:text-lg">Weekly Attendance</CardTitle>
+                <CardDescription className="text-sm">Employee attendance for this week</CardDescription>
+              </CardHeader>
+              <CardContent className="px-2 lg:px-6">
+                <div className="w-full overflow-x-auto">
+                  <ResponsiveContainer width="100%" height={220} minWidth={250}>
+                    <BarChart data={attendanceData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="day" 
+                        tick={{ fontSize: 12 }}
+                      />
+                      <YAxis 
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip contentStyle={{ fontSize: '12px' }} />
+                      <Bar dataKey="present" fill="#22c55e" name="Present" />
+                      <Bar dataKey="absent" fill="#ef4444" name="Absent" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+                
+                {/* Mobile Stats */}
+                <div className="grid grid-cols-2 gap-3 mt-3 lg:hidden">
+                  <div className="text-center p-2 bg-green-50 rounded">
+                    <div className="text-lg font-bold text-green-600">230</div>
+                    <div className="text-xs text-green-700">Total Present</div>
+                  </div>
+                  <div className="text-center p-2 bg-red-50 rounded">
+                    <div className="text-lg font-bold text-red-600">10</div>
+                    <div className="text-xs text-red-700">Total Absent</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Project Status Overview */}
+          {userRole === 'admin' && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base lg:text-lg">Project Status Overview</CardTitle>
+                <CardDescription className="text-sm">Distribution of projects by status</CardDescription>
+              </CardHeader>
+              <CardContent className="px-2 lg:px-6">
+                <div className="flex flex-col lg:block">
+                  {/* Chart */}
+                  <div className="w-full overflow-x-auto lg:overflow-visible">
+                    <ResponsiveContainer width="100%" height={200} minWidth={200}>
+                      <PieChart>
+                        <Pie
+                          data={projectStatusData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={false}
+                          outerRadius={70}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {projectStatusData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
                         <Tooltip contentStyle={{ fontSize: '12px' }} />
-                        <Bar dataKey="present" fill="#22c55e" name="Present" />
-                        <Bar dataKey="absent" fill="#ef4444" name="Absent" />
-                      </BarChart>
+                      </PieChart>
                     </ResponsiveContainer>
                   </div>
                   
-                  {/* Mobile Stats */}
-                  <div className="grid grid-cols-2 gap-3 mt-3 lg:hidden">
-                    <div className="text-center p-2 bg-green-50 rounded">
-                      <div className="text-lg font-bold text-green-600">230</div>
-                      <div className="text-xs text-green-700">Total Present</div>
-                    </div>
-                    <div className="text-center p-2 bg-red-50 rounded">
-                      <div className="text-lg font-bold text-red-600">10</div>
-                      <div className="text-xs text-red-700">Total Absent</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Project Status - Mobile Optimized */}
-            {userRole === 'admin' && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base lg:text-lg">Project Status Overview</CardTitle>
-                  <CardDescription className="text-sm">Distribution of projects by status</CardDescription>
-                </CardHeader>
-                <CardContent className="px-2 lg:px-6">
-                  <div className="flex flex-col lg:block">
-                    {/* Chart */}
-                    <div className="w-full overflow-x-auto lg:overflow-visible">
-                      <ResponsiveContainer width="100%" height={200} minWidth={200}>
-                        <PieChart>
-                          <Pie
-                            data={projectStatusData}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            label={false}
-                            outerRadius={70}
-                            fill="#8884d8"
-                            dataKey="value"
-                          >
-                            {projectStatusData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip contentStyle={{ fontSize: '12px' }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    
-                    {/* Mobile Legend */}
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      {projectStatusData.map((entry, index) => (
-                        <div key={index} className="flex items-center gap-2 text-xs p-2 bg-muted/30 rounded">
-                          <div 
-                            className="w-3 h-3 rounded-full flex-shrink-0" 
-                            style={{ backgroundColor: entry.color }}
-                          />
-                          <div className="min-w-0">
-                            <div className="font-medium truncate">{entry.name}</div>
-                            <div className="text-muted-foreground">{entry.value} projects</div>
-                          </div>
+                  {/* Mobile Legend */}
+                  <div className="grid grid-cols-2 gap-2 mt-3">
+                    {projectStatusData.map((entry, index) => (
+                      <div key={index} className="flex items-center gap-2 text-xs p-2 bg-muted/30 rounded">
+                        <div 
+                          className="w-3 h-3 rounded-full flex-shrink-0" 
+                          style={{ backgroundColor: entry.color }}
+                        />
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{entry.name}</div>
+                          <div className="text-muted-foreground">{entry.value} projects</div>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-            {/* Employee Task Progress - Mobile Optimized */}
-            {userRole === 'employee' && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base lg:text-lg">My Task Progress</CardTitle>
-                  <CardDescription className="text-sm">Your assigned tasks completion rate</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="p-3 bg-muted/30 rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium">This Week</span>
-                        <span className="text-lg font-bold text-primary">85%</span>
-                      </div>
-                      <Progress value={85} className="h-2" />
+          {/* Employee Task Progress / Upcoming Deadlines */}
+          {userRole === 'employee' ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base lg:text-lg">My Task Progress</CardTitle>
+                <CardDescription className="text-sm">Your assigned tasks completion rate</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium">This Week</span>
+                      <span className="text-lg font-bold text-primary">85%</span>
                     </div>
-                    <div className="p-3 bg-muted/30 rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium">This Month</span>
-                        <span className="text-lg font-bold text-primary">72%</span>
-                      </div>
-                      <Progress value={72} className="h-2" />
-                    </div>
-                    <div className="p-3 bg-muted/30 rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-sm font-medium">Overall</span>
-                        <span className="text-lg font-bold text-primary">89%</span>
-                      </div>
-                      <Progress value={89} className="h-2" />
-                    </div>
+                    <Progress value={85} className="h-2" />
                   </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Upcoming Deadlines - Mobile Optimized */}
-            <Card className="lg:col-span-1">
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium">This Month</span>
+                      <span className="text-lg font-bold text-primary">72%</span>
+                    </div>
+                    <Progress value={72} className="h-2" />
+                  </div>
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-medium">Overall</span>
+                      <span className="text-lg font-bold text-primary">89%</span>
+                    </div>
+                    <Progress value={89} className="h-2" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base lg:text-lg">
                   <AlertCircle className="h-4 w-4 lg:h-5 lg:w-5 text-orange-500 flex-shrink-0" />
@@ -464,7 +460,7 @@ const Index = () => {
                 </div>
               </CardContent>
             </Card>
-          </div>
+          )}
         </div>
 
         {/* Project Timeline Section */}
