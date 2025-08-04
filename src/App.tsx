@@ -43,9 +43,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
       <main className="flex-1 flex flex-col min-w-0">
         <header className="h-14 flex items-center border-b bg-card px-4 lg:px-6 sticky top-0 z-40">
           <SidebarTrigger className="mr-2" />
-          <div className="flex-1 min-w-0">
-            <AgencyHeader />
-          </div>
+          <AgencyHeader />
         </header>
         <div className="flex-1 p-4 lg:p-6 overflow-auto">
           {children}
