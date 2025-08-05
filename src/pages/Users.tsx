@@ -20,24 +20,31 @@ const Users = () => {
     try {
       setLoading(true);
       
-      // Fetch profiles with user roles
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select(`
-          *,
-          user_roles (
-            role
-          )
-        `)
-        .order('created_at', { ascending: false });
+      // Fetch profiles and user roles separately
+      const [profilesResponse, rolesResponse] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('user_roles')
+          .select('user_id, role')
+      ]);
 
-      if (profilesError) throw profilesError;
+      if (profilesResponse.error) throw profilesResponse.error;
+      if (rolesResponse.error) throw rolesResponse.error;
 
-      const formattedUsers = profiles?.map(profile => ({
+      // Create a map of user roles for easy lookup
+      const roleMap = new Map();
+      rolesResponse.data?.forEach(userRole => {
+        roleMap.set(userRole.user_id, userRole.role);
+      });
+
+      const formattedUsers = profilesResponse.data?.map(profile => ({
         id: profile.user_id,
         name: profile.full_name || 'Unknown User',
         email: profile.user_id, // We don't have email in profiles, using user_id as fallback
-        role: Array.isArray(profile.user_roles) && profile.user_roles.length > 0 ? profile.user_roles[0].role : 'employee',
+        role: roleMap.get(profile.user_id) || 'employee',
         status: profile.is_active ? 'active' : 'inactive',
         userId: profile.user_id,
         position: profile.position,
