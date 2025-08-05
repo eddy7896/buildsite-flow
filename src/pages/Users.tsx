@@ -1,18 +1,83 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
-import { Plus, Edit, Trash2, Eye } from "lucide-react";
-import { useState } from "react";
+import { Plus, Edit, Trash2, Eye, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const Users = () => {
-  // Mock data - replace with actual API calls
-  const users = [
-    { id: 1, name: "John Doe", email: "john@company.com", role: "admin", status: "active", userId: "USR-001", password: "admin123" },
-    { id: 2, name: "Jane Smith", email: "jane@company.com", role: "hr", status: "active", userId: "USR-002", password: "hr123" },
-    { id: 3, name: "Mike Johnson", email: "mike@company.com", role: "employee", status: "inactive", userId: "USR-003", password: "emp123" },
-  ];
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch profiles with user roles
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          user_roles (
+            role
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (profilesError) throw profilesError;
+
+      const formattedUsers = profiles?.map(profile => ({
+        id: profile.user_id,
+        name: profile.full_name || 'Unknown User',
+        email: profile.user_id, // We don't have email in profiles, using user_id as fallback
+        role: Array.isArray(profile.user_roles) && profile.user_roles.length > 0 ? profile.user_roles[0].role : 'employee',
+        status: profile.is_active ? 'active' : 'inactive',
+        userId: profile.user_id,
+        position: profile.position,
+        department: profile.department,
+        phone: profile.phone,
+        hire_date: profile.hire_date,
+        avatar_url: profile.avatar_url
+      })) || [];
+
+      setUsers(formattedUsers);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <div className="text-center">
+            <p className="text-destructive mb-2">Error loading users</p>
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <Button onClick={fetchUsers} className="mt-4">Retry</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -35,7 +100,12 @@ const Users = () => {
           <CardDescription>A list of all users in the system</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          {users.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No users found</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
             {users.map((user) => (
               <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex-1">
@@ -62,6 +132,9 @@ const Users = () => {
                     <DialogContent>
                       <DialogHeader>
                         <DialogTitle>User Details</DialogTitle>
+                        <DialogDescription>
+                          View detailed information about this user including their authorization level and system access.
+                        </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4">
                         <div>
@@ -89,8 +162,20 @@ const Users = () => {
                           </Badge>
                         </div>
                         <div>
-                          <label className="text-sm font-medium text-muted-foreground">Password</label>
-                          <p className="text-sm font-mono">{user.password}</p>
+                          <label className="text-sm font-medium text-muted-foreground">Position</label>
+                          <p className="text-sm">{user.position || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Department</label>
+                          <p className="text-sm">{user.department || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Phone</label>
+                          <p className="text-sm">{user.phone || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium text-muted-foreground">Hire Date</label>
+                          <p className="text-sm">{user.hire_date || 'Not specified'}</p>
                         </div>
                       </div>
                     </DialogContent>
@@ -104,7 +189,8 @@ const Users = () => {
                 </div>
               </div>
             ))}
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
