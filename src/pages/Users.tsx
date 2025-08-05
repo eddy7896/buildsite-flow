@@ -19,26 +19,40 @@ const Users = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
+      console.log('Starting to fetch users...');
       
       // Fetch profiles and user roles separately
-      const [profilesResponse, rolesResponse] = await Promise.all([
-        supabase
-          .from('profiles')
-          .select('*')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('user_roles')
-          .select('user_id, role')
-      ]);
+      console.log('Fetching profiles...');
+      const profilesResponse = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      if (profilesResponse.error) throw profilesResponse.error;
-      if (rolesResponse.error) throw rolesResponse.error;
+      console.log('Profiles response:', profilesResponse);
+
+      console.log('Fetching user roles...');
+      const rolesResponse = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+
+      console.log('Roles response:', rolesResponse);
+
+      if (profilesResponse.error) {
+        console.error('Profiles error:', profilesResponse.error);
+        throw profilesResponse.error;
+      }
+      if (rolesResponse.error) {
+        console.error('Roles error:', rolesResponse.error);
+        throw rolesResponse.error;
+      }
 
       // Create a map of user roles for easy lookup
       const roleMap = new Map();
       rolesResponse.data?.forEach(userRole => {
         roleMap.set(userRole.user_id, userRole.role);
       });
+
+      console.log('Role map:', roleMap);
 
       const formattedUsers = profilesResponse.data?.map(profile => ({
         id: profile.user_id,
@@ -54,8 +68,10 @@ const Users = () => {
         avatar_url: profile.avatar_url
       })) || [];
 
+      console.log('Formatted users:', formattedUsers);
       setUsers(formattedUsers);
     } catch (err: any) {
+      console.error('Fetch users error:', err);
       setError(err.message);
     } finally {
       setLoading(false);
