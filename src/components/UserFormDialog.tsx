@@ -135,7 +135,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto mx-4">
         <DialogHeader>
           <DialogTitle>{user ? 'Edit User' : 'Create New User'}</DialogTitle>
           <DialogDescription>
@@ -143,11 +143,12 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           <div className="space-y-2">
             <Label htmlFor="full_name">Full Name</Label>
             <Input
               id="full_name"
+              className="h-12 text-base"
               value={formData.full_name}
               onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
               required
@@ -159,6 +160,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
             <Input
               id="email"
               type="email"
+              className="h-12 text-base"
               value={formData.email}
               onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
               required
@@ -185,6 +187,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
             <Label htmlFor="position">Position</Label>
             <Input
               id="position"
+              className="h-12 text-base"
               value={formData.position}
               onChange={(e) => setFormData(prev => ({ ...prev, position: e.target.value }))}
             />
@@ -194,6 +197,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
             <Label htmlFor="department">Department</Label>
             <Input
               id="department"
+              className="h-12 text-base"
               value={formData.department}
               onChange={(e) => setFormData(prev => ({ ...prev, department: e.target.value }))}
             />
@@ -203,6 +207,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
             <Label htmlFor="phone">Phone</Label>
             <Input
               id="phone"
+              className="h-12 text-base"
               value={formData.phone}
               onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
             />
@@ -213,16 +218,17 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
             <Input
               id="hire_date"
               type="date"
+              className="h-12 text-base"
               value={formData.hire_date}
               onChange={(e) => setFormData(prev => ({ ...prev, hire_date: e.target.value }))}
             />
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={onClose} className="w-full sm:w-auto h-12 sm:h-auto">
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading} className="w-full sm:w-auto h-12 sm:h-auto">
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

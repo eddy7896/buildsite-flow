@@ -127,32 +127,32 @@ const Invoices = () => {
   }
 
   return (
-    <div className="p-4 lg:p-6">
-      <div className="flex flex-col space-y-4 sm:flex-row sm:justify-between sm:items-center sm:space-y-0 mb-6">
+    <div className="p-3 sm:p-4 lg:p-6">
+      <div className="flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-center sm:space-y-0 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold">Invoices</h1>
-          <p className="text-sm lg:text-base text-muted-foreground">Manage client invoices and billing</p>
+          <h1 className="text-2xl sm:text-3xl font-bold">Invoices</h1>
+          <p className="text-sm text-muted-foreground">Manage client invoices and billing</p>
         </div>
         <div className="flex flex-col space-y-2 sm:flex-row sm:gap-2 sm:space-y-0">
-          <Button variant="outline" className="w-full sm:w-auto">
+          <Button variant="outline" className="w-full sm:w-auto min-h-[44px]">
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <Button onClick={handleNewInvoice} className="w-full sm:w-auto">
+          <Button onClick={handleNewInvoice} className="w-full sm:w-auto min-h-[44px]">
             <Plus className="mr-2 h-4 w-4" />
             New Invoice
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <Card>
-          <CardContent className="pt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6">
+        <Card className="hover:shadow-md transition-shadow">
+          <CardContent className="pt-4 sm:pt-6">
             <div className="flex items-center">
-              <FileText className="h-8 w-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Total Invoices</p>
-                <p className="text-2xl font-bold">{invoiceStats.totalInvoices}</p>
+              <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
+              <div className="ml-3 sm:ml-4">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground">Total Invoices</p>
+                <p className="text-xl sm:text-2xl font-bold">{invoiceStats.totalInvoices}</p>
               </div>
             </div>
           </CardContent>

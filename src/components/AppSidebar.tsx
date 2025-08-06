@@ -113,10 +113,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar
-      className={isMobile ? "w-full" : collapsed ? "w-14" : "w-60"}
+      className={isMobile ? "w-64" : collapsed ? "w-14" : "w-60"}
       collapsible={isMobile ? "offcanvas" : "icon"}
       variant={isMobile ? "floating" : "sidebar"}
-      side={isMobile ? "left" : "left"}
+      side="left"
     >
       <SidebarContent className="flex flex-col">
         {/* Logo placeholder when collapsed */}
@@ -128,28 +128,49 @@ export function AppSidebar() {
           </div>
         )}
         
-        <SidebarGroup className="flex-1 mt-6">
-          <SidebarGroupLabel>
+        {/* Mobile header with close button */}
+        {isMobile && (
+          <div className="p-4 border-b border-sidebar-border flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
                 <Building className="h-4 w-4 text-primary" />
               </div>
-              {(!collapsed || isMobile) && <span className="text-xl font-bold">BuildFlow</span>}
+              <span className="text-xl font-bold">BuildFlow</span>
             </div>
-          </SidebarGroupLabel>
+          </div>
+        )}
+        
+        <SidebarGroup className="flex-1 mt-2">
+          {!isMobile && (
+            <SidebarGroupLabel>
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <Building className="h-4 w-4 text-primary" />
+                </div>
+                {(!collapsed || isMobile) && <span className="text-xl font-bold">BuildFlow</span>}
+              </div>
+            </SidebarGroupLabel>
+          )}
           
-          <SidebarGroupContent className="mt-8">
-            <SidebarMenu>
+          <SidebarGroupContent className={isMobile ? "mt-4" : "mt-8"}>
+            <SidebarMenu className="space-y-1">
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
+                  <SidebarMenuButton 
+                    asChild 
+                    className={isMobile ? "h-12 px-4 text-base" : "h-10 px-3"}
+                  >
                     <NavLink 
                       to={item.url} 
                       end={item.url === '/'}
-                      className={({ isActive }) => getNavCls({ isActive })}
+                      className={({ isActive }) => `${getNavCls({ isActive })} ${isMobile ? 'flex items-center space-x-3 py-3' : 'flex items-center space-x-2'}`}
                     >
-                      <item.icon className="h-4 w-4" />
-                      {(!collapsed || isMobile) && <span>{item.title}</span>}
+                      <item.icon className={isMobile ? "h-5 w-5" : "h-4 w-4"} />
+                      {(!collapsed || isMobile) && (
+                        <span className={isMobile ? "text-base font-medium" : "text-sm"}>
+                          {item.title}
+                        </span>
+                      )}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -159,18 +180,25 @@ export function AppSidebar() {
         </SidebarGroup>
         
         {/* Settings at bottom */}
-        <SidebarGroup className="mt-auto">
+        <SidebarGroup className="mt-auto border-t border-sidebar-border pt-4">
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton asChild>
+                <SidebarMenuButton 
+                  asChild 
+                  className={isMobile ? "h-12 px-4 text-base" : "h-10 px-3"}
+                >
                   <NavLink 
                     to="/settings" 
-                    className={({ isActive }) => getNavCls({ isActive })}
-                    >
-                      <Settings className="h-4 w-4" />
-                      {(!collapsed || isMobile) && <span>Settings</span>}
-                    </NavLink>
+                    className={({ isActive }) => `${getNavCls({ isActive })} ${isMobile ? 'flex items-center space-x-3 py-3' : 'flex items-center space-x-2'}`}
+                  >
+                    <Settings className={isMobile ? "h-5 w-5" : "h-4 w-4"} />
+                    {(!collapsed || isMobile) && (
+                      <span className={isMobile ? "text-base font-medium" : "text-sm"}>
+                        Settings
+                      </span>
+                    )}
+                  </NavLink>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

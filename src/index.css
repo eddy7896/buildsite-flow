@@ -104,11 +104,16 @@ All colors MUST be HSL.
     /* Improve mobile performance and prevent bounce scrolling */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Prevent horizontal scroll on mobile */
+    overflow-x: hidden;
   }
 
   /* Touch-friendly interactions */
   button, [role="button"], a {
     @apply touch-manipulation;
+    /* Minimum touch target size for mobile */
+    min-height: 44px;
+    min-width: 44px;
   }
 
   /* Prevent text selection on interactive elements */
@@ -120,5 +125,46 @@ All colors MUST be HSL.
   /* Improve scrolling performance on mobile */
   * {
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* Enhanced mobile-specific styles */
+  @media (max-width: 768px) {
+    /* Larger text for better readability on mobile */
+    body {
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* Better spacing for touch devices */
+    .card, .button, .input {
+      @apply p-4;
+    }
+
+    /* Prevent zoom on form inputs */
+    input, select, textarea {
+      font-size: 16px;
+    }
+
+    /* Better modal/dialog handling */
+    .dialog-content {
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+  }
+
+  /* Tablet optimizations */
+  @media (min-width: 768px) and (max-width: 1024px) {
+    .container {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+  }
+
+  /* Safe area handling for notched devices */
+  @supports (padding: max(0px)) {
+    body {
+      padding-left: max(12px, env(safe-area-inset-left));
+      padding-right: max(12px, env(safe-area-inset-right));
+    }
   }
 }

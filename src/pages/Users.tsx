@@ -160,31 +160,31 @@ const Users = () => {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-3 sm:p-4 lg:p-6">
+      <div className="flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-center sm:space-y-0 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Users</h1>
-          <p className="text-muted-foreground">Manage system users and their roles</p>
+          <h1 className="text-2xl sm:text-3xl font-bold">Users</h1>
+          <p className="text-sm text-muted-foreground">Manage system users and their roles</p>
         </div>
-        <Button onClick={handleNewUser}>
+        <Button onClick={handleNewUser} className="w-full sm:w-auto min-h-[44px]">
           <Plus className="mr-2 h-4 w-4" />
           Add User
         </Button>
       </div>
 
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex gap-4">
+      <Card className="mb-4 sm:mb-6">
+        <CardContent className="pt-4 sm:pt-6">
+          <div className="flex flex-col space-y-3 sm:flex-row sm:gap-4 sm:space-y-0">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search users..."
-                className="pl-10"
+                className="pl-10 h-12 text-base"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button variant="outline">
+            <Button variant="outline" className="h-12 w-full sm:w-auto">
               <Filter className="mr-2 h-4 w-4" />
               Filter
             </Button>
@@ -214,31 +214,39 @@ const Users = () => {
               )}
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
             {filteredUsers.map((user) => (
-              <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
+              <div key={user.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 border rounded-lg space-y-3 sm:space-y-0">
                 <div className="flex-1">
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <h3 className="font-medium">{user.name}</h3>
-                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                  <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:gap-4 sm:space-y-0">
+                    <div className="flex-1">
+                      <h3 className="font-medium text-base">{user.name}</h3>
+                      <p className="text-sm text-muted-foreground break-all">{user.email}</p>
+                      {(user.position || user.department) && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {user.position}{user.position && user.department && ' • '}{user.department}
+                        </p>
+                      )}
                     </div>
-                    <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
-                      {user.role}
-                    </Badge>
-                    <Badge variant={user.status === 'active' ? 'default' : 'destructive'}>
-                      {user.status}
-                    </Badge>
+                    <div className="flex flex-row sm:flex-col gap-2 sm:gap-1">
+                      <Badge variant={user.role === 'admin' ? 'default' : 'secondary'} className="text-xs">
+                        {user.role}
+                      </Badge>
+                      <Badge variant={user.status === 'active' ? 'default' : 'destructive'} className="text-xs">
+                        {user.status}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col space-y-2 sm:flex-row sm:gap-2 sm:space-y-0">
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <Eye className="h-4 w-4" />
+                      <Button variant="outline" size="sm" className="w-full sm:w-auto min-h-[40px]">
+                        <Eye className="h-4 w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">View</span>
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
                       <DialogHeader>
                         <DialogTitle>User Details</DialogTitle>
                         <DialogDescription>
@@ -252,11 +260,11 @@ const Users = () => {
                         </div>
                         <div>
                           <label className="text-sm font-medium text-muted-foreground">Email</label>
-                          <p className="text-sm">{user.email}</p>
+                          <p className="text-sm break-all">{user.email}</p>
                         </div>
                         <div>
                           <label className="text-sm font-medium text-muted-foreground">User ID</label>
-                          <p className="text-sm">{user.userId}</p>
+                          <p className="text-sm font-mono text-xs break-all">{user.userId}</p>
                         </div>
                         <div>
                           <label className="text-sm font-medium text-muted-foreground">Authorization Level</label>
@@ -284,16 +292,18 @@ const Users = () => {
                         </div>
                         <div>
                           <label className="text-sm font-medium text-muted-foreground">Hire Date</label>
-                          <p className="text-sm">{user.hire_date || 'Not specified'}</p>
+                          <p className="text-sm">{user.hire_date ? new Date(user.hire_date).toLocaleDateString() : 'Not specified'}</p>
                         </div>
                       </div>
                     </DialogContent>
                   </Dialog>
-                  <Button variant="outline" size="sm" onClick={() => handleEditUser(user)}>
-                    <Edit className="h-4 w-4" />
+                  <Button variant="outline" size="sm" onClick={() => handleEditUser(user)} className="w-full sm:w-auto min-h-[40px]">
+                    <Edit className="h-4 w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Edit</span>
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleDeleteUser(user)}>
-                    <Trash2 className="h-4 w-4" />
+                  <Button variant="outline" size="sm" onClick={() => handleDeleteUser(user)} className="w-full sm:w-auto min-h-[40px]">
+                    <Trash2 className="h-4 w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Delete</span>
                   </Button>
                 </div>
               </div>

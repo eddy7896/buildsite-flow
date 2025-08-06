@@ -112,31 +112,31 @@ const Projects = () => {
   }
 
   return (
-    <div className="p-4 lg:p-6">
-      <div className="flex flex-col space-y-4 sm:flex-row sm:justify-between sm:items-center sm:space-y-0 mb-6">
+    <div className="p-3 sm:p-4 lg:p-6">
+      <div className="flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-center sm:space-y-0 mb-4 sm:mb-6">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold">Projects</h1>
-          <p className="text-sm lg:text-base text-muted-foreground">Manage and track project progress</p>
+          <h1 className="text-2xl sm:text-3xl font-bold">Projects</h1>
+          <p className="text-sm text-muted-foreground">Manage and track project progress</p>
         </div>
-        <Button onClick={handleNewProject} className="w-full sm:w-auto">
+        <Button onClick={handleNewProject} className="w-full sm:w-auto min-h-[44px]">
           <Plus className="mr-2 h-4 w-4" />
           New Project
         </Button>
       </div>
 
-      <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex gap-4">
+      <Card className="mb-4 sm:mb-6">
+        <CardContent className="pt-4 sm:pt-6">
+          <div className="flex flex-col space-y-3 sm:flex-row sm:gap-4 sm:space-y-0">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
                 placeholder="Search projects..." 
-                className="pl-10" 
+                className="pl-10 h-12 text-base" 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button variant="outline">
+            <Button variant="outline" className="h-12 w-full sm:w-auto">
               <Filter className="mr-2 h-4 w-4" />
               Filter
             </Button>
@@ -164,13 +164,13 @@ const Projects = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 lg:gap-6">
+        <div className="grid gap-3 sm:gap-4 lg:gap-6">
           {filteredProjects.map((project) => (
-            <Card key={project.id}>
-              <CardHeader className="pb-4">
-                <div className="flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-start sm:space-y-0">
+            <Card key={project.id} className="hover:shadow-md transition-shadow">
+              <CardHeader className="pb-3 sm:pb-4">
+                <div className="flex flex-col space-y-2 sm:space-y-3 lg:flex-row lg:justify-between lg:items-start lg:space-y-0">
                   <div className="flex-1">
-                    <CardTitle className="text-lg lg:text-xl">{project.name}</CardTitle>
+                    <CardTitle className="text-base sm:text-lg lg:text-xl">{project.name}</CardTitle>
                     <CardDescription className="text-sm lg:text-base mt-1">{project.description}</CardDescription>
                   </div>
                   <div className="flex gap-2">
