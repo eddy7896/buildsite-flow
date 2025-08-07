@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { 
   Building, 
   Users, 
@@ -92,7 +93,7 @@ const navigationItems = {
 };
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, setOpenMobile } = useSidebar();
   const { userRole } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
@@ -100,6 +101,13 @@ export function AppSidebar() {
 
   const items = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.employee;
   const collapsed = state === 'collapsed';
+
+  // Auto-collapse sidebar on mobile when navigating
+  useEffect(() => {
+    if (isMobile && setOpenMobile) {
+      setOpenMobile(false);
+    }
+  }, [currentPath, isMobile, setOpenMobile]);
 
   const isActive = (path: string) => {
     if (path === '/') {
