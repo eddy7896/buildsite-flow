@@ -245,13 +245,13 @@ const CreateEmployee = () => {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Create New Employee</h1>
-          <p className="text-muted-foreground">Add a new employee to the system</p>
+    <div className="p-4 lg:p-6">
+      <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0 mb-6">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl lg:text-3xl font-bold break-words">Create New Employee</h1>
+          <p className="text-sm lg:text-base text-muted-foreground">Add a new employee to the system</p>
         </div>
-        <Button asChild variant="outline" size="sm">
+        <Button asChild variant="outline" size="sm" className="w-full lg:w-auto h-10">
           <Link to="/users">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Users
