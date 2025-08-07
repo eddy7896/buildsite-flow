@@ -142,21 +142,21 @@ const Index = () => {
   };
 
   return (
-    <div className="bg-background min-h-screen">
+    <div className="bg-background">
       {/* Header */}
-      <div className="border-b bg-card px-3 sm:px-4 lg:px-6 py-3 sm:py-4">
-        <div className="flex flex-col space-y-3 sm:space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
-          <div className="flex items-center space-x-3 sm:space-x-4">
+      <div className="border-b bg-card px-4 lg:px-6 py-4">
+        <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
+          <div className="flex items-center space-x-4">
             <div>
-              <h1 className="text-lg sm:text-xl lg:text-2xl font-bold">Dashboard</h1>
-              <p className="text-xs sm:text-sm text-muted-foreground">Welcome back, {profile?.full_name || 'User'}</p>
+              <h1 className="text-xl lg:text-2xl font-bold">Dashboard</h1>
+              <p className="text-sm text-muted-foreground">Welcome back, {profile?.full_name || 'User'}</p>
             </div>
           </div>
           
-          <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4">
-            <div className="text-left sm:text-right">
-              <p className="font-medium text-sm lg:text-base truncate">{profile?.full_name || user?.email}</p>
-              <div className="flex items-center sm:justify-end space-x-2">
+          <div className="flex flex-col space-y-2 lg:flex-row lg:items-center lg:space-y-0 lg:space-x-4">
+            <div className="text-left lg:text-right">
+              <p className="font-medium text-sm lg:text-base">{profile?.full_name || user?.email}</p>
+              <div className="flex items-center lg:justify-end space-x-2">
                 {getRoleIcon(userRole || 'employee')}
                 <Badge variant="secondary" className="text-xs">
                   {getRoleDisplay(userRole || 'employee')}
@@ -164,72 +164,71 @@ const Index = () => {
               </div>
             </div>
             
-            <Button variant="outline" size="sm" onClick={signOut} className="w-full sm:w-auto min-h-[44px]">
+            <Button variant="outline" size="sm" onClick={signOut} className="w-full lg:w-auto">
               <LogOut className="h-4 w-4 mr-2" />
-              <span className="sm:hidden lg:inline">Sign Out</span>
-              <span className="hidden sm:inline lg:hidden">Sign Out</span>
+              Sign Out
             </Button>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <main className="p-3 sm:p-4 lg:p-6">
-        <div className="mb-4 sm:mb-6 lg:mb-8">
-          <p className="text-sm lg:text-base text-muted-foreground leading-relaxed">
+      <main className="p-4 lg:p-6">
+        <div className="mb-6 lg:mb-8">
+          <p className="text-sm lg:text-base text-muted-foreground">
             {getDashboardMessage(userRole || 'employee')}
           </p>
         </div>
 
         {/* Quick Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-6 sm:mb-8">
-          <Card className="hover:shadow-md transition-shadow">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Active Projects</CardTitle>
               <Building className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">12</div>
+              <div className="text-2xl font-bold">12</div>
               <p className="text-xs text-muted-foreground">+2 from last month</p>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Team Members</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">48</div>
+              <div className="text-2xl font-bold">48</div>
               <p className="text-xs text-muted-foreground">+3 new hires</p>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">₹125,000</div>
+              <div className="text-2xl font-bold">₹125,000</div>
               <p className="text-xs text-muted-foreground">+8% from last month</p>
             </CardContent>
           </Card>
 
-          <Card className="hover:shadow-md transition-shadow">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
               <Calculator className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-xl sm:text-2xl font-bold">7</div>
+              <div className="text-2xl font-bold">7</div>
               <p className="text-xs text-muted-foreground">₹24,500 total</p>
             </CardContent>
           </Card>
         </div>
 
         {/* Charts and Analytics Section - 2x2 Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Monthly Revenue vs Expenses */}
           {(userRole === 'admin' || userRole === 'finance_manager') && (
             <Card>
