@@ -145,47 +145,47 @@ const Invoices = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <Card>
-          <CardContent className="pt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6">
+        <Card className="transition-all hover:shadow-md">
+          <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
-              <FileText className="h-8 w-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Total Invoices</p>
-                <p className="text-2xl font-bold">{invoiceStats.totalInvoices}</p>
+              <FileText className="h-6 w-6 lg:h-8 lg:w-8 text-blue-600 flex-shrink-0" />
+              <div className="ml-3 lg:ml-4 min-w-0">
+                <p className="text-xs lg:text-sm font-medium text-muted-foreground">Total Invoices</p>
+                <p className="text-xl lg:text-2xl font-bold">{invoiceStats.totalInvoices}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="transition-all hover:shadow-md">
+          <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
-              <DollarSign className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Total Amount</p>
-                <p className="text-2xl font-bold">₹{invoiceStats.totalAmount.toLocaleString()}</p>
+              <DollarSign className="h-6 w-6 lg:h-8 lg:w-8 text-green-600 flex-shrink-0" />
+              <div className="ml-3 lg:ml-4 min-w-0">
+                <p className="text-xs lg:text-sm font-medium text-muted-foreground">Total Amount</p>
+                <p className="text-lg lg:text-2xl font-bold truncate">₹{invoiceStats.totalAmount.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="transition-all hover:shadow-md">
+          <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
-              <Calendar className="h-8 w-8 text-yellow-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold">₹{invoiceStats.pendingAmount.toLocaleString()}</p>
+              <Calendar className="h-6 w-6 lg:h-8 lg:w-8 text-yellow-600 flex-shrink-0" />
+              <div className="ml-3 lg:ml-4 min-w-0">
+                <p className="text-xs lg:text-sm font-medium text-muted-foreground">Pending</p>
+                <p className="text-lg lg:text-2xl font-bold truncate">₹{invoiceStats.pendingAmount.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="transition-all hover:shadow-md">
+          <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
-              <TrendingUp className="h-8 w-8 text-red-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Overdue</p>
-                <p className="text-2xl font-bold">₹{invoiceStats.overdueAmount.toLocaleString()}</p>
+              <TrendingUp className="h-6 w-6 lg:h-8 lg:w-8 text-red-600 flex-shrink-0" />
+              <div className="ml-3 lg:ml-4 min-w-0">
+                <p className="text-xs lg:text-sm font-medium text-muted-foreground">Overdue</p>
+                <p className="text-lg lg:text-2xl font-bold truncate">₹{invoiceStats.overdueAmount.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -194,17 +194,17 @@ const Invoices = () => {
 
       <Card className="mb-6">
         <CardContent className="pt-6">
-          <div className="flex gap-4">
+          <div className="flex flex-col space-y-3 lg:flex-row lg:space-y-0 lg:space-x-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input 
                 placeholder="Search invoices..." 
-                className="pl-10" 
+                className="pl-10 h-10" 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button variant="outline">
+            <Button variant="outline" className="w-full lg:w-auto h-10">
               <Filter className="mr-2 h-4 w-4" />
               Filter
             </Button>
@@ -236,52 +236,80 @@ const Invoices = () => {
           ) : (
             <div className="space-y-4">
               {filteredInvoices.map((invoice) => (
-                <div key={invoice.id} className="flex flex-col lg:flex-row lg:items-center lg:justify-between p-4 border rounded-lg space-y-4 lg:space-y-0">
-                  <div className="flex-1">
-                    <div className="flex flex-col space-y-2">
-                      <div>
-                        <h3 className="font-semibold">{invoice.invoice_number}</h3>
-                        <p className="text-sm text-muted-foreground">{invoice.title}</p>
-                        <p className="text-xs text-muted-foreground">{invoice.description}</p>
+                <Card key={invoice.id} className="transition-all hover:shadow-md">
+                  <CardContent className="p-4 lg:p-6">
+                    <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
+                      {/* Invoice Details */}
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <div>
+                          <h3 className="font-semibold text-base lg:text-lg break-words">{invoice.invoice_number}</h3>
+                          <p className="text-sm lg:text-base text-muted-foreground break-words">{invoice.title}</p>
+                          {invoice.description && (
+                            <p className="text-xs lg:text-sm text-muted-foreground break-words">{invoice.description}</p>
+                          )}
+                        </div>
+                        
+                        {/* Mobile: Show amount and dates prominently */}
+                        <div className="lg:hidden bg-muted/30 p-3 rounded-lg">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-bold text-lg">₹{(invoice.total_amount || 0).toLocaleString()}</span>
+                            <Badge variant={getStatusColor(invoice.status)} className="text-xs">
+                              {invoice.status}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <p>Issue: {new Date(invoice.issue_date).toLocaleDateString()}</p>
+                            {invoice.due_date && (
+                              <p className={isOverdue(invoice.due_date, invoice.status) ? "text-red-600" : ""}>
+                                Due: {new Date(invoice.due_date).toLocaleDateString()}
+                                {isOverdue(invoice.due_date, invoice.status) && " (Overdue)"}
+                              </p>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4 lg:text-right space-y-3 sm:space-y-0">
-                    <div className="text-center sm:text-right">
-                      <p className="font-bold text-lg">₹{(invoice.total_amount || 0).toLocaleString()}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Issue: {new Date(invoice.issue_date).toLocaleDateString()}
-                      </p>
-                      {invoice.due_date && (
+
+                      {/* Desktop: Amount and dates */}
+                      <div className="hidden lg:flex lg:flex-col lg:items-end lg:text-right lg:min-w-fit lg:ml-4">
+                        <p className="font-bold text-xl">₹{(invoice.total_amount || 0).toLocaleString()}</p>
                         <p className="text-sm text-muted-foreground">
-                          Due: {new Date(invoice.due_date).toLocaleDateString()}
+                          Issue: {new Date(invoice.issue_date).toLocaleDateString()}
                         </p>
-                      )}
-                      {invoice.due_date && isOverdue(invoice.due_date, invoice.status) && (
-                        <p className="text-xs text-red-600">Overdue</p>
-                      )}
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 space-y-2 sm:space-y-0">
-                      <Badge variant={getStatusColor(invoice.status)}>
-                        {invoice.status}
-                      </Badge>
-                      <div className="flex gap-1">
-                        <Button variant="outline" size="sm" onClick={() => handleEditInvoice(invoice)} className="flex-1 sm:flex-none">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleDeleteInvoice(invoice)} className="flex-1 sm:flex-none">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {invoice.due_date && (
+                          <p className={`text-sm ${isOverdue(invoice.due_date, invoice.status) ? "text-red-600" : "text-muted-foreground"}`}>
+                            Due: {new Date(invoice.due_date).toLocaleDateString()}
+                            {isOverdue(invoice.due_date, invoice.status) && " (Overdue)"}
+                          </p>
+                        )}
+                        <Badge variant={getStatusColor(invoice.status)} className="mt-2">
+                          {invoice.status}
+                        </Badge>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex flex-col space-y-2 lg:flex-row lg:space-y-0 lg:space-x-2 lg:ml-4">
+                        <div className="grid grid-cols-2 gap-2 lg:flex lg:gap-1">
+                          <Button variant="outline" size="sm" onClick={() => handleEditInvoice(invoice)} className="h-9">
+                            <Edit className="h-4 w-4 mr-2 lg:mr-0" />
+                            <span className="lg:hidden">Edit</span>
+                          </Button>
+                          <Button variant="outline" size="sm" className="h-9">
+                            <Eye className="h-4 w-4 mr-2 lg:mr-0" />
+                            <span className="lg:hidden">View</span>
+                          </Button>
+                          <Button variant="outline" size="sm" className="h-9">
+                            <Download className="h-4 w-4 mr-2 lg:mr-0" />
+                            <span className="lg:hidden">Download</span>
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => handleDeleteInvoice(invoice)} className="h-9">
+                            <Trash2 className="h-4 w-4 mr-2 lg:mr-0" />
+                            <span className="lg:hidden">Delete</span>
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           )}
