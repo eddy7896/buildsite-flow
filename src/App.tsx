@@ -9,6 +9,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { AgencyHeader } from "@/components/AgencyHeader";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
+import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Users from "./pages/Users";
@@ -61,9 +62,10 @@ const App = () => (
       <AuthProvider>
         <BrowserRouter>
           <Routes>
+            <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
             <Route 
-              path="/" 
+              path="/dashboard" 
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
