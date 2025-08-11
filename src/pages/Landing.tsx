@@ -96,6 +96,7 @@ export default function Landing() {
               <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Features</a>
               <a href="#benefits" className="text-muted-foreground hover:text-foreground transition-colors">Benefits</a>
               <a href="#testimonials" className="text-muted-foreground hover:text-foreground transition-colors">Testimonials</a>
+              <Link to="/pricing" className="text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
             </nav>
 
             <div className="flex items-center gap-4">
