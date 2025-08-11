@@ -14,16 +14,19 @@ import {
   FileText,
   DollarSign,
   Star,
-  MessageSquare
+  MessageSquare,
+  Target,
+  Zap,
+  Globe
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export default function Landing() {
   const features = [
     {
-      icon: Building2,
+      icon: Target,
       title: "Project Management",
-      description: "Streamline your construction projects from start to finish with powerful project tracking and collaboration tools."
+      description: "Streamline your projects from start to finish with powerful tracking, collaboration tools, and milestone management."
     },
     {
       icon: Users,
@@ -43,7 +46,7 @@ export default function Landing() {
     {
       icon: Calendar,
       title: "Resource Planning",
-      description: "Optimize resource allocation and scheduling to maximize efficiency and minimize downtime across all projects."
+      description: "Optimize resource allocation and scheduling to maximize efficiency and minimize downtime across all operations."
     },
     {
       icon: FileText,
@@ -64,14 +67,14 @@ export default function Landing() {
   const testimonials = [
     {
       name: "Sarah Johnson",
-      company: "Metropolitan Construction",
-      role: "Project Manager",
+      company: "Creative Solutions Agency",
+      role: "Operations Director",
       content: "BuildFlow transformed how we manage our projects. We've seen a 35% improvement in delivery times and our team collaboration has never been better.",
       rating: 5
     },
     {
       name: "Michael Chen", 
-      company: "Urban Development Corp",
+      company: "Digital Marketing Pro",
       role: "CEO",
       content: "The financial management features alone have saved us countless hours. The real-time reporting gives us the insights we need to make better business decisions.",
       rating: 5
@@ -85,7 +88,7 @@ export default function Landing() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-2">
-              <Building2 className="h-8 w-8 text-primary" />
+              <Zap className="h-8 w-8 text-primary" />
               <span className="text-xl font-bold">BuildFlow</span>
             </div>
             
@@ -113,7 +116,7 @@ export default function Landing() {
           <div className="text-center max-w-4xl mx-auto">
             <Badge variant="secondary" className="mb-6">
               <TrendingUp className="w-4 h-4 mr-2" />
-              Trusted by 500+ Construction Agencies
+              Trusted by 500+ Agencies Worldwide
             </Badge>
             
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
@@ -122,8 +125,8 @@ export default function Landing() {
             </h1>
             
             <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto leading-relaxed">
-              BuildFlow is the all-in-one construction ERP platform that streamlines operations, 
-              boosts team productivity, and scales your business faster than ever before.
+              BuildFlow is the all-in-one business management platform that streamlines operations, 
+              boosts team productivity, and scales your agency faster than ever before.
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
@@ -151,7 +154,7 @@ export default function Landing() {
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">Everything You Need to Scale</h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Comprehensive tools designed specifically for construction agencies to manage projects, 
+              Comprehensive tools designed for modern agencies to manage projects, 
               teams, and finances in one powerful platform.
             </p>
           </div>
@@ -179,7 +182,7 @@ export default function Landing() {
                 Drive Measurable Results for Your Agency
               </h2>
               <p className="text-xl text-muted-foreground mb-8">
-                Join hundreds of construction agencies that have transformed their operations 
+                Join hundreds of agencies that have transformed their operations 
                 and accelerated growth with BuildFlow.
               </p>
               
@@ -229,7 +232,7 @@ export default function Landing() {
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">Trusted by Industry Leaders</h2>
             <p className="text-xl text-muted-foreground">
-              See how construction agencies are transforming their operations with BuildFlow
+              See how agencies are transforming their operations with BuildFlow
             </p>
           </div>
 
@@ -263,7 +266,7 @@ export default function Landing() {
                 Ready to Transform Your Agency?
               </h2>
               <p className="text-xl opacity-90 mb-8 max-w-2xl mx-auto">
-                Join the hundreds of construction agencies already using BuildFlow to scale their operations and drive growth.
+                Join the hundreds of agencies already using BuildFlow to scale their operations and drive growth.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link to="/auth">
@@ -286,7 +289,7 @@ export default function Landing() {
         <div className="container mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-2 mb-4 md:mb-0">
-              <Building2 className="h-6 w-6 text-primary" />
+              <Zap className="h-6 w-6 text-primary" />
               <span className="text-lg font-semibold">BuildFlow</span>
             </div>
             
