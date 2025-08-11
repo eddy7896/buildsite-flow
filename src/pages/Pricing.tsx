@@ -9,11 +9,21 @@ import {
   Users,
   Building2,
   Crown,
-  Star
+  Star,
+  Globe,
+  ChevronDown
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useCurrency } from "@/hooks/useCurrency";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Pricing() {
+  const { currency, loading, formatPrice, changeCurrency, availableCurrencies } = useCurrency();
   const plans = [
     {
       name: "Starter",
@@ -144,6 +154,26 @@ export default function Pricing() {
             <nav className="hidden md:flex items-center gap-6">
               <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">Home</Link>
               <Link to="/pricing" className="text-foreground font-medium">Pricing</Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="sm" className="gap-2">
+                    <Globe className="h-4 w-4" />
+                    {currency.code}
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {Object.entries(availableCurrencies).map(([countryCode, currencyInfo]) => (
+                    <DropdownMenuItem 
+                      key={countryCode}
+                      onClick={() => changeCurrency(countryCode)}
+                      className="cursor-pointer"
+                    >
+                      {currencyInfo.symbol} {currencyInfo.code} - {currencyInfo.name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </nav>
 
             <div className="flex items-center gap-4">
@@ -167,11 +197,17 @@ export default function Pricing() {
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
             Choose the perfect plan for your agency. Upgrade or downgrade at any time.
           </p>
-          <div className="flex justify-center mb-12">
+          <div className="flex justify-center items-center gap-4 mb-8">
             <Badge variant="secondary" className="px-4 py-2">
               <Star className="w-4 h-4 mr-2" />
               All plans include 14-day free trial
             </Badge>
+            {!loading && (
+              <Badge variant="outline" className="px-4 py-2">
+                <Globe className="w-4 h-4 mr-2" />
+                Prices in {currency.name}
+              </Badge>
+            )}
           </div>
         </div>
       </section>
@@ -179,6 +215,12 @@ export default function Pricing() {
       {/* Pricing Plans */}
       <section className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="container mx-auto">
+          {loading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <span className="ml-2 text-muted-foreground">Loading pricing...</span>
+            </div>
+          ) : (
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {plans.map((plan, index) => (
               <Card key={index} className={`relative ${plan.popular ? 'border-primary shadow-lg scale-105' : 'border-border'}`}>
@@ -195,7 +237,7 @@ export default function Pricing() {
                   </div>
                   <CardTitle className="text-2xl">{plan.name}</CardTitle>
                   <div className="mt-4">
-                    <span className="text-4xl font-bold">${plan.price}</span>
+                    <span className="text-4xl font-bold">{formatPrice(plan.price)}</span>
                     <span className="text-muted-foreground">/{plan.period}</span>
                   </div>
                   <p className="text-muted-foreground mt-2">{plan.description}</p>
@@ -220,6 +262,7 @@ export default function Pricing() {
               </Card>
             ))}
           </div>
+          )}
         </div>
       </section>
 
