@@ -103,7 +103,7 @@ export default function Landing() {
               <Link to="/auth">
                 <Button variant="ghost" className="hidden sm:inline-flex">Sign In</Button>
               </Link>
-              <Link to="/auth">
+              <Link to="/signup">
                 <Button>Get Started <ArrowRight className="ml-2 h-4 w-4" /></Button>
               </Link>
             </div>
@@ -131,7 +131,7 @@ export default function Landing() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Link to="/auth">
+              <Link to="/signup">
                 <Button size="lg" className="w-full sm:w-auto">
                   Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
@@ -197,7 +197,7 @@ export default function Landing() {
               </div>
 
               <div className="mt-8">
-                <Link to="/auth">
+                <Link to="/signup">
                   <Button size="lg">
                     Start Your Growth Journey <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
@@ -270,7 +270,7 @@ export default function Landing() {
                 Join the hundreds of agencies already using BuildFlow to scale their operations and drive growth.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link to="/auth">
+                <Link to="/signup">
                   <Button size="lg" variant="secondary" className="w-full sm:w-auto">
                     Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
