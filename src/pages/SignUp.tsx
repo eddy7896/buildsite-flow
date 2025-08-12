@@ -40,7 +40,8 @@ const SignUp = () => {
     confirmPassword: '',
     agencyName: '',
     fullName: '',
-    phone: ''
+    phone: '',
+    countryCode: '+1 US'
   });
   
   const [selectedPlan, setSelectedPlan] = useState('');
@@ -270,13 +271,47 @@ const SignUp = () => {
 
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
-                    placeholder="+1 (555) 123-4567"
-                    value={accountData.phone}
-                    onChange={(e) => setAccountData(prev => ({ ...prev, phone: e.target.value }))}
-                  />
+                  <div className="flex gap-2">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="w-[120px] justify-between">
+                          {accountData.countryCode || '+1 US'}
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-[200px]">
+                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+1 US' }))}>
+                          🇺🇸 +1 United States
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+91 IN' }))}>
+                          🇮🇳 +91 India
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+44 UK' }))}>
+                          🇬🇧 +44 United Kingdom
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+61 AU' }))}>
+                          🇦🇺 +61 Australia
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+49 DE' }))}>
+                          🇩🇪 +49 Germany
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+33 FR' }))}>
+                          🇫🇷 +33 France
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+81 JP' }))}>
+                          🇯🇵 +81 Japan
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      placeholder="555 123-4567"
+                      value={accountData.phone}
+                      onChange={(e) => setAccountData(prev => ({ ...prev, phone: e.target.value }))}
+                      className="flex-1"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid sm:grid-cols-2 gap-4">
