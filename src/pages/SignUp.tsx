@@ -225,10 +225,15 @@ const SignUp = () => {
         {currentStep === 1 && (
           <Card className="max-w-2xl mx-auto">
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl font-bold">Create Your Agency Account</CardTitle>
+              <CardTitle className="text-2xl font-bold">Create Your Agency Admin Account</CardTitle>
               <CardDescription>
-                Set up your construction management agency in minutes
+                Set up your construction management agency admin account in minutes
               </CardDescription>
+              <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> This creates an admin account with full system access. Employee accounts can only be created by admins from within the dashboard.
+                </p>
+              </div>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleAccountSubmit} className="space-y-6">
