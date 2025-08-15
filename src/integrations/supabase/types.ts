@@ -309,7 +309,6 @@ export type Database = {
           marital_status: string | null
           nationality: string | null
           notes: string | null
-          salary: number | null
           skills: Json | null
           social_security_number: string | null
           supervisor_id: string | null
@@ -334,7 +333,6 @@ export type Database = {
           marital_status?: string | null
           nationality?: string | null
           notes?: string | null
-          salary?: number | null
           skills?: Json | null
           social_security_number?: string | null
           supervisor_id?: string | null
@@ -359,7 +357,6 @@ export type Database = {
           marital_status?: string | null
           nationality?: string | null
           notes?: string | null
-          salary?: number | null
           skills?: Json | null
           social_security_number?: string | null
           supervisor_id?: string | null
@@ -408,6 +405,41 @@ export type Database = {
             foreignKeyName: "employee_files_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
+            referencedRelation: "employee_details"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_salary_details: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          employee_id: string
+          id: string
+          salary: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          employee_id: string
+          id?: string
+          salary?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string
+          id?: string
+          salary?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_salary_details_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: true
             referencedRelation: "employee_details"
             referencedColumns: ["id"]
           },
@@ -1341,6 +1373,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      decrypt_ssn: {
+        Args: { encrypted_ssn: string; encryption_key?: string }
+        Returns: string
+      }
+      encrypt_ssn: {
+        Args: { encryption_key?: string; ssn_text: string }
+        Returns: string
+      }
       generate_client_number: {
         Args: Record<PropertyKey, never>
         Returns: string
