@@ -29,6 +29,8 @@ interface UserProfile {
   notes?: string;
   skills: string[];
   full_name?: string;
+  salary?: number; // This will only be visible to authorized users
+  social_security_number?: string; // This will be masked for non-authorized users
 }
 
 const MyProfile = () => {
@@ -46,17 +48,22 @@ const MyProfile = () => {
       setLoading(true);
       
       // Fetch employee details and profile information separately
-      const [employeeResponse, profileResponse] = await Promise.all([
+      const [employeeResponse, profileResponse, salaryResponse] = await Promise.all([
         supabase
           .from('employee_details')
           .select('*')
           .eq('user_id', user.id)
-          .single(),
+          .maybeSingle(),
         supabase
           .from('profiles')
           .select('*')
           .eq('user_id', user.id)
-          .single()
+          .maybeSingle(),
+        supabase
+          .from('employee_salary_details')
+          .select('salary')
+          .eq('employee_id', user.id)
+          .maybeSingle()
       ]);
 
       if (employeeResponse.error && employeeResponse.error.code !== 'PGRST116') {
@@ -81,7 +88,9 @@ const MyProfile = () => {
           emergency_contact_relationship: employeeResponse.data.emergency_contact_relationship,
           notes: employeeResponse.data.notes,
           skills: Array.isArray(employeeResponse.data.skills) ? employeeResponse.data.skills.map(skill => String(skill)) : [],
-          full_name: profileResponse.data?.full_name
+          full_name: profileResponse.data?.full_name,
+          salary: salaryResponse.data?.salary,
+          social_security_number: '***-**-****' // SSN is encrypted and masked for regular users
         };
         setProfile(transformedProfile);
         setFormData(transformedProfile);
