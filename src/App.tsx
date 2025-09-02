@@ -12,7 +12,7 @@ import Index from "./pages/Index";
 import Landing from "./pages/Landing";
 import Pricing from "./pages/Pricing";
 import Auth from "./pages/Auth";
-import AgencySignUp from "./pages/AgencySignUp";
+import SignupSuccess from "./pages/SignupSuccess";
 import AgencyDashboard from "./pages/AgencyDashboard";
 import SignUp from "./pages/SignUp";
 import NotFound from "./pages/NotFound";
@@ -73,6 +73,7 @@ const App = () => (
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/signup" element={<SignUp />} />
+            <Route path="/signup-success" element={<SignupSuccess />} />
             <Route 
               path="/dashboard" 
               element={

@@ -44,6 +44,7 @@ const SignUp = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState(0);
   
   // Form states
   const [accountData, setAccountData] = useState({
@@ -139,6 +140,40 @@ const SignUp = () => {
     );
   }
 
+  const calculatePasswordStrength = (password: string) => {
+    let strength = 0;
+    if (password.length >= 8) strength += 1;
+    if (/[A-Z]/.test(password)) strength += 1;
+    if (/[a-z]/.test(password)) strength += 1;
+    if (/[0-9]/.test(password)) strength += 1;
+    if (/[^A-Za-z0-9]/.test(password)) strength += 1;
+    return strength;
+  };
+
+  const getPasswordStrengthText = (strength: number) => {
+    switch (strength) {
+      case 0:
+      case 1: return 'Very Weak';
+      case 2: return 'Weak';
+      case 3: return 'Fair';
+      case 4: return 'Good';
+      case 5: return 'Strong';
+      default: return '';
+    }
+  };
+
+  const getPasswordStrengthColor = (strength: number) => {
+    switch (strength) {
+      case 0:
+      case 1: return 'bg-red-500';
+      case 2: return 'bg-orange-500';
+      case 3: return 'bg-yellow-500';
+      case 4: return 'bg-blue-500';
+      case 5: return 'bg-green-500';
+      default: return 'bg-gray-300';
+    }
+  };
+
   const validateStep1 = () => {
     const newErrors: Record<string, string> = {};
     
@@ -160,6 +195,8 @@ const SignUp = () => {
       newErrors.password = 'Password is required';
     } else if (accountData.password.length < 6) {
       newErrors.password = 'Password must be at least 6 characters';
+    } else if (passwordStrength < 3) {
+      newErrors.password = 'Password is too weak. Include uppercase, lowercase, numbers, and symbols.';
     }
     
     if (!accountData.confirmPassword) {
@@ -225,8 +262,9 @@ const SignUp = () => {
         description: "Please check your email to verify your account before signing in.",
       });
 
-      // Redirect to auth page with success message
-      window.location.href = '/auth?registered=true';
+      // Redirect to success page with agency info
+      const successUrl = `/signup-success?agencyName=${encodeURIComponent(accountData.agencyName)}&email=${encodeURIComponent(accountData.email)}&plan=${encodeURIComponent(selectedPlan)}`;
+      window.location.href = successUrl;
       
     } catch (error: any) {
       console.error('Registration error:', error);
@@ -441,6 +479,7 @@ const SignUp = () => {
                         value={accountData.password}
                         onChange={(e) => {
                           setAccountData(prev => ({ ...prev, password: e.target.value }));
+                          setPasswordStrength(calculatePasswordStrength(e.target.value));
                           if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
                         }}
                         className={errors.password ? 'border-destructive pr-10' : 'pr-10'}
@@ -460,6 +499,23 @@ const SignUp = () => {
                         )}
                       </Button>
                     </div>
+                    {/* Password Strength Indicator */}
+                    {accountData.password && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-xs">
+                          <span>Password Strength:</span>
+                          <span className={`font-medium ${passwordStrength >= 4 ? 'text-green-600' : passwordStrength >= 3 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {getPasswordStrengthText(passwordStrength)}
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full transition-all duration-300 ${getPasswordStrengthColor(passwordStrength)}`}
+                            style={{ width: `${(passwordStrength / 5) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                     {errors.password && (
                       <p className="text-sm text-destructive flex items-center gap-1">
                         <AlertCircle className="h-4 w-4" />
