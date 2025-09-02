@@ -174,13 +174,20 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
               onValueChange={(value) => setFormData({ ...formData, category_id: value })}
               required
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select category" />
+              <SelectTrigger className="bg-background border-input">
+                <SelectValue placeholder="Select expense category" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="bg-background border-border shadow-lg z-50 max-h-60 overflow-y-auto">
                 {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
-                    {category.name}
+                  <SelectItem key={category.id} value={category.id} className="hover:bg-muted">
+                    <div className="flex flex-col items-start">
+                      <span className="font-medium">{category.name}</span>
+                      {category.description && (
+                        <span className="text-xs text-muted-foreground line-clamp-2">
+                          {category.description}
+                        </span>
+                      )}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
