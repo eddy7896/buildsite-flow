@@ -662,6 +662,59 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_policies: {
+        Row: {
+          auto_approve_below: number | null
+          category_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          max_amount: number | null
+          mileage_rate: number | null
+          policy_description: string | null
+          requires_finance_approval: boolean | null
+          requires_manager_approval: boolean | null
+          requires_receipt_above: number | null
+          updated_at: string
+        }
+        Insert: {
+          auto_approve_below?: number | null
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          max_amount?: number | null
+          mileage_rate?: number | null
+          policy_description?: string | null
+          requires_finance_approval?: boolean | null
+          requires_manager_approval?: boolean | null
+          requires_receipt_above?: number | null
+          updated_at?: string
+        }
+        Update: {
+          auto_approve_below?: number | null
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          max_amount?: number | null
+          mileage_rate?: number | null
+          policy_description?: string | null
+          requires_finance_approval?: boolean | null
+          requires_manager_approval?: boolean | null
+          requires_receipt_above?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_policies_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       failed_login_attempts: {
         Row: {
           attempt_time: string
@@ -1223,6 +1276,102 @@ export type Database = {
         }
         Relationships: []
       }
+      notification_preferences: {
+        Row: {
+          agency_id: string | null
+          category: string
+          created_at: string
+          email_enabled: boolean | null
+          id: string
+          in_app_enabled: boolean | null
+          push_enabled: boolean | null
+          quiet_hours_end: string | null
+          quiet_hours_start: string | null
+          updated_at: string
+          user_id: string | null
+          weekend_notifications: boolean | null
+        }
+        Insert: {
+          agency_id?: string | null
+          category: string
+          created_at?: string
+          email_enabled?: boolean | null
+          id?: string
+          in_app_enabled?: boolean | null
+          push_enabled?: boolean | null
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          updated_at?: string
+          user_id?: string | null
+          weekend_notifications?: boolean | null
+        }
+        Update: {
+          agency_id?: string | null
+          category?: string
+          created_at?: string
+          email_enabled?: boolean | null
+          id?: string
+          in_app_enabled?: boolean | null
+          push_enabled?: boolean | null
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          updated_at?: string
+          user_id?: string | null
+          weekend_notifications?: boolean | null
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          action_url: string | null
+          agency_id: string | null
+          category: string
+          created_at: string
+          expires_at: string | null
+          id: string
+          message: string
+          metadata: Json | null
+          priority: string | null
+          read_at: string | null
+          sent_at: string | null
+          title: string
+          type: string
+          user_id: string | null
+        }
+        Insert: {
+          action_url?: string | null
+          agency_id?: string | null
+          category: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          message: string
+          metadata?: Json | null
+          priority?: string | null
+          read_at?: string | null
+          sent_at?: string | null
+          title: string
+          type: string
+          user_id?: string | null
+        }
+        Update: {
+          action_url?: string | null
+          agency_id?: string | null
+          category?: string
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          message?: string
+          metadata?: Json | null
+          priority?: string | null
+          read_at?: string | null
+          sent_at?: string | null
+          title?: string
+          type?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       payroll: {
         Row: {
           agency_id: string | null
@@ -1656,8 +1805,15 @@ export type Database = {
           description: string
           employee_id: string
           expense_date: string
+          finance_reviewer_id: string | null
           id: string
+          manager_id: string | null
+          mileage_amount: number | null
+          mileage_distance: number | null
+          mileage_rate: number | null
           payment_date: string | null
+          policy_violation: string | null
+          receipt_required: boolean | null
           rejection_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
@@ -1675,8 +1831,15 @@ export type Database = {
           description: string
           employee_id: string
           expense_date: string
+          finance_reviewer_id?: string | null
           id?: string
+          manager_id?: string | null
+          mileage_amount?: number | null
+          mileage_distance?: number | null
+          mileage_rate?: number | null
           payment_date?: string | null
+          policy_violation?: string | null
+          receipt_required?: boolean | null
           rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -1694,8 +1857,15 @@ export type Database = {
           description?: string
           employee_id?: string
           expense_date?: string
+          finance_reviewer_id?: string | null
           id?: string
+          manager_id?: string | null
+          mileage_amount?: number | null
+          mileage_distance?: number | null
+          mileage_rate?: number | null
           payment_date?: string | null
+          policy_violation?: string | null
+          receipt_required?: boolean | null
           rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
@@ -1723,6 +1893,47 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "expense_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reimbursement_workflow_states: {
+        Row: {
+          action_date: string | null
+          actor_id: string | null
+          attachments: Json | null
+          comments: string | null
+          created_at: string
+          id: string
+          request_id: string | null
+          state: string
+        }
+        Insert: {
+          action_date?: string | null
+          actor_id?: string | null
+          attachments?: Json | null
+          comments?: string | null
+          created_at?: string
+          id?: string
+          request_id?: string | null
+          state: string
+        }
+        Update: {
+          action_date?: string | null
+          actor_id?: string | null
+          attachments?: Json | null
+          comments?: string | null
+          created_at?: string
+          id?: string
+          request_id?: string | null
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reimbursement_workflow_states_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "reimbursement_requests"
             referencedColumns: ["id"]
           },
         ]
@@ -1962,6 +2173,20 @@ export type Database = {
         }
         Returns: string
       }
+      create_notification: {
+        Args: {
+          p_action_url?: string
+          p_category: string
+          p_expires_at?: string
+          p_message: string
+          p_metadata?: Json
+          p_priority?: string
+          p_title: string
+          p_type: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       decrypt_ssn: {
         Args: { encrypted_ssn: string; encryption_key?: string }
         Returns: string
@@ -2008,6 +2233,10 @@ export type Database = {
         Args: { employee_user_id: string }
         Returns: string
       }
+      get_unread_notification_count: {
+        Args: { p_user_id?: string }
+        Returns: number
+      }
       get_user_agency_id: {
         Args: Record<PropertyKey, never>
         Returns: string
@@ -2051,6 +2280,10 @@ export type Database = {
           user_id: string
         }[]
       }
+      mark_notification_read: {
+        Args: { p_notification_id: string }
+        Returns: boolean
+      }
       record_failed_login: {
         Args: {
           client_ip?: unknown
@@ -2066,6 +2299,14 @@ export type Database = {
       unlock_account: {
         Args: { user_email: string }
         Returns: boolean
+      }
+      validate_expense_policy: {
+        Args: {
+          p_amount: number
+          p_category_id: string
+          p_has_receipt?: boolean
+        }
+        Returns: Json
       }
     }
     Enums: {

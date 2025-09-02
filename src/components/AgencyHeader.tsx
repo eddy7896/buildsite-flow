@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { NotificationCenter } from "./NotificationCenter";
 
 interface AgencyInfo {
   agency_name: string | null;
@@ -47,6 +48,7 @@ export const AgencyHeader = () => {
 
   return (
     <div className="flex items-center gap-3 ml-auto">
+      <NotificationCenter />
       {agencyInfo.logo_url && (
         <img
           src={agencyInfo.logo_url}
