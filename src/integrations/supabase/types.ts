@@ -1436,7 +1436,6 @@ export type Database = {
           last_name: string | null
           phone: string | null
           position: string | null
-          social_security_number: string | null
           user_id: string | null
         }
         Relationships: []
@@ -1459,6 +1458,24 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_employee_full_details: {
+        Args: { target_user_id: string }
+        Returns: {
+          department: string
+          emp_position: string
+          employee_id: string
+          employment_type: string
+          first_name: string
+          full_name: string
+          hire_date: string
+          id: string
+          is_active: boolean
+          last_name: string
+          phone: string
+          social_security_number: string
+          user_id: string
+        }[]
+      }
       get_employee_ssn: {
         Args: { employee_user_id: string }
         Returns: string
@@ -1473,6 +1490,23 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      list_employees: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          department: string
+          emp_position: string
+          employee_id: string
+          employment_type: string
+          first_name: string
+          full_name: string
+          hire_date: string
+          id: string
+          is_active: boolean
+          last_name: string
+          phone: string
+          user_id: string
+        }[]
       }
     }
     Enums: {
