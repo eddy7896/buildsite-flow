@@ -66,6 +66,11 @@ const GstCompliance = () => {
   const [liability, setLiability] = useState<GstLiability | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<Date>(new Date());
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  
+  // Debug effect to track state changes
+  useEffect(() => {
+    console.log('showSettingsDialog state changed to:', showSettingsDialog);
+  }, [showSettingsDialog]);
 
   useEffect(() => {
     fetchGstSettings();
@@ -198,7 +203,12 @@ const GstCompliance = () => {
             <p className="text-muted-foreground mb-4">
               Please configure your GST settings to start using the compliance features.
             </p>
-            <Button onClick={() => setShowSettingsDialog(true)}>
+            <Button onClick={() => {
+              console.log('Configure GST Settings button clicked');
+              console.log('Current showSettingsDialog state:', showSettingsDialog);
+              setShowSettingsDialog(true);
+              console.log('Setting showSettingsDialog to true');
+            }}>
               <Settings className="mr-2 h-4 w-4" />
               Configure GST Settings
             </Button>
@@ -471,7 +481,12 @@ const GstCompliance = () => {
                   </Select>
                 </div>
               </div>
-              <Button onClick={() => setShowSettingsDialog(true)}>
+              <Button onClick={() => {
+                console.log('Update Settings button clicked');
+                console.log('Current showSettingsDialog state:', showSettingsDialog);
+                setShowSettingsDialog(true);
+                console.log('Setting showSettingsDialog to true');
+              }}>
                 <Settings className="mr-2 h-4 w-4" />
                 Update Settings
               </Button>
@@ -482,11 +497,16 @@ const GstCompliance = () => {
 
       <GstSettingsDialog
         open={showSettingsDialog}
-        onOpenChange={setShowSettingsDialog}
+        onOpenChange={(open) => {
+          console.log('GstSettingsDialog onOpenChange called with:', open);
+          setShowSettingsDialog(open);
+        }}
         existingSettings={gstSettings}
         onSave={(settings) => {
+          console.log('GstSettingsDialog onSave called with settings:', settings);
           setGstSettings(settings);
           fetchGstSettings(); // Refresh the data
+          setShowSettingsDialog(false);
         }}
       />
     </div>

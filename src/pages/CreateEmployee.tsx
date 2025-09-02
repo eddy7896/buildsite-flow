@@ -18,6 +18,7 @@ import { z } from "zod";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 const formSchema = z.object({
   // Personal Information
@@ -67,6 +68,7 @@ interface UploadedFile {
 
 const CreateEmployee = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [profileImage, setProfileImage] = useState<File | null>(null);
@@ -121,11 +123,23 @@ const CreateEmployee = () => {
         throw new Error('Failed to create user account');
       }
 
+      // Get the current user's profile to find agency_id
+      const { data: currentUserProfile, error: currentUserError } = await supabase
+        .from('profiles')
+        .select('agency_id')
+        .eq('user_id', user?.id)
+        .single();
+
+      if (currentUserError || !currentUserProfile?.agency_id) {
+        throw new Error('Unable to determine agency. Please contact support.');
+      }
+
       // Create profile entry
       const { error: profileError } = await supabase
         .from('profiles')
         .insert({
           user_id: userId,
+          agency_id: currentUserProfile.agency_id,
           full_name: `${values.firstName} ${values.lastName}`,
           phone: values.phone,
           department: values.department,

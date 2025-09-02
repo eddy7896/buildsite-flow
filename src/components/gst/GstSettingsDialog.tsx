@@ -29,12 +29,13 @@ interface GstSettingsDialogProps {
   onSave: (settings: GstSettings) => void;
 }
 
-export const GstSettingsDialog: React.FC<GstSettingsDialogProps> = ({
-  open,
-  onOpenChange,
-  existingSettings,
-  onSave
+export const GstSettingsDialog: React.FC<GstSettingsDialogProps> = ({ 
+  open, 
+  onOpenChange, 
+  existingSettings, 
+  onSave 
 }) => {
+  console.log('GstSettingsDialog rendered with open:', open);
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -176,6 +177,8 @@ export const GstSettingsDialog: React.FC<GstSettingsDialogProps> = ({
     }
   };
 
+  console.log('GstSettingsDialog rendering dialog with open:', open);
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
