@@ -143,6 +143,136 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
+    // Check for mock credentials first
+    const mockUsers = [
+      { email: 'admin@buildflow.com', password: 'admin123', fullName: 'System Administrator', role: 'admin' },
+      { email: 'hr@buildflow.com', password: 'hr123', fullName: 'HR Manager', role: 'hr' },
+      { email: 'finance@buildflow.com', password: 'finance123', fullName: 'Finance Manager', role: 'finance_manager' },
+      { email: 'employee@buildflow.com', password: 'employee123', fullName: 'John Employee', role: 'employee' }
+    ];
+
+    const mockUser = mockUsers.find(u => u.email === email && u.password === password);
+    
+    if (mockUser) {
+      // Simulate successful login with mock data
+      try {
+        // Check if profile exists in database, create if needed
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('user_id')
+          .eq('full_name', mockUser.fullName)
+          .maybeSingle();
+
+        let userId = existingProfile?.user_id;
+        
+        if (!existingProfile) {
+          // Create profile and role for mock user
+          userId = crypto.randomUUID();
+          
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .insert({
+              user_id: userId,
+              full_name: mockUser.fullName,
+              department: mockUser.role === 'admin' ? 'Administration' : 
+                         mockUser.role === 'hr' ? 'Human Resources' :
+                         mockUser.role === 'finance_manager' ? 'Finance' : 'Construction',
+              position: mockUser.role === 'admin' ? 'System Admin' :
+                       mockUser.role === 'hr' ? 'HR Manager' :
+                       mockUser.role === 'finance_manager' ? 'Finance Manager' : 'Site Worker',
+              is_active: true
+            });
+
+          if (profileError) {
+            console.error('Error creating mock profile:', profileError);
+          }
+
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert({
+              user_id: userId,
+              role: mockUser.role
+            });
+
+          if (roleError) {
+            console.error('Error creating mock role:', roleError);
+          }
+
+          // Create employee details for employee role
+          if (mockUser.role === 'employee') {
+            const { error: empError } = await supabase
+              .from('employee_details')
+              .insert({
+                user_id: userId,
+                employee_id: 'EMP-001',
+                first_name: 'John',
+                last_name: 'Employee',
+                employment_type: 'full_time',
+                is_active: true
+              });
+
+            if (empError) {
+              console.error('Error creating employee details:', empError);
+            }
+
+            // Add salary data for testing
+            const { error: salaryError } = await supabase
+              .from('employee_salary_details')
+              .insert({
+                employee_id: userId,
+                salary: 75000.00
+              });
+
+            if (salaryError) {
+              console.error('Error creating salary details:', salaryError);
+            }
+          }
+        }
+
+        // Create mock session
+        const mockSession = {
+          access_token: 'mock-token',
+          token_type: 'bearer',
+          expires_in: 3600,
+          expires_at: Date.now() + 3600000,
+          refresh_token: 'mock-refresh',
+          user: {
+            id: userId,
+            email: mockUser.email,
+            email_confirmed_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            app_metadata: {},
+            user_metadata: { full_name: mockUser.fullName }
+          }
+        };
+
+        // Set auth state manually for mock user
+        setUser(mockSession.user as any);
+        setSession(mockSession as any);
+        
+        // Fetch profile and role
+        await fetchUserProfile(userId);
+        await fetchUserRole(userId);
+
+        toast({
+          title: "Mock login successful",
+          description: `Logged in as ${mockUser.fullName} (${mockUser.role})`
+        });
+
+        return { error: null };
+      } catch (error) {
+        console.error('Mock login error:', error);
+        toast({
+          title: "Mock login failed",
+          description: "Error setting up mock session",
+          variant: "destructive"
+        });
+        return { error };
+      }
+    }
+
+    // Fall back to regular Supabase auth for real users
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password
