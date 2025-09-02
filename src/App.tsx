@@ -35,6 +35,7 @@ import Clients from "./pages/Clients";
 import Reports from "./pages/Reports";
 import Analytics from "./pages/Analytics";
 import ProjectManagement from "./pages/ProjectManagement";
+import AIFeatures from "./pages/AIFeatures";
 import CreateEmployee from "./pages/CreateEmployee";
 import AssignUserRoles from "./pages/AssignUserRoles";
 import JobCosting from "./pages/JobCosting";
@@ -264,6 +265,16 @@ const App = () => (
                 <ProtectedRoute>
                   <DashboardLayout>
                     <ProjectManagement />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/ai-features" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <AIFeatures />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

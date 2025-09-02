@@ -20,7 +20,8 @@ import {
   ChartLine,
   Briefcase,
   Users2,
-  FileCheck
+  FileCheck,
+  Brain
 } from 'lucide-react';
 import {
   Sidebar,
@@ -57,6 +58,7 @@ const navigationItems = {
     { title: 'Financial Management', url: '/financial-management', icon: Calculator },
     { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'Analytics', url: '/analytics', icon: BarChart3 },
+    { title: 'AI Features', url: '/ai-features', icon: Brain },
   ],
   ceo: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
