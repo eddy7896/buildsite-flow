@@ -94,11 +94,13 @@ const navigationItems = {
 
 export function AppSidebar() {
   const { state, setOpenMobile } = useSidebar();
-  const { userRole } = useAuth();
+  const { userRole, loading } = useAuth();
   const location = useLocation();
   const currentPath = location.pathname;
   const isMobile = useIsMobile();
 
+  console.log('AppSidebar - userRole:', userRole, 'loading:', loading);
+  
   const items = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.employee;
   const collapsed = state === 'collapsed';
 
