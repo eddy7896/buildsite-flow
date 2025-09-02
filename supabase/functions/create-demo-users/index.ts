@@ -2,6 +2,29 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.53.0';
 
+// Helper functions for default values
+const getDefaultDepartment = (role: string) => {
+  switch (role) {
+    case 'super_admin': return 'System Administration';
+    case 'admin': return 'Administration';
+    case 'hr': return 'Human Resources';
+    case 'finance_manager': return 'Finance';
+    case 'employee': return 'Construction';
+    default: return 'General';
+  }
+};
+
+const getDefaultPosition = (role: string) => {
+  switch (role) {
+    case 'super_admin': return 'Super Admin';
+    case 'admin': return 'System Admin';
+    case 'hr': return 'HR Manager';
+    case 'finance_manager': return 'Finance Manager';
+    case 'employee': return 'Site Worker';
+    default: return 'Employee';
+  }
+};
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -69,15 +92,54 @@ serve(async (req) => {
 
     for (const demoUser of demoUsers) {
       try {
-        // Check if user already exists
-        const { data: existingUser } = await supabaseAdmin.auth.admin.getUserById(demoUser.user_id);
+        // Check if user already exists by email
+        const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
+        const existingUser = existingUsers.users?.find(u => u.email === demoUser.email);
         
-        if (existingUser.user) {
-          console.log(`User ${demoUser.email} already exists, skipping creation`);
+        if (existingUser) {
+          console.log(`User ${demoUser.email} already exists with ID ${existingUser.id}`);
+          
+          // Make sure profile and role exist for existing user
+          const { data: agencyData } = await supabaseAdmin
+            .from('agencies')
+            .select('id')
+            .limit(1)
+            .single();
+
+          const agencyId = agencyData?.id;
+
+          // Upsert profile for existing user
+          const { error: profileError } = await supabaseAdmin
+            .from('profiles')
+            .upsert({
+              user_id: existingUser.id,
+              full_name: demoUser.full_name,
+              department: getDefaultDepartment(demoUser.role),
+              position: getDefaultPosition(demoUser.role),
+              agency_id: agencyId,
+              is_active: true
+            });
+
+          if (profileError) {
+            console.error(`Error upserting profile for ${demoUser.email}:`, profileError);
+          }
+
+          // Upsert role for existing user
+          const { error: roleError } = await supabaseAdmin
+            .from('user_roles')
+            .upsert({
+              user_id: existingUser.id,
+              role: demoUser.role
+            });
+
+          if (roleError) {
+            console.error(`Error upserting role for ${demoUser.email}:`, roleError);
+          }
+
           results.push({
             email: demoUser.email,
-            status: 'already_exists',
-            user_id: demoUser.user_id
+            status: 'updated',
+            user_id: existingUser.id
           });
           continue;
         }
@@ -119,22 +181,52 @@ serve(async (req) => {
           }
 
           // Update our database records to use the actual auth user ID
+          // Delete old records with hardcoded UUIDs first
+          await supabaseAdmin
+            .from('user_roles')
+            .delete()
+            .eq('user_id', demoUser.user_id);
+
+          await supabaseAdmin
+            .from('profiles')
+            .delete()
+            .eq('user_id', demoUser.user_id);
+
+          // Get agency ID for the user
+          const { data: agencyData } = await supabaseAdmin
+            .from('agencies')
+            .select('id')
+            .limit(1)
+            .single();
+
+          const agencyId = agencyData?.id;
+
+          // Create new profile with correct auth user ID
           const { error: profileError } = await supabaseAdmin
             .from('profiles')
-            .update({ user_id: newUser.user.id })
-            .eq('user_id', demoUser.user_id);
+            .insert({
+              user_id: newUser.user.id,
+              full_name: demoUser.full_name,
+              department: getDefaultDepartment(demoUser.role),
+              position: getDefaultPosition(demoUser.role),
+              agency_id: agencyId,
+              is_active: true
+            });
 
           if (profileError) {
-            console.error(`Error updating profile for ${demoUser.email}:`, profileError);
+            console.error(`Error creating profile for ${demoUser.email}:`, profileError);
           }
 
+          // Create new role with correct auth user ID
           const { error: roleError } = await supabaseAdmin
             .from('user_roles')
-            .update({ user_id: newUser.user.id })
-            .eq('user_id', demoUser.user_id);
+            .insert({
+              user_id: newUser.user.id,
+              role: demoUser.role
+            });
 
           if (roleError) {
-            console.error(`Error updating role for ${demoUser.email}:`, roleError);
+            console.error(`Error creating role for ${demoUser.email}:`, roleError);
           }
 
           console.log(`Successfully created user ${demoUser.email} with ID ${newUser.user.id}`);
