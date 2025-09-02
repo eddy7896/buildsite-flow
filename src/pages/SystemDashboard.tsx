@@ -34,7 +34,10 @@ const SystemDashboard = () => {
   }
 
   // Only initialize analytics after authentication is confirmed
-  const { metrics, agencies, loading, refreshMetrics } = useSystemAnalytics();
+  const { metrics, agencies, loading, refreshMetrics } = useSystemAnalytics({
+    userId: user.id,
+    userRole: userRole || ''
+  });
   const { toast } = useToast();
 
   useEffect(() => {

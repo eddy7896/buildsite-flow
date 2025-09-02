@@ -42,7 +42,12 @@ export interface AgencyData {
   invoice_count: number;
 }
 
-export const useSystemAnalytics = () => {
+interface UseSystemAnalyticsProps {
+  userId: string;
+  userRole: string;
+}
+
+export const useSystemAnalytics = ({ userId, userRole }: UseSystemAnalyticsProps) => {
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const [agencies, setAgencies] = useState<AgencyData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,19 +57,8 @@ export const useSystemAnalytics = () => {
     try {
       setLoading(true);
 
-      // Check if user is super_admin
-      const { data: user } = await supabase.auth.getUser();
-      if (!user?.user) {
-        throw new Error('Not authenticated');
-      }
-
-      const { data: userRole } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.user.id)
-        .single();
-
-      if (userRole?.role !== 'super_admin') {
+      // Check if user has super_admin role (passed from component)
+      if (userRole !== 'super_admin') {
         throw new Error('Access denied: Super admin role required');
       }
 
@@ -186,8 +180,10 @@ export const useSystemAnalytics = () => {
   };
 
   useEffect(() => {
-    fetchSystemMetrics();
-  }, []);
+    if (userId && userRole) {
+      fetchSystemMetrics();
+    }
+  }, [userId, userRole]);
 
   const refreshMetrics = () => {
     fetchSystemMetrics();
