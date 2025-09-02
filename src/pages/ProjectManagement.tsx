@@ -27,7 +27,7 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { GanttChart } from "@/components/project-management/GanttChart";
 import { ResourceManagement } from "@/components/project-management/ResourceManagement";
 import { ProjectTimeline } from "@/components/project-management/ProjectTimeline";
-// import ProjectFormDialog from "@/components/ProjectFormDialog";
+
 
 interface Project {
   id: string;
@@ -85,7 +85,6 @@ export default function ProjectManagement() {
   const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState('grid');
-  const [showProjectForm, setShowProjectForm] = useState(false);
   const { toast } = useToast();
 
   const fetchProjects = async () => {
