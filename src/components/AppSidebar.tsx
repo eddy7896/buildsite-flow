@@ -21,7 +21,8 @@ import {
   Briefcase,
   Users2,
   FileCheck,
-  Brain
+  Brain,
+  Monitor
 } from 'lucide-react';
 import {
   Sidebar,
@@ -41,7 +42,7 @@ const navigationItems = {
   // Executive Level
   super_admin: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'System Dashboard', url: '/system', icon: ChartLine },
+    { title: 'System Dashboard', url: '/system', icon: Monitor },
     { title: 'Agency Management', url: '/agency', icon: Building2 },
     { title: 'Users', url: '/users', icon: Users },
     { title: 'Reports', url: '/reports', icon: ChartLine },
@@ -80,6 +81,7 @@ const navigationItems = {
   // Management Level
   admin: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'System Dashboard', url: '/system', icon: Monitor },
     { title: 'Users', url: '/users', icon: Users },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
