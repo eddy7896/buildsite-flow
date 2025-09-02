@@ -496,16 +496,16 @@ const GstCompliance = () => {
       </Tabs>
 
       {showSettingsDialog && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
-            <h2 className="text-lg font-semibold mb-4">GST Settings</h2>
-            <p>This is a test dialog to verify it's working.</p>
+        <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center">
+          <div className="bg-background border border-border rounded-lg p-6 max-w-2xl w-full mx-4 shadow-lg">
+            <h2 className="text-lg font-semibold mb-4 text-foreground">GST Settings Test</h2>
+            <p className="text-muted-foreground">This is a test dialog to verify it's working.</p>
             <button 
               onClick={() => {
                 console.log('Test dialog close button clicked');
                 setShowSettingsDialog(false);
               }}
-              className="mt-4 px-4 py-2 bg-gray-200 rounded"
+              className="mt-4 px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80"
             >
               Close
             </button>
