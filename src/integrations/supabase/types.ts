@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_lockouts: {
+        Row: {
+          created_at: string
+          email: string
+          failed_attempts: number
+          id: string
+          ip_address: unknown | null
+          locked_until: string
+          unlocked_at: string | null
+          unlocked_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          failed_attempts?: number
+          id?: string
+          ip_address?: unknown | null
+          locked_until: string
+          unlocked_at?: string | null
+          unlocked_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          failed_attempts?: number
+          id?: string
+          ip_address?: unknown | null
+          locked_until?: string
+          unlocked_at?: string | null
+          unlocked_by?: string | null
+        }
+        Relationships: []
+      }
       agencies: {
         Row: {
           created_at: string
@@ -626,6 +659,33 @@ export type Database = {
           is_active?: boolean
           name?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      failed_login_attempts: {
+        Row: {
+          attempt_time: string
+          created_at: string
+          email: string
+          id: string
+          ip_address: unknown | null
+          user_agent: string | null
+        }
+        Insert: {
+          attempt_time?: string
+          created_at?: string
+          email: string
+          id?: string
+          ip_address?: unknown | null
+          user_agent?: string | null
+        }
+        Update: {
+          attempt_time?: string
+          created_at?: string
+          email?: string
+          id?: string
+          ip_address?: unknown | null
+          user_agent?: string | null
         }
         Relationships: []
       }
@@ -1843,6 +1903,42 @@ export type Database = {
           },
         ]
       }
+      user_sessions: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          ip_address: unknown | null
+          is_active: boolean
+          last_activity: string
+          session_token: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          ip_address?: unknown | null
+          is_active?: boolean
+          last_activity?: string
+          session_token: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          ip_address?: unknown | null
+          is_active?: boolean
+          last_activity?: string
+          session_token?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1851,6 +1947,10 @@ export type Database = {
       can_view_employee_data: {
         Args: { target_user_id: string }
         Returns: boolean
+      }
+      cleanup_expired_sessions: {
+        Args: Record<PropertyKey, never>
+        Returns: number
       }
       create_immutable_audit_log: {
         Args: {
@@ -1930,6 +2030,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_account_locked: {
+        Args: { user_email: string }
+        Returns: boolean
+      }
       list_employees: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -1947,9 +2051,21 @@ export type Database = {
           user_id: string
         }[]
       }
+      record_failed_login: {
+        Args: {
+          client_ip?: unknown
+          client_user_agent?: string
+          user_email: string
+        }
+        Returns: boolean
+      }
       rotate_ssn_encryption_keys: {
         Args: Record<PropertyKey, never>
         Returns: undefined
+      }
+      unlock_account: {
+        Args: { user_email: string }
+        Returns: boolean
       }
     }
     Enums: {

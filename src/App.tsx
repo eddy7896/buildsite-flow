@@ -8,6 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AgencyHeader } from "@/components/AgencyHeader";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import Landing from "./pages/Landing";
 import Pricing from "./pages/Pricing";
@@ -66,8 +67,9 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <AuthProvider>
-        <BrowserRouter>
+      <ErrorBoundary>
+        <AuthProvider>
+          <BrowserRouter>
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/pricing" element={<Pricing />} />
@@ -350,6 +352,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
       </AuthProvider>
+    </ErrorBoundary>
     </TooltipProvider>
   </QueryClientProvider>
 );
