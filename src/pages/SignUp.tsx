@@ -476,7 +476,7 @@ const SignUp = () => {
                     <DropdownMenuTrigger asChild>
                       <Button 
                         variant="outline" 
-                        className="rounded-l-none rounded-r-none border-l-0 border-r-0 px-3 bg-muted hover:bg-muted/80"
+                        className="rounded-l-none px-3 bg-muted hover:bg-muted/80"
                       >
                         {isCustomTld ? customTld : selectedTld}
                         <ChevronDown className="ml-1 h-4 w-4" />
@@ -505,9 +505,6 @@ const SignUp = () => {
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <div className="px-3 py-2 bg-muted border border-l-0 rounded-r-md text-sm text-muted-foreground">
-                    .lovable.app
-                  </div>
                 </div>
                 
                 {isCustomTld && (
@@ -535,7 +532,7 @@ const SignUp = () => {
                 )}
                 
                 <p className="text-xs text-muted-foreground">
-                  Your agency will be accessible at: <strong>{accountData.agencyDomain || 'your-domain'}{isCustomTld ? customTld : selectedTld}.lovable.app</strong>
+                  Your agency domain: <strong>{accountData.agencyDomain || 'your-domain'}{isCustomTld ? customTld : selectedTld}</strong>
                 </p>
                 {errors.agencyDomain && (
                   <p className="text-sm text-destructive flex items-center gap-1">
