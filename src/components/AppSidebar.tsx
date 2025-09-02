@@ -55,6 +55,7 @@ const navigationItems = {
     { title: 'Quotations', url: '/quotations', icon: FileCheck },
     { title: 'Financial Management', url: '/financial-management', icon: Calculator },
     { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   ],
   ceo: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
@@ -103,6 +104,7 @@ const navigationItems = {
     { title: 'Quotations', url: '/quotations', icon: FileCheck },
     { title: 'Financial Management', url: '/financial-management', icon: Calculator },
     { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   ],
   operations_manager: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },

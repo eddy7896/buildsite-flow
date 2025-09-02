@@ -33,6 +33,7 @@ import MyLeave from "./pages/MyLeave";
 import Ledger from "./pages/Ledger";
 import Clients from "./pages/Clients";
 import Reports from "./pages/Reports";
+import Analytics from "./pages/Analytics";
 import CreateEmployee from "./pages/CreateEmployee";
 import AssignUserRoles from "./pages/AssignUserRoles";
 import JobCosting from "./pages/JobCosting";
@@ -242,6 +243,16 @@ const App = () => (
                 <ProtectedRoute>
                   <DashboardLayout>
                     <Reports />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/analytics" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <Analytics />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 
