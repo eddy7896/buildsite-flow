@@ -119,13 +119,28 @@ const SignUp = () => {
   useEffect(() => {
     const planParam = searchParams.get('plan');
     if (planParam) {
-      const planId = plans.find(p => p.name.toLowerCase() === planParam.toLowerCase())?.id;
+      const planId = plans.find(p => 
+        p.name.toLowerCase() === planParam.toLowerCase() ||
+        p.id === planParam.toLowerCase()
+      )?.id;
+      
       if (planId) {
         setSelectedPlan(planId);
-        setCurrentStep(2); // Skip to plan selection if coming from pricing
+        // If user came from pricing with a plan, show plan selection step
+        if (currentStep === 1 && accountData.agencyName && accountData.email) {
+          // If they have some account data already, go to plan step
+          setCurrentStep(2);
+        }
+      } else {
+        // Invalid plan parameter, show a warning
+        toast({
+          title: "Invalid plan selection",
+          description: "The plan you selected is not available. Please choose from our available plans.",
+          variant: "destructive",
+        });
       }
     }
-  }, [searchParams]);
+  }, [searchParams, accountData.agencyName, accountData.email, currentStep, toast]);
 
   // Redirect if already authenticated
   if (user) {
@@ -606,22 +621,33 @@ const SignUp = () => {
                     Plan Selected
                   </Badge>
                 )}
+                {searchParams.get('plan') && (
+                  <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
+                    Recommended from pricing
+                  </Badge>
+                )}
               </div>
             </div>
 
             <div className="grid md:grid-cols-3 gap-6 mb-8">
-              {plans.map((plan) => (
+              {plans.map((plan) => {
+                const isPreSelected = searchParams.get('plan')?.toLowerCase() === plan.name.toLowerCase();
+                const isSelected = selectedPlan === plan.id;
+                
+                return (
                 <Card 
                   key={plan.id} 
                   className={`relative cursor-pointer transition-all hover:shadow-lg ${
-                    selectedPlan === plan.id ? 'border-primary shadow-lg scale-105' : 'border-border'
-                  } ${plan.popular ? 'border-primary' : ''}`}
+                    isSelected ? 'border-primary shadow-lg scale-105' : 'border-border'
+                  } ${plan.popular || isPreSelected ? 'border-primary' : ''} ${
+                    isPreSelected ? 'ring-2 ring-primary ring-opacity-20' : ''
+                  }`}
                   onClick={() => handlePlanSelection(plan.id)}
                 >
-                  {plan.popular && (
+                  {(plan.popular || isPreSelected) && (
                     <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                      <Badge className="bg-primary text-primary-foreground">
-                        Most Popular
+                      <Badge className={`${isPreSelected ? 'bg-blue-500 text-white' : 'bg-primary text-primary-foreground'}`}>
+                        {isPreSelected ? 'Recommended' : 'Most Popular'}
                       </Badge>
                     </div>
                   )}
@@ -670,8 +696,40 @@ const SignUp = () => {
                     )}
                   </CardContent>
                 </Card>
-              ))}
+                )
+              })}
             </div>
+
+            {/* Plan Selection Summary */}
+            {selectedPlan && (
+              <div className="mb-8">
+                <Card className="bg-blue-50 border-blue-200">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 className="h-5 w-5 text-blue-600" />
+                        <div>
+                          <p className="font-medium text-blue-900">
+                            {plans.find(p => p.id === selectedPlan)?.name} Plan Selected
+                          </p>
+                          <p className="text-sm text-blue-700">
+                            {formatPrice(plans.find(p => p.id === selectedPlan)?.price || 0)}/month • 14-day free trial
+                          </p>
+                        </div>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setSelectedPlan('')}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        Change Plan
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
