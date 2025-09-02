@@ -38,7 +38,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 const navigationItems = {
   admin: [
-    { title: 'Dashboard', url: '/', icon: BarChart3 },
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'Users', url: '/users', icon: Users },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
@@ -57,7 +57,7 @@ const navigationItems = {
     { title: 'Reports', url: '/reports', icon: ChartLine },
   ],
   hr: [
-    { title: 'Dashboard', url: '/', icon: BarChart3 },
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Jobs', url: '/jobs', icon: Briefcase },
     { title: 'Quotations', url: '/quotations', icon: FileCheck },
@@ -70,7 +70,7 @@ const navigationItems = {
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
   ],
   finance_manager: [
-    { title: 'Dashboard', url: '/', icon: BarChart3 },
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'Jobs', url: '/jobs', icon: Briefcase },
     { title: 'Quotations', url: '/quotations', icon: FileCheck },
     { title: 'Payroll', url: '/payroll', icon: Calculator },
@@ -85,7 +85,7 @@ const navigationItems = {
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
   ],
   employee: [
-    { title: 'Dashboard', url: '/', icon: BarChart3 },
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
@@ -101,6 +101,11 @@ export function AppSidebar() {
 
   console.log('AppSidebar - userRole:', userRole, 'loading:', loading);
   
+  // Don't show any navigation items if still loading or no role
+  if (loading || !userRole) {
+    return null;
+  }
+  
   const items = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.employee;
   const collapsed = state === 'collapsed';
 
@@ -112,8 +117,8 @@ export function AppSidebar() {
   }, [currentPath, isMobile, setOpenMobile]);
 
   const isActive = (path: string) => {
-    if (path === '/') {
-      return currentPath === '/';
+    if (path === '/dashboard') {
+      return currentPath === '/dashboard';
     }
     return currentPath.startsWith(path);
   };
