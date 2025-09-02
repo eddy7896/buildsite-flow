@@ -25,9 +25,10 @@ import {
   Settings
 } from 'lucide-react';
 import { AdvancedFilingDashboard } from '@/components/gst/AdvancedFilingDashboard';
+import { GstSettingsDialog } from '@/components/gst/GstSettingsDialog';
 
 interface GstSettings {
-  id: string;
+  id?: string;
   gstin: string;
   legal_name: string;
   trade_name?: string;
@@ -64,6 +65,7 @@ const GstCompliance = () => {
   const [filings, setFilings] = useState<GstFiling[]>([]);
   const [liability, setLiability] = useState<GstLiability | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<Date>(new Date());
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
 
   useEffect(() => {
     fetchGstSettings();
@@ -196,7 +198,7 @@ const GstCompliance = () => {
             <p className="text-muted-foreground mb-4">
               Please configure your GST settings to start using the compliance features.
             </p>
-            <Button>
+            <Button onClick={() => setShowSettingsDialog(true)}>
               <Settings className="mr-2 h-4 w-4" />
               Configure GST Settings
             </Button>
@@ -469,7 +471,7 @@ const GstCompliance = () => {
                   </Select>
                 </div>
               </div>
-              <Button>
+              <Button onClick={() => setShowSettingsDialog(true)}>
                 <Settings className="mr-2 h-4 w-4" />
                 Update Settings
               </Button>
@@ -477,6 +479,16 @@ const GstCompliance = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <GstSettingsDialog
+        open={showSettingsDialog}
+        onOpenChange={setShowSettingsDialog}
+        existingSettings={gstSettings}
+        onSave={(settings) => {
+          setGstSettings(settings);
+          fetchGstSettings(); // Refresh the data
+        }}
+      />
     </div>
   );
 };
