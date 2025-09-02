@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'hr' | 'finance_manager' | 'employee';
+  requiredRole?: 'admin' | 'hr' | 'finance_manager' | 'employee' | 'super_admin';
 }
 
 const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
@@ -22,7 +22,7 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     return <Navigate to="/auth" replace />;
   }
 
-  if (requiredRole && userRole !== requiredRole && userRole !== 'admin') {
+  if (requiredRole && userRole !== requiredRole && userRole !== 'admin' && userRole !== 'super_admin') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

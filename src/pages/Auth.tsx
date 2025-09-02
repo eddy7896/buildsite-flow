@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -202,6 +202,18 @@ const Auth = () => {
                 <span><strong>Employee:</strong> Personal data & attendance only</span>
               </div>
             </div>
+          </div>
+          {/* Agency Registration Link */}
+          <div className="text-center mt-6">
+            <p className="text-sm text-muted-foreground mb-2">
+              Don't have an agency account?
+            </p>
+            <Link 
+              to="/agency-signup" 
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              Create Your Agency
+            </Link>
           </div>
         </CardContent>
       </Card>

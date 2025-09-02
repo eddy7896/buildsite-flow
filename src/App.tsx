@@ -12,6 +12,7 @@ import Index from "./pages/Index";
 import Landing from "./pages/Landing";
 import Pricing from "./pages/Pricing";
 import Auth from "./pages/Auth";
+import AgencySignUp from "./pages/AgencySignUp";
 import SignUp from "./pages/SignUp";
 import NotFound from "./pages/NotFound";
 import Users from "./pages/Users";
@@ -66,10 +67,11 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/auth" element={<Auth />} />
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/agency-signup" element={<AgencySignUp />} />
           <Route path="/signup" element={<SignUp />} />
             <Route 
               path="/dashboard" 

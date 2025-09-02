@@ -16,7 +16,7 @@ interface Profile {
 }
 
 interface UserRole {
-  role: 'admin' | 'hr' | 'finance_manager' | 'employee';
+  role: 'admin' | 'hr' | 'finance_manager' | 'employee' | 'super_admin';
 }
 
 interface AuthContextType {
