@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -72,8 +72,7 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/agency-signup" element={<AgencySignUp />} />
-          <Route path="/signup" element={<SignUp />} />
+            <Route path="/signup" element={<SignUp />} />
             <Route 
               path="/dashboard" 
               element={
@@ -342,6 +341,9 @@ const App = () => (
                 </ProtectedRoute>
               } 
             />
+            {/* Redirect old agency signup route to new unified signup */}
+            <Route path="/agency-signup" element={<Navigate to="/signup" replace />} />
+            
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

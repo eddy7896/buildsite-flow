@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Navigate, Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,6 +30,7 @@ import {
 const SignUp = () => {
   const { signUp, user, loading } = useAuth();
   const { currency, formatPrice, changeCurrency, availableCurrencies } = useCurrency();
+  const [searchParams] = useSearchParams();
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -102,6 +103,18 @@ const SignUp = () => {
     }
   ];
 
+  // Pre-select plan from URL parameter
+  useEffect(() => {
+    const planParam = searchParams.get('plan');
+    if (planParam) {
+      const planId = plans.find(p => p.name.toLowerCase() === planParam.toLowerCase())?.id;
+      if (planId) {
+        setSelectedPlan(planId);
+        setCurrentStep(2); // Skip to plan selection if coming from pricing
+      }
+    }
+  }, [searchParams]);
+
   // Redirect if already authenticated
   if (user) {
     return <Navigate to="/dashboard" replace />;
@@ -144,16 +157,42 @@ const SignUp = () => {
 
     setIsLoading(true);
     
-    const { error } = await signUp(accountData.email, accountData.password, accountData.fullName);
-    
-    if (!error) {
-      // TODO: Store selected plan and agency info
-      // This would typically be handled by a separate API call
-      console.log('Agency signup:', { 
-        ...accountData, 
-        selectedPlan,
-        planDetails: plans.find(p => p.id === selectedPlan)
+    try {
+      // Call the register-agency edge function instead of just auth signup
+      const response = await fetch(`https://ljhdcsmfhddxkdbwnfht.supabase.co/functions/v1/register-agency`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          // Agency details
+          agencyName: accountData.agencyName,
+          domain: accountData.agencyName.toLowerCase().replace(/\s+/g, '-'),
+          
+          // Admin user details
+          email: accountData.email,
+          password: accountData.password,
+          fullName: accountData.fullName,
+          phone: accountData.phone,
+          
+          // Plan selection
+          selectedPlan,
+          planDetails: plans.find(p => p.id === selectedPlan)
+        }),
       });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Registration failed');
+      }
+
+      console.log('Agency registration successful:', result);
+      // The user will be automatically redirected by the auth system
+      
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      alert(error.message || 'Registration failed. Please try again.');
     }
     
     setIsLoading(false);
