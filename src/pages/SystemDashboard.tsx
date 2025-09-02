@@ -10,6 +10,7 @@ import { AgencyManagement } from '@/components/system/AgencyManagement';
 import { SystemDashboardCharts } from '@/components/system/SystemDashboardCharts';
 import { SupportTicketsWidget } from '@/components/system/SupportTicketsWidget';
 import { RealTimeUsageWidget } from '@/components/system/RealTimeUsageWidget';
+import PlanManagement from '@/components/system/PlanManagement';
 import { RefreshCw, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -125,11 +126,12 @@ const SystemDashboard = () => {
 
         {/* Main Dashboard Tabs */}
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="agencies">Agencies</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
             <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -221,6 +223,10 @@ const SystemDashboard = () => {
               <RealTimeUsageWidget />
               <SupportTicketsWidget />
             </div>
+          </TabsContent>
+
+          <TabsContent value="settings" className="space-y-6">
+            <PlanManagement />
           </TabsContent>
         </Tabs>
       </div>
