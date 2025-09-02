@@ -24,6 +24,7 @@ import {
   Calculator,
   Settings
 } from 'lucide-react';
+import { AdvancedFilingDashboard } from '@/components/gst/AdvancedFilingDashboard';
 
 interface GstSettings {
   id: string;
@@ -295,13 +296,33 @@ const GstCompliance = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="returns" className="space-y-6">
+      <Tabs defaultValue="dashboard" className="space-y-6">
         <TabsList>
+          <TabsTrigger value="dashboard">Filing Dashboard</TabsTrigger>
           <TabsTrigger value="returns">GST Returns</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
           <TabsTrigger value="liability">Tax Liability</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="dashboard" className="space-y-6">
+          <AdvancedFilingDashboard
+            filings={filings}
+            onGenerateReturn={(returnType) => {
+              if (returnType === 'GSTR1') {
+                generateGSTR1();
+              } else if (returnType === 'GSTR3B') {
+                generateGSTR3B();
+              }
+            }}
+            onFileReturn={(filing) => {
+              toast({
+                title: "Filing Initiated",
+                description: `${filing.return_type} filing process started.`
+              });
+            }}
+          />
+        </TabsContent>
 
         <TabsContent value="returns" className="space-y-6">
           <Card>
