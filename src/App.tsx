@@ -45,6 +45,7 @@ import Accounting from "./pages/Accounting";
 import FinancialManagement from "./pages/FinancialManagement";
 import EmployeeProjects from "./pages/EmployeeProjects";
 import { Reimbursements } from "./pages/Reimbursements";
+import SystemDashboard from "./pages/SystemDashboard";
 
 const queryClient = new QueryClient();
 
@@ -374,6 +375,14 @@ const App = () => (
               element={
                 <ProtectedRoute requiredRole="super_admin">
                   <AgencyDashboard />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/system" 
+              element={
+                <ProtectedRoute requiredRole="super_admin">
+                  <SystemDashboard />
                 </ProtectedRoute>
               } 
             />

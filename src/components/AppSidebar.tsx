@@ -41,6 +41,7 @@ const navigationItems = {
   // Executive Level
   super_admin: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'System Dashboard', url: '/system', icon: ChartLine },
     { title: 'Agency Management', url: '/agency', icon: Building2 },
     { title: 'Users', url: '/users', icon: Users },
     { title: 'CRM', url: '/crm', icon: Users2 },
