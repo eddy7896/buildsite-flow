@@ -183,9 +183,7 @@ const Index = () => {
 
         {/* Time Clock Section - Show for all users */}
         <div className="mb-8">
-          <div className="max-w-md mx-auto lg:mx-0">
-            <ClockInOut />
-          </div>
+          <ClockInOut compact={true} />
         </div>
 
         {/* Quick Stats Cards */}

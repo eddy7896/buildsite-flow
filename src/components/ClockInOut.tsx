@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, MapPin, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,13 +19,15 @@ interface AttendanceRecord {
   status: string;
 }
 
-const ClockInOut = () => {
+interface ClockInOutProps {
+  compact?: boolean;
+}
+
+const ClockInOut = ({ compact = false }: ClockInOutProps) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [location, setLocation] = useState<{ lat: number; lng: number; address: string } | null>(null);
-  const [geoLoading, setGeoLoading] = useState(false);
 
   // Update current time every second
   useEffect(() => {
@@ -70,63 +72,30 @@ const ClockInOut = () => {
         return;
       }
 
-      setGeoLoading(true);
-      
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
           
           try {
-            // Reverse geocoding to get address
-            const response = await fetch(
-              `https://api.opencagedata.com/geocode/v1/json?q=${latitude}+${longitude}&key=demo_key&limit=1`
-            );
-            
-            let address = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-            
-            if (response.ok) {
-              const data = await response.json();
-              if (data.results && data.results.length > 0) {
-                address = data.results[0].formatted || address;
-              }
-            }
-            
+            // Simple fallback location format
+            const address = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
             const locationData = { lat: latitude, lng: longitude, address };
-            setLocation(locationData);
-            setGeoLoading(false);
             resolve(locationData);
           } catch (error) {
-            setGeoLoading(false);
             const fallbackLocation = { 
               lat: latitude, 
               lng: longitude, 
               address: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}` 
             };
-            setLocation(fallbackLocation);
             resolve(fallbackLocation);
           }
         },
         (error) => {
-          setGeoLoading(false);
-          let errorMessage = 'Unable to retrieve location.';
-          
-          switch (error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage = 'Location access denied by user.';
-              break;
-            case error.POSITION_UNAVAILABLE:
-              errorMessage = 'Location information is unavailable.';
-              break;
-            case error.TIMEOUT:
-              errorMessage = 'Location request timed out.';
-              break;
-          }
-          
-          reject(new Error(errorMessage));
+          reject(new Error('Unable to retrieve location'));
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
+          timeout: 5000,
           maximumAge: 0
         }
       );
@@ -137,7 +106,7 @@ const ClockInOut = () => {
     const checkIn = new Date(checkInTime);
     const checkOut = new Date(checkOutTime);
     const diffInMs = checkOut.getTime() - checkIn.getTime();
-    return Math.round((diffInMs / (1000 * 60 * 60)) * 100) / 100; // Round to 2 decimal places
+    return Math.round((diffInMs / (1000 * 60 * 60)) * 100) / 100;
   };
 
   const handleClockIn = async () => {
@@ -227,42 +196,98 @@ const ClockInOut = () => {
   const canClockIn = !todayAttendance || !todayAttendance.check_in_time;
   const canClockOut = todayAttendance && todayAttendance.check_in_time && !todayAttendance.check_out_time;
 
+  if (compact) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between gap-4">
+            {/* Current Time */}
+            <div className="flex items-center gap-3">
+              <Clock className="h-5 w-5 text-primary" />
+              <div>
+                <div className="font-mono font-bold text-lg">
+                  {format(currentTime, 'HH:mm:ss')}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {format(currentTime, 'MMM dd, yyyy')}
+                </div>
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="text-center">
+              {todayAttendance?.check_in_time && !todayAttendance?.check_out_time && (
+                <div className="text-sm">
+                  <Badge variant="outline" className="text-green-600 border-green-200">
+                    Working since {format(new Date(todayAttendance.check_in_time), 'HH:mm')}
+                  </Badge>
+                </div>
+              )}
+              {todayAttendance?.check_out_time && (
+                <div className="text-sm">
+                  <Badge variant="secondary">
+                    Completed ({todayAttendance.total_hours?.toFixed(1)}h)
+                  </Badge>
+                </div>
+              )}
+            </div>
+
+            {/* Action Button */}
+            <div>
+              {canClockIn && (
+                <Button 
+                  onClick={handleClockIn} 
+                  disabled={loading}
+                  size="sm"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    'Clock In'
+                  )}
+                </Button>
+              )}
+
+              {canClockOut && (
+                <Button 
+                  onClick={handleClockOut} 
+                  disabled={loading}
+                  variant="destructive"
+                  size="sm"
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    'Clock Out'
+                  )}
+                </Button>
+              )}
+
+              {todayAttendance && todayAttendance.check_out_time && (
+                <Badge variant="outline" className="text-muted-foreground">
+                  Day Complete
+                </Badge>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Original full component for dedicated attendance page
   return (
     <Card className="w-full max-w-md mx-auto">
-      <CardHeader className="text-center">
-        <CardTitle className="flex items-center justify-center gap-2">
-          <Clock className="h-5 w-5" />
-          Time Clock
-        </CardTitle>
-        <CardDescription>
-          {format(currentTime, 'EEEE, MMMM do, yyyy')}
-        </CardDescription>
-      </CardHeader>
-      
-      <CardContent className="space-y-6">
-        {/* Current Time Display */}
+      {/* Keep the original detailed implementation for the attendance page */}
+      <CardContent className="p-6 space-y-6">
         <div className="text-center">
           <div className="text-3xl font-mono font-bold">
             {format(currentTime, 'HH:mm:ss')}
           </div>
-        </div>
-
-        {/* Location Display */}
-        {(location || geoLoading) && (
-          <div className="flex items-start gap-2 p-3 bg-muted rounded-lg">
-            <MapPin className="h-4 w-4 mt-1 text-muted-foreground" />
-            <div className="flex-1 text-sm">
-              {geoLoading ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Getting location...
-                </div>
-              ) : (
-                <span className="text-muted-foreground">{location?.address}</span>
-              )}
-            </div>
+          <div className="text-sm text-muted-foreground">
+            {format(currentTime, 'EEEE, MMMM do, yyyy')}
           </div>
-        )}
+        </div>
 
         {/* Today's Status */}
         {todayAttendance && (
@@ -304,7 +329,7 @@ const ClockInOut = () => {
           {canClockIn && (
             <Button 
               onClick={handleClockIn} 
-              disabled={loading || geoLoading}
+              disabled={loading}
               className="w-full"
               size="lg"
             >
@@ -322,7 +347,7 @@ const ClockInOut = () => {
           {canClockOut && (
             <Button 
               onClick={handleClockOut} 
-              disabled={loading || geoLoading}
+              disabled={loading}
               variant="destructive"
               className="w-full"
               size="lg"
