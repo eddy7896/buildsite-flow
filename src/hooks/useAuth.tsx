@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { AppRole } from '@/utils/roleUtils';
@@ -40,23 +39,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
-  const [hasRedirected, setHasRedirected] = useState(false);
-  
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  // Role-based redirection effect
-  useEffect(() => {
-    if (user && userRole && !loading && !hasRedirected && location.pathname === '/auth') {
-      setHasRedirected(true);
-      
-      if (userRole === 'super_admin') {
-        navigate('/system');
-      } else {
-        navigate('/dashboard');
-      }
-    }
-  }, [user, userRole, loading, hasRedirected, location.pathname, navigate]);
 
   useEffect(() => {
     // Set up auth state listener FIRST
@@ -64,11 +46,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
-        // Reset redirection flag on auth state change
-        if (!session?.user) {
-          setHasRedirected(false);
-        }
         
         // Defer profile and role fetching
         if (session?.user) {

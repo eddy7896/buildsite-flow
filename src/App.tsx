@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AgencyHeader } from "@/components/AgencyHeader";
+import { AuthRedirect } from "@/components/AuthRedirect";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
@@ -74,7 +75,8 @@ const App = () => (
       <ErrorBoundary>
         <AuthProvider>
           <BrowserRouter>
-          <Routes>
+            <AuthRedirect />
+            <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/auth" element={<Auth />} />
