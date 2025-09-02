@@ -144,7 +144,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     // Check for mock credentials first
-    const mockUsers = [
+    const mockUsers: Array<{
+      email: string;
+      password: string;
+      fullName: string;
+      role: 'admin' | 'hr' | 'finance_manager' | 'employee';
+    }> = [
       { email: 'admin@buildflow.com', password: 'admin123', fullName: 'System Administrator', role: 'admin' },
       { email: 'hr@buildflow.com', password: 'hr123', fullName: 'HR Manager', role: 'hr' },
       { email: 'finance@buildflow.com', password: 'finance123', fullName: 'Finance Manager', role: 'finance_manager' },
@@ -191,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .from('user_roles')
             .insert({
               user_id: userId,
-              role: mockUser.role as 'admin' | 'hr' | 'finance_manager' | 'employee'
+              role: mockUser.role
             });
 
           if (roleError) {
