@@ -1443,6 +1443,10 @@ export type Database = {
       }
     }
     Functions: {
+      can_view_employee_data: {
+        Args: { target_user_id: string }
+        Returns: boolean
+      }
       decrypt_ssn: {
         Args: { encrypted_ssn: string; encryption_key?: string }
         Returns: string
@@ -1453,6 +1457,10 @@ export type Database = {
       }
       generate_client_number: {
         Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      get_employee_ssn: {
+        Args: { employee_user_id: string }
         Returns: string
       }
       get_user_role: {
