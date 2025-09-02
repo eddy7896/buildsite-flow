@@ -1174,6 +1174,56 @@ export type Database = {
           },
         ]
       }
+      leave_balances: {
+        Row: {
+          agency_id: string | null
+          allocated_days: number
+          created_at: string
+          employee_id: string | null
+          id: string
+          leave_type_id: string | null
+          pending_days: number | null
+          remaining_days: number | null
+          updated_at: string
+          used_days: number | null
+          year: number
+        }
+        Insert: {
+          agency_id?: string | null
+          allocated_days: number
+          created_at?: string
+          employee_id?: string | null
+          id?: string
+          leave_type_id?: string | null
+          pending_days?: number | null
+          remaining_days?: number | null
+          updated_at?: string
+          used_days?: number | null
+          year: number
+        }
+        Update: {
+          agency_id?: string | null
+          allocated_days?: number
+          created_at?: string
+          employee_id?: string | null
+          id?: string
+          leave_type_id?: string | null
+          pending_days?: number | null
+          remaining_days?: number | null
+          updated_at?: string
+          used_days?: number | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leave_balances_leave_type_id_fkey"
+            columns: ["leave_type_id"]
+            isOneToOne: false
+            referencedRelation: "leave_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leave_requests: {
         Row: {
           agency_id: string | null
@@ -2233,6 +2283,16 @@ export type Database = {
         Args: { employee_user_id: string }
         Returns: string
       }
+      get_leave_balance_summary: {
+        Args: { p_employee_id?: string; p_year?: number }
+        Returns: {
+          allocated_days: number
+          leave_type_name: string
+          pending_days: number
+          remaining_days: number
+          used_days: number
+        }[]
+      }
       get_unread_notification_count: {
         Args: { p_user_id?: string }
         Returns: number
@@ -2258,6 +2318,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      initialize_leave_balances: {
+        Args: { p_employee_id: string; p_year?: number }
+        Returns: undefined
       }
       is_account_locked: {
         Args: { user_email: string }
