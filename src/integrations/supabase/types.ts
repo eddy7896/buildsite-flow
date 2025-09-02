@@ -1429,6 +1429,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_reimbursement_requests_employee_id"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "mock_users_status"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "fk_reimbursement_requests_employee_id"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "reimbursement_requests_category_id_fkey"
             columns: ["category_id"]
             isOneToOne: false

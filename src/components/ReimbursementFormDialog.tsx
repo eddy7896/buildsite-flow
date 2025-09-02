@@ -49,13 +49,19 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
 
   const fetchCategories = async () => {
     try {
+      console.log("Fetching expense categories...");
       const { data, error } = await supabase
         .from("expense_categories")
         .select("id, name, description")
         .eq("is_active", true)
         .order("name");
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching categories:", error);
+        throw error;
+      }
+      
+      console.log("Categories fetched:", data);
       setCategories(data || []);
     } catch (error) {
       console.error("Error fetching categories:", error);
@@ -178,20 +184,31 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
                 <SelectValue placeholder="Select expense category" />
               </SelectTrigger>
               <SelectContent className="bg-background border-border shadow-lg z-50 max-h-60 overflow-y-auto">
-                {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id} className="hover:bg-muted">
-                    <div className="flex flex-col items-start">
-                      <span className="font-medium">{category.name}</span>
-                      {category.description && (
-                        <span className="text-xs text-muted-foreground line-clamp-2">
-                          {category.description}
-                        </span>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
+                {categories.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground">
+                    {loading ? "Loading categories..." : "No categories available"}
+                  </div>
+                ) : (
+                  categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id} className="hover:bg-muted cursor-pointer">
+                      <div className="flex flex-col items-start">
+                        <span className="font-medium">{category.name}</span>
+                        {category.description && (
+                          <span className="text-xs text-muted-foreground line-clamp-2">
+                            {category.description}
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
+            {categories.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {categories.length} categories available
+              </p>
+            )}
           </div>
 
           <div>
