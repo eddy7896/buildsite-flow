@@ -45,6 +45,7 @@ const navigationItems = {
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'Project Management', url: '/project-management', icon: Calendar },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
     { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
