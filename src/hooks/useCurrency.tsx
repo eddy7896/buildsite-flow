@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface CurrencyInfo {
   code: string;
@@ -26,7 +27,20 @@ export const useCurrency = () => {
   useEffect(() => {
     const detectCurrency = async () => {
       try {
-        // Try to get user's country from IP geolocation
+        // First, try to get admin-configured currency from agency settings
+        const { data: agencyData } = await supabase
+          .from('agency_settings')
+          .select('default_currency')
+          .limit(1)
+          .single();
+
+        if (agencyData?.default_currency && currencies[agencyData.default_currency]) {
+          setCurrency(currencies[agencyData.default_currency]);
+          setLoading(false);
+          return;
+        }
+
+        // Fallback to IP geolocation detection
         const response = await fetch('https://ipapi.co/json/');
         if (response.ok) {
           const data = await response.json();
@@ -39,7 +53,7 @@ export const useCurrency = () => {
           const detectedCurrency = currencies[mappedCode] || currencies.default;
           setCurrency(detectedCurrency);
         } else {
-          // Fallback to default currency (INR)
+          // Final fallback to default currency (INR)
           setCurrency(currencies.default);
         }
       } catch (error) {

@@ -5,18 +5,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Save, Bell, Shield, User, Building, Upload, X } from "lucide-react";
+import { useCurrency } from "@/hooks/useCurrency";
+import { Save, Bell, Shield, User, Building, Upload, X, DollarSign } from "lucide-react";
 
 const Settings = () => {
   const { userRole } = useAuth();
   const { toast } = useToast();
+  const { availableCurrencies } = useCurrency();
   const [agencySettings, setAgencySettings] = useState({
     agency_name: '',
     logo_url: '',
-    domain: ''
+    domain: '',
+    default_currency: 'US'
   });
   const [loading, setLoading] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -43,7 +47,8 @@ const Settings = () => {
         setAgencySettings({
           agency_name: data.agency_name || '',
           logo_url: data.logo_url || '',
-          domain: data.domain || ''
+          domain: data.domain || '',
+          default_currency: data.default_currency || 'US'
         });
         setLogoPreview(data.logo_url || '');
       }
@@ -113,7 +118,8 @@ const Settings = () => {
           .update({
             agency_name: agencySettings.agency_name,
             logo_url: logoUrl,
-            domain: agencySettings.domain
+            domain: agencySettings.domain,
+            default_currency: agencySettings.default_currency
           })
           .eq('id', existingData.id);
 
@@ -125,7 +131,8 @@ const Settings = () => {
           .insert({
             agency_name: agencySettings.agency_name,
             logo_url: logoUrl,
-            domain: agencySettings.domain
+            domain: agencySettings.domain,
+            default_currency: agencySettings.default_currency
           });
 
         if (error) throw error;
@@ -226,6 +233,46 @@ const Settings = () => {
                 />
                 <p className="text-xs text-muted-foreground">
                   Domain used for auto-generating employee email addresses
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="defaultCurrency">Default Currency</Label>
+                <Select
+                  value={agencySettings.default_currency}
+                  onValueChange={(value) => setAgencySettings(prev => ({ ...prev, default_currency: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue>
+                      {availableCurrencies[agencySettings.default_currency] ? (
+                        <div className="flex items-center gap-2">
+                          <DollarSign className="h-4 w-4" />
+                          <span>
+                            {availableCurrencies[agencySettings.default_currency].symbol} {availableCurrencies[agencySettings.default_currency].code} - {availableCurrencies[agencySettings.default_currency].name}
+                          </span>
+                        </div>
+                      ) : (
+                        <span>Select currency</span>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(availableCurrencies)
+                      .filter(([key]) => key !== 'default')
+                      .map(([countryCode, currency]) => (
+                        <SelectItem key={countryCode} value={countryCode}>
+                          <div className="flex items-center gap-2">
+                            <span>{currency.symbol}</span>
+                            <span>{currency.code}</span>
+                            <span>-</span>
+                            <span>{currency.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Currency used throughout the system for pricing and financial data
                 </p>
               </div>
               

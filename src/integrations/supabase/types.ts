@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           agency_name: string | null
           created_at: string
+          default_currency: string | null
           domain: string | null
           id: string
           logo_url: string | null
@@ -26,6 +27,7 @@ export type Database = {
         Insert: {
           agency_name?: string | null
           created_at?: string
+          default_currency?: string | null
           domain?: string | null
           id?: string
           logo_url?: string | null
@@ -34,6 +36,7 @@ export type Database = {
         Update: {
           agency_name?: string | null
           created_at?: string
+          default_currency?: string | null
           domain?: string | null
           id?: string
           logo_url?: string | null
