@@ -481,22 +481,7 @@ export type Database = {
           salary?: number | null
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "employee_salary_details_employee_id_fkey"
-            columns: ["employee_id"]
-            isOneToOne: true
-            referencedRelation: "employee_basic_info"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "employee_salary_details_employee_id_fkey"
-            columns: ["employee_id"]
-            isOneToOne: true
-            referencedRelation: "employee_details"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       invoices: {
         Row: {
@@ -1436,6 +1421,18 @@ export type Database = {
           last_name: string | null
           phone: string | null
           position: string | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
+      mock_users_status: {
+        Row: {
+          department: string | null
+          full_name: string | null
+          login_credentials: string | null
+          position: string | null
+          record_type: string | null
+          role: Database["public"]["Enums"]["app_role"] | null
           user_id: string | null
         }
         Relationships: []
