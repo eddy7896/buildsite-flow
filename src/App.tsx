@@ -384,7 +384,9 @@ const App = () => (
               path="/system" 
               element={
                 <ProtectedRoute requiredRole="super_admin">
-                  <SystemDashboard />
+                  <DashboardLayout>
+                    <SystemDashboard />
+                  </DashboardLayout>
                 </ProtectedRoute>
               } 
             />
