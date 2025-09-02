@@ -55,12 +55,21 @@ const Auth = () => {
   // Mock credentials for different roles
   const mockCredentials = [
     {
+      role: 'super_admin',
+      email: 'super@buildflow.com',
+      password: 'super123',
+      description: 'System Dashboard Access',
+      icon: Building,
+      variant: 'default' as const,
+      highlight: true
+    },
+    {
       role: 'admin',
       email: 'admin@buildflow.com',
       password: 'admin123',
       description: 'Full system access',
       icon: Shield,
-      variant: 'default' as const
+      variant: 'secondary' as const
     },
     {
       role: 'hr',
@@ -68,7 +77,7 @@ const Auth = () => {
       password: 'hr123',
       description: 'HR management access',
       icon: Users,
-      variant: 'secondary' as const
+      variant: 'outline' as const
     },
     {
       role: 'finance_manager',
@@ -131,9 +140,11 @@ const Auth = () => {
                 return (
                   <Button
                     key={cred.role}
-                    variant="outline"
+                    variant={cred.highlight ? "default" : "outline"}
                     size="sm"
-                    className="h-auto p-3 flex flex-col items-center space-y-1 text-xs"
+                    className={`h-auto p-3 flex flex-col items-center space-y-1 text-xs ${
+                      cred.highlight ? 'ring-2 ring-primary/20 bg-primary/5' : ''
+                    }`}
                     onClick={() => fillMockCredentials(cred.email, cred.password)}
                     type="button"
                   >
@@ -144,6 +155,11 @@ const Auth = () => {
                     <span className="text-muted-foreground text-center leading-tight">
                       {cred.description}
                     </span>
+                    {cred.highlight && (
+                      <span className="text-xs font-medium text-primary">
+                        ⭐ NEW
+                      </span>
+                    )}
                   </Button>
                 );
               })}
@@ -206,6 +222,10 @@ const Auth = () => {
           <div className="mt-6 p-4 bg-muted/50 rounded-lg">
             <h4 className="text-sm font-medium mb-2">Role Permissions:</h4>
             <div className="space-y-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Building className="h-3 w-3 text-primary" />
+                <span><strong>Super Admin:</strong> System dashboard & platform management</span>
+              </div>
               <div className="flex items-center gap-2">
                 <Shield className="h-3 w-3" />
                 <span><strong>Admin:</strong> Full system access & user management</span>
