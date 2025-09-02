@@ -12,11 +12,11 @@ import { SystemDashboardCharts } from '@/components/system/SystemDashboardCharts
 import { SupportTicketsWidget } from '@/components/system/SupportTicketsWidget';
 import { RealTimeUsageWidget } from '@/components/system/RealTimeUsageWidget';
 import PlanManagement from '@/components/system/PlanManagement';
-import { RefreshCw, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle, TrendingUp, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const SystemDashboard = () => {
-  const { user, userRole } = useAuth();
+  const { user, userRole, signOut } = useAuth();
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   
   // Show loading while auth is being determined
@@ -56,6 +56,14 @@ const SystemDashboard = () => {
     toast({
       title: "Dashboard Refreshed",
       description: "System metrics have been updated."
+    });
+  };
+
+  const handleLogout = async () => {
+    await signOut();
+    toast({
+      title: "Logged out",
+      description: "You have been successfully logged out."
     });
   };
 
@@ -118,6 +126,14 @@ const SystemDashboard = () => {
               >
                 <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 Refresh
+              </Button>
+              <Button 
+                onClick={handleLogout} 
+                variant="outline" 
+                size="sm"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
               </Button>
             </div>
           </div>
