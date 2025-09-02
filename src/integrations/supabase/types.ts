@@ -1693,6 +1693,39 @@ export type Database = {
         }
         Relationships: []
       }
+      role_metadata: {
+        Row: {
+          created_at: string | null
+          department_restricted: boolean | null
+          description: string | null
+          display_name: string
+          id: string
+          permissions: Json | null
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          department_restricted?: boolean | null
+          description?: string | null
+          display_name: string
+          id?: string
+          permissions?: Json | null
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          department_restricted?: boolean | null
+          description?: string | null
+          display_name?: string
+          id?: string
+          permissions?: Json | null
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       sales_pipeline: {
         Row: {
           created_at: string
@@ -1837,6 +1870,13 @@ export type Database = {
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      has_role_or_higher: {
+        Args: {
+          _min_role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
