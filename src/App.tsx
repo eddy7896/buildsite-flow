@@ -36,6 +36,8 @@ import JobCosting from "./pages/JobCosting";
 import Quotations from "./pages/Quotations";
 import CRM from "./pages/CRM";
 import Accounting from "./pages/Accounting";
+import FinancialManagement from "./pages/FinancialManagement";
+import EmployeeProjects from "./pages/EmployeeProjects";
 import { Reimbursements } from "./pages/Reimbursements";
 
 const queryClient = new QueryClient();
@@ -222,7 +224,7 @@ const App = () => (
             <Route 
               path="/clients" 
               element={
-                <ProtectedRoute requiredRole="admin">
+                <ProtectedRoute>
                   <DashboardLayout>
                     <Clients />
                   </DashboardLayout>
@@ -262,7 +264,7 @@ const App = () => (
             <Route 
               path="/jobs" 
               element={
-                <ProtectedRoute requiredRole="hr">
+                <ProtectedRoute>
                   <DashboardLayout>
                     <JobCosting />
                   </DashboardLayout>
@@ -272,7 +274,7 @@ const App = () => (
             <Route 
               path="/quotations" 
               element={
-                <ProtectedRoute requiredRole="hr">
+                <ProtectedRoute>
                   <DashboardLayout>
                     <Quotations />
                   </DashboardLayout>
@@ -295,6 +297,26 @@ const App = () => (
                 <ProtectedRoute requiredRole="finance_manager">
                   <DashboardLayout>
                     <Accounting />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/financial-management" 
+              element={
+                <ProtectedRoute requiredRole="finance_manager">
+                  <DashboardLayout>
+                    <FinancialManagement />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/my-projects" 
+              element={
+                <ProtectedRoute requiredRole="employee">
+                  <DashboardLayout>
+                    <EmployeeProjects />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 
