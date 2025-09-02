@@ -11,10 +11,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Building2, Users, Settings, UserPlus, Edit, Trash2, MoreHorizontal } from 'lucide-react';
+import { Building2, Users, Settings, UserPlus, Edit, Trash2, MoreHorizontal, Sparkles } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import UserFormDialog from '@/components/UserFormDialog';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
+import DemoDataManager from '@/components/DemoDataManager';
+import OnboardingWizard from '@/components/OnboardingWizard';
 
 interface AgencyData {
   id: string;
@@ -49,6 +51,7 @@ const AgencyDashboard = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [agencyData, setAgencyData] = useState<AgencyData | null>(null);
   const [agencySettings, setAgencySettings] = useState<AgencySettings>({
     agency_name: '',
@@ -66,8 +69,34 @@ const AgencyDashboard = () => {
     if (user) {
       fetchAgencyData();
       fetchAgencyUsers();
+      
+      // Check if this is a new agency that needs onboarding
+      checkOnboardingStatus();
     }
   }, [user]);
+
+  const checkOnboardingStatus = async () => {
+    try {
+      // Check if agency has any real data (non-demo)
+      const { data: clientsData } = await supabase
+        .from('clients')
+        .select('id')
+        .limit(1);
+
+      const { data: usersData } = await supabase
+        .from('profiles')
+        .select('id')
+        .neq('user_id', user?.id) // Exclude current user
+        .limit(1);
+
+      // Show onboarding if no clients and no other users
+      if ((!clientsData || clientsData.length === 0) && (!usersData || usersData.length === 0)) {
+        setShowOnboarding(true);
+      }
+    } catch (error) {
+      console.error('Error checking onboarding status:', error);
+    }
+  };
 
   const fetchAgencyData = async () => {
     try {
@@ -202,6 +231,15 @@ const AgencyDashboard = () => {
     }
   };
 
+  if (showOnboarding) {
+    return (
+      <OnboardingWizard 
+        onComplete={() => setShowOnboarding(false)}
+        onSkip={() => setShowOnboarding(false)}
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -271,6 +309,7 @@ const AgencyDashboard = () => {
         <TabsList>
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="demo-data">Demo Data</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="space-y-4">
@@ -420,6 +459,10 @@ const AgencyDashboard = () => {
               </Button>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="demo-data" className="space-y-4">
+          <DemoDataManager onDataChange={fetchAgencyUsers} />
         </TabsContent>
       </Tabs>
 
