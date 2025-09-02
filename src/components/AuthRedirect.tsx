@@ -23,6 +23,8 @@ export function AuthRedirect() {
       
       if (userRole === 'super_admin') {
         navigate('/system');
+      } else if (userRole === 'admin') {
+        navigate('/agency');
       } else {
         navigate('/dashboard');
       }

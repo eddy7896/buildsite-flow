@@ -81,7 +81,6 @@ const navigationItems = {
   // Management Level
   admin: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'System Dashboard', url: '/system', icon: Monitor },
     { title: 'Users', url: '/users', icon: Users },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },

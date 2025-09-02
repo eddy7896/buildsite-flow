@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { hasRoleOrHigher } from '@/utils/roleUtils';
 import { Loader2 } from 'lucide-react';
 
 type AppRole = 'super_admin' | 'ceo' | 'cto' | 'cfo' | 'coo' | 'admin' | 'operations_manager' | 
@@ -27,7 +28,7 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     return <Navigate to="/auth" replace />;
   }
 
-  if (requiredRole && userRole !== requiredRole && userRole !== 'admin' && userRole !== 'super_admin') {
+  if (requiredRole && userRole && !hasRoleOrHigher(userRole, requiredRole)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">

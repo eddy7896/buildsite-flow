@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { useSystemAnalytics } from '@/hooks/useSystemAnalytics';
+import { Navigate } from 'react-router-dom';
 import { SystemMetricsCards } from '@/components/system/SystemMetricsCards';
 import { AgencyManagement } from '@/components/system/AgencyManagement';
 import { SystemDashboardCharts } from '@/components/system/SystemDashboardCharts';
@@ -15,10 +16,15 @@ import { RefreshCw, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast';
 
 const SystemDashboard = () => {
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const { metrics, agencies, loading, refreshMetrics } = useSystemAnalytics();
   const { toast } = useToast();
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+
+  // Redirect non-super_admin users
+  if (userRole && userRole !== 'super_admin') {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   useEffect(() => {
     // Auto-refresh every 5 minutes

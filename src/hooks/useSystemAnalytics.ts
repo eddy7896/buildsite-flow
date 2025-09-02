@@ -52,6 +52,22 @@ export const useSystemAnalytics = () => {
     try {
       setLoading(true);
 
+      // Check if user is super_admin
+      const { data: user } = await supabase.auth.getUser();
+      if (!user?.user) {
+        throw new Error('Not authenticated');
+      }
+
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', user.user.id)
+        .single();
+
+      if (userRole?.role !== 'super_admin') {
+        throw new Error('Access denied: Super admin role required');
+      }
+
       // Fetch agencies data
       const { data: agenciesData, error: agenciesError } = await supabase
         .from('agencies')
