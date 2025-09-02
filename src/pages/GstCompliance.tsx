@@ -495,8 +495,26 @@ const GstCompliance = () => {
         </TabsContent>
       </Tabs>
 
+      {showSettingsDialog && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+            <h2 className="text-lg font-semibold mb-4">GST Settings</h2>
+            <p>This is a test dialog to verify it's working.</p>
+            <button 
+              onClick={() => {
+                console.log('Test dialog close button clicked');
+                setShowSettingsDialog(false);
+              }}
+              className="mt-4 px-4 py-2 bg-gray-200 rounded"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
       <GstSettingsDialog
-        open={showSettingsDialog}
+        open={false}
         onOpenChange={(open) => {
           console.log('GstSettingsDialog onOpenChange called with:', open);
           setShowSettingsDialog(open);
