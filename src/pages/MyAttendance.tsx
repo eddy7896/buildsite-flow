@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { useState } from "react";
 import { Clock, Calendar as CalendarIcon, Play, Square, TrendingUp, Award } from "lucide-react";
+import ClockInOut from '@/components/ClockInOut';
 
 const MyAttendance = () => {
   const [date, setDate] = useState<Date | undefined>(new Date());
@@ -49,19 +50,11 @@ const MyAttendance = () => {
           <h1 className="text-3xl font-bold">My Attendance</h1>
           <p className="text-muted-foreground">Track your work hours and attendance records</p>
         </div>
-        <div className="flex gap-2">
-          {todayStatus.isCheckedIn ? (
-            <Button variant="destructive">
-              <Square className="mr-2 h-4 w-4" />
-              Check Out
-            </Button>
-          ) : (
-            <Button>
-              <Play className="mr-2 h-4 w-4" />
-              Check In
-            </Button>
-          )}
-        </div>
+      </div>
+
+      {/* Clock In/Out Section */}
+      <div className="mb-6">
+        <ClockInOut />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
