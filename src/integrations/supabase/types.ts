@@ -157,6 +157,7 @@ export type Database = {
         Row: {
           action: string
           created_at: string | null
+          hash_chain: string | null
           id: string
           ip_address: unknown | null
           new_values: Json | null
@@ -165,10 +166,12 @@ export type Database = {
           table_name: string
           user_agent: string | null
           user_id: string | null
+          verified: boolean | null
         }
         Insert: {
           action: string
           created_at?: string | null
+          hash_chain?: string | null
           id?: string
           ip_address?: unknown | null
           new_values?: Json | null
@@ -177,10 +180,12 @@ export type Database = {
           table_name: string
           user_agent?: string | null
           user_id?: string | null
+          verified?: boolean | null
         }
         Update: {
           action?: string
           created_at?: string | null
+          hash_chain?: string | null
           id?: string
           ip_address?: unknown | null
           new_values?: Json | null
@@ -189,6 +194,7 @@ export type Database = {
           table_name?: string
           user_agent?: string | null
           user_id?: string | null
+          verified?: boolean | null
         }
         Relationships: []
       }
@@ -563,6 +569,36 @@ export type Database = {
           id?: string
           salary?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      encryption_keys: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          key_hash: string
+          key_version: number
+          rotated_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          key_hash: string
+          key_version?: number
+          rotated_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          key_hash?: string
+          key_version?: number
+          rotated_at?: string | null
         }
         Relationships: []
       }
@@ -1739,6 +1775,39 @@ export type Database = {
         }
         Relationships: []
       }
+      ssn_access_logs: {
+        Row: {
+          access_reason: string | null
+          access_timestamp: string
+          accessed_by: string | null
+          created_at: string
+          employee_user_id: string
+          id: string
+          ip_address: unknown | null
+          user_agent: string | null
+        }
+        Insert: {
+          access_reason?: string | null
+          access_timestamp?: string
+          accessed_by?: string | null
+          created_at?: string
+          employee_user_id: string
+          id?: string
+          ip_address?: unknown | null
+          user_agent?: string | null
+        }
+        Update: {
+          access_reason?: string | null
+          access_timestamp?: string
+          accessed_by?: string | null
+          created_at?: string
+          employee_user_id?: string
+          id?: string
+          ip_address?: unknown | null
+          user_agent?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           agency_id: string | null
@@ -1783,12 +1852,34 @@ export type Database = {
         Args: { target_user_id: string }
         Returns: boolean
       }
+      create_immutable_audit_log: {
+        Args: {
+          p_action: string
+          p_new_values: Json
+          p_old_values: Json
+          p_record_id: string
+          p_table_name: string
+        }
+        Returns: string
+      }
       decrypt_ssn: {
         Args: { encrypted_ssn: string; encryption_key?: string }
         Returns: string
       }
+      decrypt_ssn_with_audit: {
+        Args: {
+          access_reason?: string
+          employee_user_id: string
+          encrypted_ssn: string
+        }
+        Returns: string
+      }
       encrypt_ssn: {
         Args: { encryption_key?: string; ssn_text: string }
+        Returns: string
+      }
+      encrypt_ssn_with_rotation: {
+        Args: { key_version?: number; ssn_text: string }
         Returns: string
       }
       generate_client_number: {
@@ -1855,6 +1946,10 @@ export type Database = {
           phone: string
           user_id: string
         }[]
+      }
+      rotate_ssn_encryption_keys: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
     }
     Enums: {
