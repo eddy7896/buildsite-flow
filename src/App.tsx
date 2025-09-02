@@ -376,7 +376,9 @@ const App = () => (
               path="/agency" 
               element={
                 <ProtectedRoute requiredRole="super_admin">
-                  <AgencyDashboard />
+                  <DashboardLayout>
+                    <AgencyDashboard />
+                  </DashboardLayout>
                 </ProtectedRoute>
               } 
             />
