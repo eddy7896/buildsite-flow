@@ -191,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .from('user_roles')
             .insert({
               user_id: userId,
-              role: mockUser.role
+              role: mockUser.role as 'admin' | 'hr' | 'finance_manager' | 'employee'
             });
 
           if (roleError) {
