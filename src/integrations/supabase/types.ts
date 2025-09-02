@@ -534,13 +534,6 @@ export type Database = {
             foreignKeyName: "employee_files_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
-            referencedRelation: "employee_basic_info"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "employee_files_employee_id_fkey"
-            columns: ["employee_id"]
-            isOneToOne: false
             referencedRelation: "employee_details"
             referencedColumns: ["id"]
           },
@@ -1619,13 +1612,6 @@ export type Database = {
             foreignKeyName: "fk_reimbursement_requests_employee_id"
             columns: ["employee_id"]
             isOneToOne: false
-            referencedRelation: "mock_users_status"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "fk_reimbursement_requests_employee_id"
-            columns: ["employee_id"]
-            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
           },
@@ -1790,35 +1776,7 @@ export type Database = {
       }
     }
     Views: {
-      employee_basic_info: {
-        Row: {
-          department: string | null
-          employee_id: string | null
-          employment_type: string | null
-          first_name: string | null
-          full_name: string | null
-          hire_date: string | null
-          id: string | null
-          is_active: boolean | null
-          last_name: string | null
-          phone: string | null
-          position: string | null
-          user_id: string | null
-        }
-        Relationships: []
-      }
-      mock_users_status: {
-        Row: {
-          department: string | null
-          full_name: string | null
-          login_credentials: string | null
-          position: string | null
-          record_type: string | null
-          role: Database["public"]["Enums"]["app_role"] | null
-          user_id: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       can_view_employee_data: {
