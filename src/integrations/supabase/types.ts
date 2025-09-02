@@ -799,19 +799,263 @@ export type Database = {
         }
         Relationships: []
       }
+      gst_filings: {
+        Row: {
+          acknowledgment_number: string | null
+          agency_id: string | null
+          created_at: string
+          due_date: string
+          filed_by: string | null
+          filed_date: string | null
+          filing_period: string
+          id: string
+          interest: number | null
+          late_fee: number | null
+          refund_claimed: number | null
+          return_type: string
+          status: string
+          total_tax_amount: number | null
+          total_taxable_value: number | null
+          updated_at: string
+        }
+        Insert: {
+          acknowledgment_number?: string | null
+          agency_id?: string | null
+          created_at?: string
+          due_date: string
+          filed_by?: string | null
+          filed_date?: string | null
+          filing_period: string
+          id?: string
+          interest?: number | null
+          late_fee?: number | null
+          refund_claimed?: number | null
+          return_type: string
+          status?: string
+          total_tax_amount?: number | null
+          total_taxable_value?: number | null
+          updated_at?: string
+        }
+        Update: {
+          acknowledgment_number?: string | null
+          agency_id?: string | null
+          created_at?: string
+          due_date?: string
+          filed_by?: string | null
+          filed_date?: string | null
+          filing_period?: string
+          id?: string
+          interest?: number | null
+          late_fee?: number | null
+          refund_claimed?: number | null
+          return_type?: string
+          status?: string
+          total_tax_amount?: number | null
+          total_taxable_value?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gst_filings_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gst_settings: {
+        Row: {
+          agency_id: string | null
+          business_type: string
+          composition_scheme: boolean | null
+          created_at: string
+          filing_frequency: string
+          gstin: string
+          id: string
+          is_active: boolean | null
+          legal_name: string
+          trade_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          agency_id?: string | null
+          business_type?: string
+          composition_scheme?: boolean | null
+          created_at?: string
+          filing_frequency?: string
+          gstin: string
+          id?: string
+          is_active?: boolean | null
+          legal_name: string
+          trade_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agency_id?: string | null
+          business_type?: string
+          composition_scheme?: boolean | null
+          created_at?: string
+          filing_frequency?: string
+          gstin?: string
+          id?: string
+          is_active?: boolean | null
+          legal_name?: string
+          trade_name?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gst_settings_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gst_transactions: {
+        Row: {
+          agency_id: string | null
+          cess_amount: number | null
+          cess_rate: number | null
+          cgst_amount: number | null
+          cgst_rate: number | null
+          counterparty_name: string
+          created_at: string
+          gstin_counterparty: string | null
+          hsn_sac_code: string | null
+          id: string
+          igst_amount: number | null
+          igst_rate: number | null
+          invoice_id: string | null
+          place_of_supply: string | null
+          reverse_charge: boolean | null
+          sgst_amount: number | null
+          sgst_rate: number | null
+          supply_type: string
+          taxable_value: number
+          transaction_date: string
+          transaction_type: string
+          updated_at: string
+        }
+        Insert: {
+          agency_id?: string | null
+          cess_amount?: number | null
+          cess_rate?: number | null
+          cgst_amount?: number | null
+          cgst_rate?: number | null
+          counterparty_name: string
+          created_at?: string
+          gstin_counterparty?: string | null
+          hsn_sac_code?: string | null
+          id?: string
+          igst_amount?: number | null
+          igst_rate?: number | null
+          invoice_id?: string | null
+          place_of_supply?: string | null
+          reverse_charge?: boolean | null
+          sgst_amount?: number | null
+          sgst_rate?: number | null
+          supply_type: string
+          taxable_value?: number
+          transaction_date: string
+          transaction_type: string
+          updated_at?: string
+        }
+        Update: {
+          agency_id?: string | null
+          cess_amount?: number | null
+          cess_rate?: number | null
+          cgst_amount?: number | null
+          cgst_rate?: number | null
+          counterparty_name?: string
+          created_at?: string
+          gstin_counterparty?: string | null
+          hsn_sac_code?: string | null
+          id?: string
+          igst_amount?: number | null
+          igst_rate?: number | null
+          invoice_id?: string | null
+          place_of_supply?: string | null
+          reverse_charge?: boolean | null
+          sgst_amount?: number | null
+          sgst_rate?: number | null
+          supply_type?: string
+          taxable_value?: number
+          transaction_date?: string
+          transaction_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gst_transactions_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gst_transactions_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hsn_sac_codes: {
+        Row: {
+          code: string
+          created_at: string
+          description: string
+          gst_rate: number
+          id: string
+          is_active: boolean | null
+          type: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description: string
+          gst_rate?: number
+          id?: string
+          is_active?: boolean | null
+          type: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string
+          gst_rate?: number
+          id?: string
+          is_active?: boolean | null
+          type?: string
+        }
+        Relationships: []
+      }
       invoices: {
         Row: {
           agency_id: string | null
+          cgst_amount: number | null
+          cgst_rate: number | null
           client_id: string | null
           created_at: string
           created_by: string | null
           description: string | null
           discount: number | null
           due_date: string | null
+          gstin: string | null
+          hsn_sac_code: string | null
           id: string
+          igst_amount: number | null
+          igst_rate: number | null
           invoice_number: string
           issue_date: string
           notes: string | null
+          place_of_supply: string | null
+          sgst_amount: number | null
+          sgst_rate: number | null
           status: string
           subtotal: number
           tax_rate: number
@@ -821,16 +1065,25 @@ export type Database = {
         }
         Insert: {
           agency_id?: string | null
+          cgst_amount?: number | null
+          cgst_rate?: number | null
           client_id?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
           discount?: number | null
           due_date?: string | null
+          gstin?: string | null
+          hsn_sac_code?: string | null
           id?: string
+          igst_amount?: number | null
+          igst_rate?: number | null
           invoice_number: string
           issue_date?: string
           notes?: string | null
+          place_of_supply?: string | null
+          sgst_amount?: number | null
+          sgst_rate?: number | null
           status?: string
           subtotal?: number
           tax_rate?: number
@@ -840,16 +1093,25 @@ export type Database = {
         }
         Update: {
           agency_id?: string | null
+          cgst_amount?: number | null
+          cgst_rate?: number | null
           client_id?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
           discount?: number | null
           due_date?: string | null
+          gstin?: string | null
+          hsn_sac_code?: string | null
           id?: string
+          igst_amount?: number | null
+          igst_rate?: number | null
           invoice_number?: string
           issue_date?: string
           notes?: string | null
+          place_of_supply?: string | null
+          sgst_amount?: number | null
+          sgst_rate?: number | null
           status?: string
           subtotal?: number
           tax_rate?: number
@@ -2574,6 +2836,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_gst_liability: {
+        Args: { p_agency_id: string; p_end_date: string; p_start_date: string }
+        Returns: {
+          total_cgst: number
+          total_igst: number
+          total_sgst: number
+          total_tax: number
+          total_taxable_value: number
+        }[]
+      }
       can_view_employee_data: {
         Args: { target_user_id: string }
         Returns: boolean

@@ -44,6 +44,7 @@ import Quotations from "./pages/Quotations";
 import CRM from "./pages/CRM";
 import Accounting from "./pages/Accounting";
 import FinancialManagement from "./pages/FinancialManagement";
+import GstCompliance from "./pages/GstCompliance";
 import EmployeeProjects from "./pages/EmployeeProjects";
 import { Reimbursements } from "./pages/Reimbursements";
 import SystemDashboard from "./pages/SystemDashboard";
@@ -348,6 +349,16 @@ const App = () => (
                 <ProtectedRoute requiredRole="finance_manager">
                   <DashboardLayout>
                     <FinancialManagement />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/gst-compliance" 
+              element={
+                <ProtectedRoute requiredRole="finance_manager">
+                  <DashboardLayout>
+                    <GstCompliance />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

@@ -150,6 +150,7 @@ const navigationItems = {
     { title: 'Quotations', url: '/quotations', icon: FileCheck },
     { title: 'Reimbursements', url: '/reimbursements', icon: DollarSign },
     { title: 'Financial Management', url: '/financial-management', icon: Calculator },
+    { title: 'GST Compliance', url: '/gst-compliance', icon: FileText },
     { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
