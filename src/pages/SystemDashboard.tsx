@@ -8,6 +8,8 @@ import { useSystemAnalytics } from '@/hooks/useSystemAnalytics';
 import { SystemMetricsCards } from '@/components/system/SystemMetricsCards';
 import { AgencyManagement } from '@/components/system/AgencyManagement';
 import { SystemDashboardCharts } from '@/components/system/SystemDashboardCharts';
+import { SupportTicketsWidget } from '@/components/system/SupportTicketsWidget';
+import { RealTimeUsageWidget } from '@/components/system/RealTimeUsageWidget';
 import { RefreshCw, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -215,19 +217,10 @@ const SystemDashboard = () => {
           </TabsContent>
 
           <TabsContent value="monitoring" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>System Monitoring</CardTitle>
-                <CardDescription>
-                  Real-time system health and performance metrics
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12 text-muted-foreground">
-                  Advanced monitoring features coming soon...
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <RealTimeUsageWidget />
+              <SupportTicketsWidget />
+            </div>
           </TabsContent>
         </Tabs>
       </div>
