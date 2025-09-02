@@ -41,12 +41,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 const navigationItems = {
   // Executive Level
   super_admin: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'System Dashboard', url: '/system', icon: Monitor },
-    { title: 'Agency Management', url: '/agency', icon: Building2 },
     { title: 'Users', url: '/users', icon: Users },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   ],
   ceo: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },

@@ -245,7 +245,7 @@ const App = () => (
             <Route 
               path="/reports" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requiredRole="admin">
                   <DashboardLayout>
                     <Reports />
                   </DashboardLayout>
@@ -255,7 +255,7 @@ const App = () => (
             <Route 
               path="/analytics" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requiredRole="admin">
                   <DashboardLayout>
                     <Analytics />
                   </DashboardLayout>
@@ -375,7 +375,7 @@ const App = () => (
             <Route 
               path="/agency" 
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requiredRole="admin">
                   <DashboardLayout>
                     <AgencyDashboard />
                   </DashboardLayout>
