@@ -18,12 +18,14 @@ import {
 const SignupSuccess = () => {
   const [searchParams] = useSearchParams();
   const [agencyName, setAgencyName] = useState('');
+  const [agencyDomain, setAgencyDomain] = useState('');
   const [email, setEmail] = useState('');
   const [plan, setPlan] = useState('');
 
   useEffect(() => {
     // Get data from URL params
     setAgencyName(searchParams.get('agencyName') || 'Your Agency');
+    setAgencyDomain(searchParams.get('agencyDomain') || '');
     setEmail(searchParams.get('email') || '');
     setPlan(searchParams.get('plan') || 'selected plan');
   }, [searchParams]);
@@ -90,9 +92,15 @@ const SignupSuccess = () => {
               {plan.charAt(0).toUpperCase() + plan.slice(1)} Plan Selected
             </Badge>
             <Badge variant="outline" className="px-4 py-2">
-              <Clock className="w-4 h-4 mr-2" />
+              <Clock className="w-4 w-4 mr-2" />
               14-Day Free Trial Active
             </Badge>
+            {agencyDomain && (
+              <Badge variant="outline" className="px-4 py-2">
+                <Building className="w-4 h-4 mr-2" />
+                {agencyDomain}.lovable.app
+              </Badge>
+            )}
           </div>
         </div>
 

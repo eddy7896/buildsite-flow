@@ -52,6 +52,7 @@ const SignUp = () => {
     password: '',
     confirmPassword: '',
     agencyName: '',
+    agencyDomain: '',
     fullName: '',
     phone: '',
     countryCode: '+1 US'
@@ -189,6 +190,21 @@ const SignUp = () => {
     }
   };
 
+  const generateDomainFromAgencyName = (agencyName: string) => {
+    return agencyName
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters except spaces and hyphens
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
+  };
+
+  const validateDomain = (domain: string) => {
+    // Basic domain validation
+    const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+    return domainRegex.test(domain) && domain.length >= 3 && domain.length <= 63;
+  };
+
   const validateStep1 = () => {
     const newErrors: Record<string, string> = {};
     
@@ -198,6 +214,12 @@ const SignUp = () => {
     
     if (!accountData.agencyName.trim()) {
       newErrors.agencyName = 'Agency name is required';
+    }
+
+    if (!accountData.agencyDomain.trim()) {
+      newErrors.agencyDomain = 'Agency domain is required';
+    } else if (!validateDomain(accountData.agencyDomain)) {
+      newErrors.agencyDomain = 'Domain must be 3-63 characters, contain only letters, numbers, and hyphens, and not start/end with hyphens';
     }
     
     if (!accountData.email.trim()) {
@@ -254,7 +276,7 @@ const SignUp = () => {
         body: {
           // Agency details
           agencyName: accountData.agencyName,
-          domain: accountData.agencyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-'),
+          domain: accountData.agencyDomain,
           
           // Admin user details
           email: accountData.email,
@@ -278,7 +300,7 @@ const SignUp = () => {
       });
 
       // Redirect to success page with agency info
-      const successUrl = `/signup-success?agencyName=${encodeURIComponent(accountData.agencyName)}&email=${encodeURIComponent(accountData.email)}&plan=${encodeURIComponent(selectedPlan)}`;
+      const successUrl = `/signup-success?agencyName=${encodeURIComponent(accountData.agencyName)}&agencyDomain=${encodeURIComponent(accountData.agencyDomain)}&email=${encodeURIComponent(accountData.email)}&plan=${encodeURIComponent(selectedPlan)}`;
       window.location.href = successUrl;
       
     } catch (error: any) {
@@ -359,13 +381,13 @@ const SignUp = () => {
         {currentStep === 1 && (
           <Card className="max-w-2xl mx-auto">
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl font-bold">Create Your Agency Admin Account</CardTitle>
+              <CardTitle className="text-2xl font-bold">Create Your Agency Account</CardTitle>
               <CardDescription>
-                Set up your construction management agency admin account in minutes
+                Set up your agency with a custom domain and admin account
               </CardDescription>
               <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> This creates an admin account with full system access. Employee accounts can only be created by admins from within the dashboard.
+                  <strong>Note:</strong> This creates an admin account with full system access. Employee accounts can be created later from the dashboard.
                 </p>
               </div>
             </CardHeader>
@@ -401,8 +423,17 @@ const SignUp = () => {
                     placeholder="ABC Construction"
                     value={accountData.agencyName}
                     onChange={(e) => {
-                      setAccountData(prev => ({ ...prev, agencyName: e.target.value }));
+                      const newAgencyName = e.target.value;
+                      setAccountData(prev => ({ 
+                        ...prev, 
+                        agencyName: newAgencyName,
+                        // Auto-generate domain if it's empty or matches the previous auto-generated one
+                        agencyDomain: !prev.agencyDomain || prev.agencyDomain === generateDomainFromAgencyName(prev.agencyName) 
+                          ? generateDomainFromAgencyName(newAgencyName)
+                          : prev.agencyDomain
+                      }));
                       if (errors.agencyName) setErrors(prev => ({ ...prev, agencyName: '' }));
+                      if (errors.agencyDomain) setErrors(prev => ({ ...prev, agencyDomain: '' }));
                     }}
                     className={errors.agencyName ? 'border-destructive' : ''}
                     required
@@ -414,7 +445,38 @@ const SignUp = () => {
                     </p>
                   )}
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="agencyDomain">Agency Domain</Label>
+                <div className="flex items-center">
+                  <Input
+                    id="agencyDomain"
+                    type="text"
+                    placeholder="abc-construction"
+                    value={accountData.agencyDomain}
+                    onChange={(e) => {
+                      const domain = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                      setAccountData(prev => ({ ...prev, agencyDomain: domain }));
+                      if (errors.agencyDomain) setErrors(prev => ({ ...prev, agencyDomain: '' }));
+                    }}
+                    className={`rounded-r-none ${errors.agencyDomain ? 'border-destructive' : ''}`}
+                    required
+                  />
+                  <div className="px-3 py-2 bg-muted border border-l-0 rounded-r-md text-sm text-muted-foreground">
+                    .lovable.app
+                  </div>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Your agency will be accessible at: <strong>{accountData.agencyDomain || 'your-domain'}.lovable.app</strong>
+                </p>
+                {errors.agencyDomain && (
+                  <p className="text-sm text-destructive flex items-center gap-1">
+                    <AlertCircle className="h-4 w-4" />
+                    {errors.agencyDomain}
+                  </p>
+                )}
+              </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="email">Business Email</Label>
