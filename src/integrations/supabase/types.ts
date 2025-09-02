@@ -1860,7 +1860,29 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "hr" | "finance_manager" | "employee" | "super_admin"
+      app_role:
+        | "admin"
+        | "hr"
+        | "finance_manager"
+        | "employee"
+        | "super_admin"
+        | "ceo"
+        | "cto"
+        | "cfo"
+        | "coo"
+        | "operations_manager"
+        | "department_head"
+        | "team_lead"
+        | "project_manager"
+        | "sales_manager"
+        | "marketing_manager"
+        | "quality_assurance"
+        | "it_support"
+        | "legal_counsel"
+        | "business_analyst"
+        | "customer_success"
+        | "contractor"
+        | "intern"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1988,7 +2010,30 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "hr", "finance_manager", "employee", "super_admin"],
+      app_role: [
+        "admin",
+        "hr",
+        "finance_manager",
+        "employee",
+        "super_admin",
+        "ceo",
+        "cto",
+        "cfo",
+        "coo",
+        "operations_manager",
+        "department_head",
+        "team_lead",
+        "project_manager",
+        "sales_manager",
+        "marketing_manager",
+        "quality_assurance",
+        "it_support",
+        "legal_counsel",
+        "business_analyst",
+        "customer_success",
+        "contractor",
+        "intern",
+      ],
     },
   },
 } as const
