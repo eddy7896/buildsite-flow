@@ -17,14 +17,16 @@ import { useToast } from '@/hooks/use-toast';
 
 const SystemDashboard = () => {
   const { user, userRole } = useAuth();
-  const { metrics, agencies, loading, refreshMetrics } = useSystemAnalytics();
-  const { toast } = useToast();
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-
-  // Redirect non-super_admin users
-  if (userRole && userRole !== 'super_admin') {
+  
+  // Redirect non-super_admin users or unauthenticated users
+  if (!user || (userRole && userRole !== 'super_admin')) {
     return <Navigate to="/dashboard" replace />;
   }
+
+  // Only initialize analytics after authentication check
+  const { metrics, agencies, loading, refreshMetrics } = useSystemAnalytics();
+  const { toast } = useToast();
 
   useEffect(() => {
     // Auto-refresh every 5 minutes
