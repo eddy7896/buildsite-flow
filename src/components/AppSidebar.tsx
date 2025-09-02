@@ -100,14 +100,6 @@ export function AppSidebar() {
   const isMobile = useIsMobile();
 
   console.log('AppSidebar - userRole:', userRole, 'loading:', loading);
-  
-  // Don't show any navigation items if still loading or no role
-  if (loading || !userRole) {
-    return null;
-  }
-  
-  const items = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.employee;
-  const collapsed = state === 'collapsed';
 
   // Auto-collapse sidebar on mobile when navigating
   useEffect(() => {
@@ -115,6 +107,24 @@ export function AppSidebar() {
       setOpenMobile(false);
     }
   }, [currentPath, isMobile, setOpenMobile]);
+
+  // Don't show any navigation items if still loading or no role
+  if (loading || !userRole) {
+    return (
+      <Sidebar className="w-14" collapsible="icon">
+        <SidebarContent className="flex flex-col">
+          <div className="p-3 border-b border-sidebar-border">
+            <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
+              <Building className="h-4 w-4 text-primary" />
+            </div>
+          </div>
+        </SidebarContent>
+      </Sidebar>
+    );
+  }
+  
+  const items = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.employee;
+  const collapsed = state === 'collapsed';
 
   const isActive = (path: string) => {
     if (path === '/dashboard') {
