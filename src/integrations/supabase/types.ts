@@ -483,6 +483,33 @@ export type Database = {
         }
         Relationships: []
       }
+      expense_categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       invoices: {
         Row: {
           client_id: string | null
@@ -1303,6 +1330,109 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "quotation_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reimbursement_attachments: {
+        Row: {
+          file_name: string
+          file_path: string
+          file_size: number
+          file_type: string
+          id: string
+          reimbursement_id: string
+          uploaded_at: string
+        }
+        Insert: {
+          file_name: string
+          file_path: string
+          file_size: number
+          file_type: string
+          id?: string
+          reimbursement_id: string
+          uploaded_at?: string
+        }
+        Update: {
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          file_type?: string
+          id?: string
+          reimbursement_id?: string
+          uploaded_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reimbursement_attachments_reimbursement_id_fkey"
+            columns: ["reimbursement_id"]
+            isOneToOne: false
+            referencedRelation: "reimbursement_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reimbursement_requests: {
+        Row: {
+          amount: number
+          business_purpose: string | null
+          category_id: string
+          created_at: string
+          currency: string
+          description: string
+          employee_id: string
+          expense_date: string
+          id: string
+          payment_date: string | null
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          business_purpose?: string | null
+          category_id: string
+          created_at?: string
+          currency?: string
+          description: string
+          employee_id: string
+          expense_date: string
+          id?: string
+          payment_date?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          business_purpose?: string | null
+          category_id?: string
+          created_at?: string
+          currency?: string
+          description?: string
+          employee_id?: string
+          expense_date?: string
+          id?: string
+          payment_date?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reimbursement_requests_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
             referencedColumns: ["id"]
           },
         ]

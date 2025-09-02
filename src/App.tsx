@@ -36,6 +36,7 @@ import JobCosting from "./pages/JobCosting";
 import Quotations from "./pages/Quotations";
 import CRM from "./pages/CRM";
 import Accounting from "./pages/Accounting";
+import { Reimbursements } from "./pages/Reimbursements";
 
 const queryClient = new QueryClient();
 
@@ -294,6 +295,16 @@ const App = () => (
                 <ProtectedRoute requiredRole="finance_manager">
                   <DashboardLayout>
                     <Accounting />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/reimbursements" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <Reimbursements />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

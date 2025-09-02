@@ -77,6 +77,7 @@ const navigationItems = {
     { title: 'Invoices', url: '/invoices', icon: FileText },
     { title: 'Payments', url: '/payments', icon: CreditCard },
     { title: 'Receipts', url: '/receipts', icon: Receipt },
+    { title: 'Reimbursements', url: '/reimbursements', icon: DollarSign },
     { title: 'Ledger', url: '/ledger', icon: BookOpen },
     { title: 'Accounting', url: '/accounting', icon: Calculator },
     { title: 'Reports', url: '/reports', icon: ChartLine },
@@ -89,6 +90,7 @@ const navigationItems = {
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
+    { title: 'My Reimbursements', url: '/reimbursements', icon: DollarSign },
   ],
 };
 
