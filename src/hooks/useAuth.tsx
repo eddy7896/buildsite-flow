@@ -113,19 +113,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // For real users, query the database
+      // For real users, query the database and get ALL roles
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId)
-        .maybeSingle();
+        .eq('user_id', userId);
 
       if (error) {
         console.error('Error fetching user role:', error);
         return;
       }
 
-      setUserRole(data?.role || 'employee');
+      // If no roles found, default to employee
+      if (!data || data.length === 0) {
+        setUserRole('employee');
+        return;
+      }
+
+      // Define role hierarchy (lower number = higher priority)
+      const roleHierarchy: Record<AppRole, number> = {
+        'super_admin': 1,
+        'ceo': 2,
+        'cto': 3,
+        'cfo': 4,
+        'coo': 5,
+        'admin': 6,
+        'operations_manager': 7,
+        'department_head': 8,
+        'team_lead': 9,
+        'project_manager': 10,
+        'hr': 11,
+        'finance_manager': 12,
+        'sales_manager': 13,
+        'marketing_manager': 14,
+        'quality_assurance': 15,
+        'it_support': 16,
+        'legal_counsel': 17,
+        'business_analyst': 18,
+        'customer_success': 19,
+        'employee': 20,
+        'contractor': 21,
+        'intern': 22
+      };
+
+      // Find the highest priority role
+      const userRoles = data.map(r => r.role as AppRole);
+      const highestRole = userRoles.reduce((highest, current) => {
+        const currentPriority = roleHierarchy[current] || 99;
+        const highestPriority = roleHierarchy[highest] || 99;
+        return currentPriority < highestPriority ? current : highest;
+      });
+
+      console.log('User roles found:', userRoles, 'Selected highest role:', highestRole);
+      setUserRole(highestRole);
     } catch (error) {
       console.error('Error fetching user role:', error);
     }
