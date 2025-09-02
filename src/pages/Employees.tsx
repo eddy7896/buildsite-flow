@@ -34,27 +34,18 @@ const Employees = () => {
     try {
       setLoading(true);
       
-      // Fetch employee details
+      // Use the secure employee view that respects RLS policies
       const { data: employeeData, error: employeeError } = await supabase
-        .from('employee_details')
+        .from('employee_basic_info')
         .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .order('first_name', { ascending: true });
 
       if (employeeError) {
         throw employeeError;
       }
 
-      // Fetch all user profiles for the employees
-      const userIds = employeeData?.map(emp => emp.user_id) || [];
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .in('user_id', userIds);
-
       // Transform the data to match our interface
       const transformedEmployees: Employee[] = employeeData?.map((emp: any) => {
-        const profile = profileData?.find(p => p.user_id === emp.user_id);
         return {
           id: emp.id,
           user_id: emp.user_id,
@@ -62,11 +53,11 @@ const Employees = () => {
           first_name: emp.first_name,
           last_name: emp.last_name,
           email: `${emp.first_name.toLowerCase()}.${emp.last_name.toLowerCase()}@company.com`,
-          phone: profile?.phone,
-          department: profile?.department,
-          position: profile?.position,
+          phone: emp.phone,
+          department: emp.department,
+          position: emp.position,
           is_active: emp.is_active,
-          hire_date: emp.created_at,
+          hire_date: emp.hire_date,
           employment_type: emp.employment_type
         };
       }) || [];
