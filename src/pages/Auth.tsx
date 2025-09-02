@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
+import { CreateDemoUsers } from '@/components/CreateDemoUsers';
 import { Loader2, Building, User, Shield, DollarSign, Users, CheckCircle2 } from 'lucide-react';
 
 const Auth = () => {
@@ -103,16 +104,24 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="container mx-auto px-4 py-8 max-w-md">
-        {/* Registration Success Message */}
-        {showSuccessMessage && (
-          <Alert className="mb-6 border-green-200 bg-green-50">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">
-              <strong>Registration successful!</strong> Please check your email to verify your account before signing in.
-            </AlertDescription>
-          </Alert>
-        )}
+      <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Demo User Creation Panel */}
+          <div className="space-y-4">
+            <CreateDemoUsers />
+          </div>
+
+          {/* Login Panel */}
+          <div className="space-y-4">
+            {/* Registration Success Message */}
+            {showSuccessMessage && (
+              <Alert className="border-green-200 bg-green-50">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-800">
+                  <strong>Registration successful!</strong> Please check your email to verify your account before signing in.
+                </AlertDescription>
+              </Alert>
+            )}
 
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
@@ -257,7 +266,9 @@ const Auth = () => {
             </Link>
           </div>
         </CardContent>
-      </Card>
+          </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
