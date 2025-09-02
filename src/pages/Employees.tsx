@@ -34,10 +34,21 @@ const Employees = () => {
     try {
       setLoading(true);
       
-      // Use the secure employee view that respects RLS policies
+      // Query employee details directly with RLS policies enforced
       const { data: employeeData, error: employeeError } = await supabase
-        .from('employee_basic_info')
-        .select('*')
+        .from('employee_details')
+        .select(`
+          id,
+          user_id,
+          first_name,
+          last_name,
+          phone,
+          department,
+          position,
+          employment_type,
+          hire_date,
+          is_active
+        `)
         .order('first_name', { ascending: true });
 
       if (employeeError) {
