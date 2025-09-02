@@ -1,20 +1,30 @@
-import { useState } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Navigate, Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
-import { Loader2, Building, User, Shield, DollarSign, Users } from 'lucide-react';
+import { Loader2, Building, User, Shield, DollarSign, Users, CheckCircle2 } from 'lucide-react';
 
 const Auth = () => {
   const { signIn, user, loading } = useAuth();
+  const [searchParams] = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   
   // Form states
   const [signInData, setSignInData] = useState({ email: '', password: '' });
+
+  // Check for registration success
+  useEffect(() => {
+    if (searchParams.get('registered') === 'true') {
+      setShowSuccessMessage(true);
+    }
+  }, [searchParams]);
 
   // Redirect if already authenticated
   if (user) {
@@ -84,6 +94,17 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="container mx-auto px-4 py-8 max-w-md">
+        {/* Registration Success Message */}
+        {showSuccessMessage && (
+          <Alert className="mb-6 border-green-200 bg-green-50">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-800">
+              <strong>Registration successful!</strong> Please check your email to verify your account before signing in.
+            </AlertDescription>
+          </Alert>
+        )}
+
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
@@ -209,7 +230,7 @@ const Auth = () => {
               Don't have an agency account?
             </p>
             <Link 
-              to="/agency-signup" 
+              to="/signup" 
               className="text-sm font-medium text-primary hover:underline"
             >
               Create Your Agency
@@ -217,6 +238,7 @@ const Auth = () => {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 };

@@ -5,8 +5,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Loader2, 
   Building, 
@@ -18,7 +21,11 @@ import {
   Crown,
   Users,
   Globe,
-  ChevronDown
+  ChevronDown,
+  AlertCircle,
+  CheckCircle2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -28,11 +35,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 const SignUp = () => {
-  const { signUp, user, loading } = useAuth();
+  const { user, loading } = useAuth();
   const { currency, formatPrice, changeCurrency, availableCurrencies } = useCurrency();
+  const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Form states
   const [accountData, setAccountData] = useState({
@@ -128,21 +139,45 @@ const SignUp = () => {
     );
   }
 
+  const validateStep1 = () => {
+    const newErrors: Record<string, string> = {};
+    
+    if (!accountData.fullName.trim()) {
+      newErrors.fullName = 'Full name is required';
+    }
+    
+    if (!accountData.agencyName.trim()) {
+      newErrors.agencyName = 'Agency name is required';
+    }
+    
+    if (!accountData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(accountData.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+    
+    if (!accountData.password) {
+      newErrors.password = 'Password is required';
+    } else if (accountData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+    
+    if (!accountData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+    } else if (accountData.password !== accountData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleAccountSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Basic validation
-    if (accountData.password !== accountData.confirmPassword) {
-      alert('Passwords do not match');
-      return;
+    if (validateStep1()) {
+      setCurrentStep(2);
     }
-    
-    if (accountData.password.length < 6) {
-      alert('Password must be at least 6 characters');
-      return;
-    }
-    
-    setCurrentStep(2);
   };
 
   const handlePlanSelection = (planId: string) => {
@@ -151,23 +186,23 @@ const SignUp = () => {
 
   const handleSignUp = async () => {
     if (!selectedPlan) {
-      alert('Please select a plan');
+      toast({
+        title: "Please select a plan",
+        description: "You need to choose a plan to continue with registration.",
+        variant: "destructive",
+      });
       return;
     }
 
     setIsLoading(true);
     
     try {
-      // Call the register-agency edge function instead of just auth signup
-      const response = await fetch(`https://ljhdcsmfhddxkdbwnfht.supabase.co/functions/v1/register-agency`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+      // Call the register-agency edge function with proper headers
+      const { data, error } = await supabase.functions.invoke('register-agency', {
+        body: {
           // Agency details
           agencyName: accountData.agencyName,
-          domain: accountData.agencyName.toLowerCase().replace(/\s+/g, '-'),
+          domain: accountData.agencyName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-'),
           
           // Admin user details
           email: accountData.email,
@@ -178,21 +213,28 @@ const SignUp = () => {
           // Plan selection
           selectedPlan,
           planDetails: plans.find(p => p.id === selectedPlan)
-        }),
+        }
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Registration failed');
+      if (error) {
+        throw error;
       }
 
-      console.log('Agency registration successful:', result);
-      // The user will be automatically redirected by the auth system
+      toast({
+        title: "Agency registered successfully!",
+        description: "Please check your email to verify your account before signing in.",
+      });
+
+      // Redirect to auth page with success message
+      window.location.href = '/auth?registered=true';
       
     } catch (error: any) {
       console.error('Registration error:', error);
-      alert(error.message || 'Registration failed. Please try again.');
+      toast({
+        title: "Registration failed",
+        description: error.message || 'Please try again or contact support.',
+        variant: "destructive",
+      });
     }
     
     setIsLoading(false);
@@ -277,28 +319,48 @@ const SignUp = () => {
             <CardContent>
               <form onSubmit={handleAccountSubmit} className="space-y-6">
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="fullName">Full Name</Label>
-                    <Input
-                      id="fullName"
-                      type="text"
-                      placeholder="John Doe"
-                      value={accountData.fullName}
-                      onChange={(e) => setAccountData(prev => ({ ...prev, fullName: e.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="agencyName">Agency Name</Label>
-                    <Input
-                      id="agencyName"
-                      type="text"
-                      placeholder="ABC Construction"
-                      value={accountData.agencyName}
-                      onChange={(e) => setAccountData(prev => ({ ...prev, agencyName: e.target.value }))}
-                      required
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fullName">Full Name</Label>
+                  <Input
+                    id="fullName"
+                    type="text"
+                    placeholder="John Doe"
+                    value={accountData.fullName}
+                    onChange={(e) => {
+                      setAccountData(prev => ({ ...prev, fullName: e.target.value }));
+                      if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' }));
+                    }}
+                    className={errors.fullName ? 'border-destructive' : ''}
+                    required
+                  />
+                  {errors.fullName && (
+                    <p className="text-sm text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {errors.fullName}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="agencyName">Agency Name</Label>
+                  <Input
+                    id="agencyName"
+                    type="text"
+                    placeholder="ABC Construction"
+                    value={accountData.agencyName}
+                    onChange={(e) => {
+                      setAccountData(prev => ({ ...prev, agencyName: e.target.value }));
+                      if (errors.agencyName) setErrors(prev => ({ ...prev, agencyName: '' }));
+                    }}
+                    className={errors.agencyName ? 'border-destructive' : ''}
+                    required
+                  />
+                  {errors.agencyName && (
+                    <p className="text-sm text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {errors.agencyName}
+                    </p>
+                  )}
+                </div>
                 </div>
 
                 <div className="space-y-2">
@@ -308,9 +370,19 @@ const SignUp = () => {
                     type="email"
                     placeholder="john@abcconstruction.com"
                     value={accountData.email}
-                    onChange={(e) => setAccountData(prev => ({ ...prev, email: e.target.value }))}
+                    onChange={(e) => {
+                      setAccountData(prev => ({ ...prev, email: e.target.value }));
+                      if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
+                    }}
+                    className={errors.email ? 'border-destructive' : ''}
                     required
                   />
+                  {errors.email && (
+                    <p className="text-sm text-destructive flex items-center gap-1">
+                      <AlertCircle className="h-4 w-4" />
+                      {errors.email}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -361,31 +433,90 @@ const SignUp = () => {
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="Create a strong password"
-                      value={accountData.password}
-                      onChange={(e) => setAccountData(prev => ({ ...prev, password: e.target.value }))}
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Create a strong password"
+                        value={accountData.password}
+                        onChange={(e) => {
+                          setAccountData(prev => ({ ...prev, password: e.target.value }));
+                          if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
+                        }}
+                        className={errors.password ? 'border-destructive pr-10' : 'pr-10'}
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    {errors.password && (
+                      <p className="text-sm text-destructive flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {errors.password}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="confirmPassword">Confirm Password</Label>
-                    <Input
-                      id="confirmPassword"
-                      type="password"
-                      placeholder="Confirm your password"
-                      value={accountData.confirmPassword}
-                      onChange={(e) => setAccountData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id="confirmPassword"
+                        type={showConfirmPassword ? "text" : "password"}
+                        placeholder="Confirm your password"
+                        value={accountData.confirmPassword}
+                        onChange={(e) => {
+                          setAccountData(prev => ({ ...prev, confirmPassword: e.target.value }));
+                          if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: '' }));
+                        }}
+                        className={errors.confirmPassword ? 'border-destructive pr-10' : 'pr-10'}
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    {errors.confirmPassword && (
+                      <p className="text-sm text-destructive flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {errors.confirmPassword}
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full">
-                  Continue to Plan Selection
-                  <ArrowRight className="ml-2 h-4 w-4" />
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating Account...
+                    </>
+                  ) : (
+                    <>
+                      Continue to Plan Selection
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </>
+                  )}
                 </Button>
               </form>
 
@@ -406,12 +537,20 @@ const SignUp = () => {
           <div>
             <div className="text-center mb-8">
               <h2 className="text-3xl font-bold mb-2">Choose Your Plan</h2>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground mb-4">
                 Select the perfect plan for {accountData.agencyName}
               </p>
-              <Badge variant="secondary" className="mt-4">
-                14-day free trial • No credit card required
-              </Badge>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Badge variant="secondary">
+                  14-day free trial • No credit card required
+                </Badge>
+                {selectedPlan && (
+                  <Badge variant="default">
+                    <CheckCircle2 className="w-4 h-4 mr-1" />
+                    Plan Selected
+                  </Badge>
+                )}
+              </div>
             </div>
 
             <div className="grid md:grid-cols-3 gap-6 mb-8">
