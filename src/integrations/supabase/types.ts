@@ -1965,7 +1965,7 @@ export type Database = {
       }
       profiles: {
         Row: {
-          agency_id: string | null
+          agency_id: string
           avatar_url: string | null
           created_at: string
           department: string | null
@@ -1979,7 +1979,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          agency_id?: string | null
+          agency_id: string
           avatar_url?: string | null
           created_at?: string
           department?: string | null
@@ -1993,7 +1993,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          agency_id?: string | null
+          agency_id?: string
           avatar_url?: string | null
           created_at?: string
           department?: string | null
