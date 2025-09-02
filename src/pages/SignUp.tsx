@@ -58,7 +58,16 @@ const SignUp = () => {
     countryCode: '+1 US'
   });
   
+  const [selectedTld, setSelectedTld] = useState('.com');
+  const [customTld, setCustomTld] = useState('');
+  const [isCustomTld, setIsCustomTld] = useState(false);
+  
   const [selectedPlan, setSelectedPlan] = useState('');
+
+  // Common TLD options
+  const commonTlds = [
+    '.com', '.org', '.net', '.io', '.co', '.app', '.dev', '.tech', '.agency', '.business'
+  ];
 
   const plans = [
     {
@@ -449,7 +458,7 @@ const SignUp = () => {
 
               <div className="space-y-2">
                 <Label htmlFor="agencyDomain">Agency Domain</Label>
-                <div className="flex items-center">
+                <div className="flex items-center gap-0">
                   <Input
                     id="agencyDomain"
                     type="text"
@@ -460,15 +469,73 @@ const SignUp = () => {
                       setAccountData(prev => ({ ...prev, agencyDomain: domain }));
                       if (errors.agencyDomain) setErrors(prev => ({ ...prev, agencyDomain: '' }));
                     }}
-                    className={`rounded-r-none ${errors.agencyDomain ? 'border-destructive' : ''}`}
+                    className={`rounded-r-none border-r-0 ${errors.agencyDomain ? 'border-destructive' : ''}`}
                     required
                   />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        className="rounded-l-none rounded-r-none border-l-0 border-r-0 px-3 bg-muted hover:bg-muted/80"
+                      >
+                        {isCustomTld ? customTld : selectedTld}
+                        <ChevronDown className="ml-1 h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="w-48">
+                      {commonTlds.map((tld) => (
+                        <DropdownMenuItem
+                          key={tld}
+                          onClick={() => {
+                            setSelectedTld(tld);
+                            setIsCustomTld(false);
+                            setCustomTld('');
+                          }}
+                        >
+                          {tld}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setIsCustomTld(true);
+                          setCustomTld('.custom');
+                        }}
+                      >
+                        + Custom TLD
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <div className="px-3 py-2 bg-muted border border-l-0 rounded-r-md text-sm text-muted-foreground">
                     .lovable.app
                   </div>
                 </div>
+                
+                {isCustomTld && (
+                  <div className="space-y-2">
+                    <Label htmlFor="customTld" className="text-sm">Custom TLD</Label>
+                    <Input
+                      id="customTld"
+                      type="text"
+                      placeholder=".agency"
+                      value={customTld}
+                      onChange={(e) => {
+                        let value = e.target.value;
+                        if (!value.startsWith('.')) {
+                          value = '.' + value;
+                        }
+                        value = value.toLowerCase().replace(/[^a-z0-9.-]/g, '');
+                        setCustomTld(value);
+                      }}
+                      className="max-w-xs"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Enter your custom top-level domain (e.g., .agency, .construction)
+                    </p>
+                  </div>
+                )}
+                
                 <p className="text-xs text-muted-foreground">
-                  Your agency will be accessible at: <strong>{accountData.agencyDomain || 'your-domain'}.lovable.app</strong>
+                  Your agency will be accessible at: <strong>{accountData.agencyDomain || 'your-domain'}{isCustomTld ? customTld : selectedTld}.lovable.app</strong>
                 </p>
                 {errors.agencyDomain && (
                   <p className="text-sm text-destructive flex items-center gap-1">
