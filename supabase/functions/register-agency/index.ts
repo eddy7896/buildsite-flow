@@ -9,9 +9,12 @@ const corsHeaders = {
 interface RegistrationRequest {
   agencyName: string;
   domain: string;
-  adminName: string;
-  adminEmail: string;
-  adminPassword: string;
+  email: string;
+  password: string;
+  fullName: string;
+  phone?: string;
+  selectedPlan: string;
+  planDetails?: any;
 }
 
 serve(async (req) => {
@@ -33,10 +36,10 @@ serve(async (req) => {
     );
 
     const body: RegistrationRequest = await req.json();
-    const { agencyName, domain, adminName, adminEmail, adminPassword } = body;
+    const { agencyName, domain, email, password, fullName, phone, selectedPlan } = body;
 
     // Validate required fields
-    if (!agencyName || !domain || !adminName || !adminEmail || !adminPassword) {
+    if (!agencyName || !domain || !fullName || !email || !password) {
       return new Response(
         JSON.stringify({ error: 'All fields are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -45,10 +48,10 @@ serve(async (req) => {
 
     // Check if domain already exists
     const { data: existingAgency } = await supabaseAdmin
-      .from('agencies')
+      .from('agency_settings')
       .select('id')
       .eq('domain', domain)
-      .single();
+      .maybeSingle();
 
     if (existingAgency) {
       return new Response(
@@ -59,12 +62,13 @@ serve(async (req) => {
 
     // Create the admin user
     const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
-      email: adminEmail,
-      password: adminPassword,
-      email_confirm: true,
+      email: email,
+      password: password,
+      email_confirm: false, // Require email verification
       user_metadata: {
-        full_name: adminName,
-        role: 'super_admin'
+        full_name: fullName,
+        role: 'super_admin',
+        phone: phone
       }
     });
 
@@ -78,19 +82,22 @@ serve(async (req) => {
 
     const userId = userData.user.id;
 
-    // Create the agency
-    const { data: agencyData, error: agencyError } = await supabaseAdmin
-      .from('agencies')
+    // Create the agency (simplified since agencies table doesn't exist yet)
+    // We'll store agency info in agency_settings instead
+    const agencyId = crypto.randomUUID();
+
+    // Create agency_settings record
+    const { error: agencyError } = await supabaseAdmin
+      .from('agency_settings')
       .insert([{
-        name: agencyName,
+        id: agencyId,
+        agency_name: agencyName,
         domain: domain,
-        is_active: true
-      }])
-      .select()
-      .single();
+        default_currency: 'US'
+      }]);
 
     if (agencyError) {
-      console.error('Agency creation error:', agencyError);
+      console.error('Agency settings creation error:', agencyError);
       // Clean up user if agency creation fails
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return new Response(
@@ -99,14 +106,13 @@ serve(async (req) => {
       );
     }
 
-    const agencyId = agencyData.id;
-
     // Create user profile with agency_id
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .insert([{
         user_id: userId,
-        full_name: adminName,
+        full_name: fullName,
+        phone: phone,
         agency_id: agencyId,
         is_active: true
       }]);
@@ -115,7 +121,7 @@ serve(async (req) => {
       console.error('Profile creation error:', profileError);
       // Clean up user and agency if profile creation fails
       await supabaseAdmin.auth.admin.deleteUser(userId);
-      await supabaseAdmin.from('agencies').delete().eq('id', agencyId);
+      await supabaseAdmin.from('agency_settings').delete().eq('id', agencyId);
       return new Response(
         JSON.stringify({ error: `Failed to create user profile: ${profileError.message}` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -136,35 +142,41 @@ serve(async (req) => {
       console.error('Role assignment error:', roleError);
       // Clean up user, agency, and profile if role assignment fails
       await supabaseAdmin.auth.admin.deleteUser(userId);
-      await supabaseAdmin.from('agencies').delete().eq('id', agencyId);
+      await supabaseAdmin.from('agency_settings').delete().eq('id', agencyId);
       return new Response(
         JSON.stringify({ error: `Failed to assign super admin role: ${roleError.message}` }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Create default agency settings
-    const { error: settingsError } = await supabaseAdmin
-      .from('agency_settings')
-      .insert([{
-        agency_id: agencyId,
-        agency_name: agencyName,
-        domain: domain,
-        default_currency: 'US'
-      }]);
+    // Send welcome email to the new super admin
+    try {
+      const { error: emailError } = await supabaseAdmin.functions.invoke('send-welcome-email', {
+        body: {
+          userName: fullName,
+          agencyName: agencyName,
+          email: email,
+          password: password,
+          userRole: 'super_admin'
+        }
+      });
 
-    if (settingsError) {
-      console.error('Agency settings creation error:', settingsError);
-      // Note: We don't clean up here as the core functionality is complete
-      // Agency settings can be created later if needed
+      if (emailError) {
+        console.error('Email sending failed:', emailError);
+        // Don't fail the registration if email fails, just log it
+      }
+    } catch (emailError) {
+      console.error('Email sending error:', emailError);
+      // Continue without failing
     }
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        message: 'Agency and admin user created successfully',
+        message: 'Agency registration successful! Please check your email to verify your account.',
         agencyId: agencyId,
-        userId: userId
+        userId: userId,
+        selectedPlan: selectedPlan
       }),
       { 
         status: 200, 
