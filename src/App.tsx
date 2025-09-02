@@ -13,6 +13,7 @@ import Landing from "./pages/Landing";
 import Pricing from "./pages/Pricing";
 import Auth from "./pages/Auth";
 import AgencySignUp from "./pages/AgencySignUp";
+import AgencyDashboard from "./pages/AgencyDashboard";
 import SignUp from "./pages/SignUp";
 import NotFound from "./pages/NotFound";
 import Users from "./pages/Users";
@@ -330,6 +331,14 @@ const App = () => (
                   <DashboardLayout>
                     <Reimbursements />
                   </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/agency" 
+              element={
+                <ProtectedRoute requiredRole="super_admin">
+                  <AgencyDashboard />
                 </ProtectedRoute>
               } 
             />

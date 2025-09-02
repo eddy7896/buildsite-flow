@@ -90,6 +90,24 @@ const navigationItems = {
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
     { title: 'My Reimbursements', url: '/reimbursements', icon: DollarSign },
   ],
+  super_admin: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Agency Management', url: '/agency', icon: Building2 },
+    { title: 'Users', url: '/users', icon: Users },
+    { title: 'CRM', url: '/crm', icon: Users2 },
+    { title: 'Clients', url: '/clients', icon: Building2 },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'Employees', url: '/employees', icon: UserCheck },
+    { title: 'Attendance', url: '/attendance', icon: Clock },
+    { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
+    { title: 'Payroll', url: '/payroll', icon: Calculator },
+    { title: 'Invoices', url: '/invoices', icon: FileText },
+    { title: 'Payments', url: '/payments', icon: CreditCard },
+    { title: 'Receipts', url: '/receipts', icon: Receipt },
+    { title: 'Quotations', url: '/quotations', icon: FileCheck },
+    { title: 'Financial Management', url: '/financial-management', icon: Calculator },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+  ],
 };
 
 export function AppSidebar() {
