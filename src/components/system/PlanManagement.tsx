@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,146 +6,102 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Save, Trash2, DollarSign, Settings } from 'lucide-react';
+import { Plus, Save, Trash2, DollarSign, Settings, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-interface Feature {
-  id: string;
-  name: string;
-  description: string;
-  enabled: boolean;
-}
-
-interface Plan {
-  id: string;
-  name: string;
-  price: number;
-  currency: string;
-  interval: 'month' | 'year';
-  features: Feature[];
-  isActive: boolean;
-  stripeProductId?: string;
-  stripePriceId?: string;
-}
+import { usePlanManagement, type SubscriptionPlan, type PlanFeature } from '@/hooks/usePlanManagement';
 
 const PlanManagement = () => {
   const { toast } = useToast();
-  const [plans, setPlans] = useState<Plan[]>([
-    {
-      id: '1',
-      name: 'Basic',
-      price: 29,
-      currency: 'USD',
-      interval: 'month',
-      isActive: true,
-      features: [
-        { id: '1', name: 'Users', description: 'Up to 5 users', enabled: true },
-        { id: '2', name: 'Projects', description: 'Up to 10 projects', enabled: true },
-        { id: '3', name: 'Storage', description: '1GB storage', enabled: true },
-        { id: '4', name: 'AI Features', description: 'AI powered insights', enabled: false },
-        { id: '5', name: 'Advanced Analytics', description: 'Detailed reporting', enabled: false },
-      ]
-    },
-    {
-      id: '2',
-      name: 'Professional',
-      price: 79,
-      currency: 'USD',
-      interval: 'month',
-      isActive: true,
-      features: [
-        { id: '1', name: 'Users', description: 'Up to 25 users', enabled: true },
-        { id: '2', name: 'Projects', description: 'Unlimited projects', enabled: true },
-        { id: '3', name: 'Storage', description: '10GB storage', enabled: true },
-        { id: '4', name: 'AI Features', description: 'AI powered insights', enabled: true },
-        { id: '5', name: 'Advanced Analytics', description: 'Detailed reporting', enabled: true },
-      ]
-    },
-    {
-      id: '3',
-      name: 'Enterprise',
-      price: 199,
-      currency: 'USD',
-      interval: 'month',
-      isActive: true,
-      features: [
-        { id: '1', name: 'Users', description: 'Unlimited users', enabled: true },
-        { id: '2', name: 'Projects', description: 'Unlimited projects', enabled: true },
-        { id: '3', name: 'Storage', description: 'Unlimited storage', enabled: true },
-        { id: '4', name: 'AI Features', description: 'AI powered insights', enabled: true },
-        { id: '5', name: 'Advanced Analytics', description: 'Detailed reporting', enabled: true },
-      ]
-    }
-  ]);
-
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const { plans, availableFeatures, loading, updatePlan, createPlan, deletePlan } = usePlanManagement();
+  
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<SubscriptionPlan>>({});
 
-  const handlePlanUpdate = (planId: string, updates: Partial<Plan>) => {
-    setPlans(prev => prev.map(plan => 
-      plan.id === planId ? { ...plan, ...updates } : plan
-    ));
-  };
-
-  const handleFeatureToggle = (planId: string, featureId: string) => {
-    setPlans(prev => prev.map(plan => 
-      plan.id === planId 
-        ? {
-            ...plan,
-            features: plan.features.map(feature =>
-              feature.id === featureId 
-                ? { ...feature, enabled: !feature.enabled }
-                : feature
-            )
-          }
-        : plan
-    ));
-  };
-
-  const handleSavePlans = async () => {
-    try {
-      // Here you would typically save to Supabase or call an API
-      toast({
-        title: "Plans Updated",
-        description: "Subscription plans have been saved successfully."
-      });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to save plans. Please try again.",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const addNewPlan = () => {
-    const newPlan: Plan = {
-      id: Date.now().toString(),
-      name: 'New Plan',
-      price: 0,
-      currency: 'USD',
-      interval: 'month',
-      isActive: false,
-      features: [
-        { id: '1', name: 'Users', description: 'Up to X users', enabled: true },
-        { id: '2', name: 'Projects', description: 'Up to X projects', enabled: true },
-        { id: '3', name: 'Storage', description: 'XGB storage', enabled: true },
-        { id: '4', name: 'AI Features', description: 'AI powered insights', enabled: false },
-        { id: '5', name: 'Advanced Analytics', description: 'Detailed reporting', enabled: false },
-      ]
-    };
-    setPlans(prev => [...prev, newPlan]);
-    setSelectedPlan(newPlan);
+  const handlePlanSelect = (plan: SubscriptionPlan) => {
+    setSelectedPlan(plan);
+    setEditForm({
+      name: plan.name,
+      description: plan.description,
+      price: plan.price,
+      currency: plan.currency,
+      interval: plan.interval,
+      is_active: plan.is_active,
+      max_users: plan.max_users,
+      max_agencies: plan.max_agencies,
+      max_storage_gb: plan.max_storage_gb,
+      features: [...plan.features]
+    });
     setIsEditing(true);
   };
 
-  const deletePlan = (planId: string) => {
-    setPlans(prev => prev.filter(plan => plan.id !== planId));
+  const handleSavePlan = async () => {
+    if (!selectedPlan || !editForm) return;
+
+    await updatePlan(selectedPlan.id, editForm);
+    setIsEditing(false);
+    setSelectedPlan(null);
+    setEditForm({});
+  };
+
+  const handleFeatureToggle = (featureId: string) => {
+    setEditForm(prev => ({
+      ...prev,
+      features: prev.features?.map(feature =>
+        feature.id === featureId 
+          ? { ...feature, enabled: !feature.enabled }
+          : feature
+      ) || []
+    }));
+  };
+
+  const handleAddNewPlan = () => {
+    const newPlanForm: Partial<SubscriptionPlan> = {
+      name: 'New Plan',
+      description: 'Plan description',
+      price: 0,
+      currency: 'usd',
+      interval: 'month',
+      is_active: false,
+      max_users: 5,
+      max_agencies: 1,
+      max_storage_gb: 10,
+      features: availableFeatures.map(feature => ({
+        ...feature,
+        enabled: false
+      }))
+    };
+    
+    setSelectedPlan(null);
+    setEditForm(newPlanForm);
+    setIsEditing(true);
+  };
+
+  const handleCreateNewPlan = async () => {
+    if (!editForm) return;
+    
+    await createPlan(editForm as Omit<SubscriptionPlan, 'id'>);
+    setIsEditing(false);
+    setEditForm({});
+  };
+
+  const handleDeletePlan = async (planId: string) => {
+    await deletePlan(planId);
     if (selectedPlan?.id === planId) {
       setSelectedPlan(null);
       setIsEditing(false);
+      setEditForm({});
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading plans...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -155,13 +111,9 @@ const PlanManagement = () => {
           <p className="text-muted-foreground">Configure subscription plans, pricing, and features</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={addNewPlan} variant="outline">
+          <Button onClick={handleAddNewPlan} variant="outline">
             <Plus className="mr-2 h-4 w-4" />
             Add Plan
-          </Button>
-          <Button onClick={handleSavePlans}>
-            <Save className="mr-2 h-4 w-4" />
-            Save Changes
           </Button>
         </div>
       </div>
@@ -175,58 +127,82 @@ const PlanManagement = () => {
         <TabsContent value="plans" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
             {plans.map((plan) => (
-              <Card key={plan.id} className={`cursor-pointer transition-all hover:shadow-md ${selectedPlan?.id === plan.id ? 'ring-2 ring-primary' : ''}`}>
+              <Card 
+                key={plan.id} 
+                className={`cursor-pointer transition-all hover:shadow-md ${
+                  selectedPlan?.id === plan.id ? 'ring-2 ring-primary' : ''
+                }`}
+              >
                 <CardHeader className="pb-4">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg">{plan.name}</CardTitle>
                     <div className="flex items-center gap-2">
-                      <Badge variant={plan.isActive ? "default" : "secondary"}>
-                        {plan.isActive ? 'Active' : 'Inactive'}
+                      <Badge variant={plan.is_active ? "default" : "secondary"}>
+                        {plan.is_active ? 'Active' : 'Inactive'}
                       </Badge>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          setSelectedPlan(plan);
-                          setIsEditing(true);
-                        }}
+                        onClick={() => handlePlanSelect(plan)}
                       >
                         <Settings className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => deletePlan(plan.id)}
+                        onClick={() => handleDeletePlan(plan.id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
                   <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold">${plan.price}</span>
+                    <span className="text-3xl font-bold">
+                      ${plan.price}
+                    </span>
                     <span className="text-muted-foreground">/{plan.interval}</span>
                   </div>
+                  {plan.description && (
+                    <p className="text-sm text-muted-foreground">{plan.description}</p>
+                  )}
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {plan.features.map((feature) => (
+                    <div className="flex items-center gap-2 text-sm">
+                      <DollarSign className="w-4 h-4 text-green-500" />
+                      <span>Max {plan.max_users} users</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <DollarSign className="w-4 h-4 text-blue-500" />
+                      <span>{plan.max_storage_gb}GB storage</span>
+                    </div>
+                    {plan.features.slice(0, 3).map((feature) => (
                       <div key={feature.id} className="flex items-center gap-2 text-sm">
-                        <div className={`w-2 h-2 rounded-full ${feature.enabled ? 'bg-green-500' : 'bg-gray-300'}`} />
+                        <div className={`w-2 h-2 rounded-full ${
+                          feature.enabled ? 'bg-green-500' : 'bg-gray-300'
+                        }`} />
                         <span className={feature.enabled ? 'text-foreground' : 'text-muted-foreground'}>
-                          {feature.description}
+                          {feature.name}
                         </span>
                       </div>
                     ))}
+                    {plan.features.length > 3 && (
+                      <div className="text-sm text-muted-foreground">
+                        +{plan.features.length - 3} more features
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
             ))}
           </div>
 
-          {selectedPlan && isEditing && (
+          {isEditing && (
             <Card>
               <CardHeader>
-                <CardTitle>Edit Plan: {selectedPlan.name}</CardTitle>
+                <CardTitle>
+                  {selectedPlan ? `Edit Plan: ${selectedPlan.name}` : 'Create New Plan'}
+                </CardTitle>
                 <CardDescription>Configure plan details and pricing</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -235,8 +211,8 @@ const PlanManagement = () => {
                     <Label htmlFor="planName">Plan Name</Label>
                     <Input
                       id="planName"
-                      value={selectedPlan.name}
-                      onChange={(e) => handlePlanUpdate(selectedPlan.id, { name: e.target.value })}
+                      value={editForm.name || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
                     />
                   </div>
                   <div className="space-y-2">
@@ -244,35 +220,66 @@ const PlanManagement = () => {
                     <Input
                       id="planPrice"
                       type="number"
-                      value={selectedPlan.price}
-                      onChange={(e) => handlePlanUpdate(selectedPlan.id, { price: Number(e.target.value) })}
+                      value={editForm.price || 0}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, price: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="planDescription">Description</Label>
+                    <Input
+                      id="planDescription"
+                      value={editForm.description || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="planInterval">Billing Interval</Label>
+                    <select
+                      id="planInterval"
+                      value={editForm.interval || 'month'}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, interval: e.target.value }))}
+                      className="w-full px-3 py-2 border border-input bg-background rounded-md"
+                    >
+                      <option value="month">Monthly</option>
+                      <option value="year">Yearly</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="maxUsers">Max Users</Label>
+                    <Input
+                      id="maxUsers"
+                      type="number"
+                      value={editForm.max_users || 0}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, max_users: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="maxStorage">Max Storage (GB)</Label>
+                    <Input
+                      id="maxStorage"
+                      type="number"
+                      value={editForm.max_storage_gb || 0}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, max_storage_gb: Number(e.target.value) }))}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <Label>Features</Label>
-                  {selectedPlan.features.map((feature) => (
-                    <div key={feature.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="space-y-1">
-                        <div className="font-medium">{feature.name}</div>
-                        <Input
-                          value={feature.description}
-                          onChange={(e) => {
-                            const updatedFeatures = selectedPlan.features.map(f =>
-                              f.id === feature.id ? { ...f, description: e.target.value } : f
-                            );
-                            handlePlanUpdate(selectedPlan.id, { features: updatedFeatures });
-                          }}
-                          className="text-sm"
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(editForm.features || availableFeatures).map((feature) => (
+                      <div key={feature.id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="space-y-1">
+                          <div className="font-medium">{feature.name}</div>
+                          <div className="text-sm text-muted-foreground">{feature.description}</div>
+                        </div>
+                        <Switch
+                          checked={feature.enabled}
+                          onCheckedChange={() => handleFeatureToggle(feature.id)}
                         />
                       </div>
-                      <Switch
-                        checked={feature.enabled}
-                        onCheckedChange={() => handleFeatureToggle(selectedPlan.id, feature.id)}
-                      />
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between pt-4 border-t">
@@ -280,13 +287,26 @@ const PlanManagement = () => {
                     <Label htmlFor="planActive">Plan Active</Label>
                     <Switch
                       id="planActive"
-                      checked={selectedPlan.isActive}
-                      onCheckedChange={(checked) => handlePlanUpdate(selectedPlan.id, { isActive: checked })}
+                      checked={editForm.is_active || false}
+                      onCheckedChange={(checked) => setEditForm(prev => ({ ...prev, is_active: checked }))}
                     />
                   </div>
-                  <Button onClick={() => setIsEditing(false)}>
-                    Done Editing
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setIsEditing(false)}>
+                      Cancel
+                    </Button>
+                    {selectedPlan ? (
+                      <Button onClick={handleSavePlan}>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Changes
+                      </Button>
+                    ) : (
+                      <Button onClick={handleCreateNewPlan}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Create Plan
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -296,12 +316,22 @@ const PlanManagement = () => {
         <TabsContent value="features" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Global Feature Settings</CardTitle>
-              <CardDescription>Configure system-wide feature availability</CardDescription>
+              <CardTitle>Available Features</CardTitle>
+              <CardDescription>Manage system-wide feature definitions</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                Feature management settings will be added here
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {availableFeatures.map((feature) => (
+                  <Card key={feature.id}>
+                    <CardContent className="pt-4">
+                      <div className="space-y-2">
+                        <h4 className="font-medium">{feature.name}</h4>
+                        <p className="text-sm text-muted-foreground">{feature.description}</p>
+                        <Badge variant="outline">{feature.feature_key}</Badge>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </CardContent>
           </Card>

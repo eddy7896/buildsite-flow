@@ -448,6 +448,63 @@ export type Database = {
           },
         ]
       }
+      daily_analytics: {
+        Row: {
+          active_agencies: number | null
+          active_users: number | null
+          created_at: string
+          date: string
+          id: string
+          new_agencies: number | null
+          new_users: number | null
+          support_tickets_created: number | null
+          support_tickets_resolved: number | null
+          total_agencies: number | null
+          total_invoices_created: number | null
+          total_logins: number | null
+          total_payments: number | null
+          total_projects_created: number | null
+          total_revenue: number | null
+          total_users: number | null
+        }
+        Insert: {
+          active_agencies?: number | null
+          active_users?: number | null
+          created_at?: string
+          date: string
+          id?: string
+          new_agencies?: number | null
+          new_users?: number | null
+          support_tickets_created?: number | null
+          support_tickets_resolved?: number | null
+          total_agencies?: number | null
+          total_invoices_created?: number | null
+          total_logins?: number | null
+          total_payments?: number | null
+          total_projects_created?: number | null
+          total_revenue?: number | null
+          total_users?: number | null
+        }
+        Update: {
+          active_agencies?: number | null
+          active_users?: number | null
+          created_at?: string
+          date?: string
+          id?: string
+          new_agencies?: number | null
+          new_users?: number | null
+          support_tickets_created?: number | null
+          support_tickets_resolved?: number | null
+          total_agencies?: number | null
+          total_invoices_created?: number | null
+          total_logins?: number | null
+          total_payments?: number | null
+          total_projects_created?: number | null
+          total_revenue?: number | null
+          total_users?: number | null
+        }
+        Relationships: []
+      }
       employee_details: {
         Row: {
           address: string | null
@@ -1422,6 +1479,48 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_analytics: {
+        Row: {
+          agency_id: string | null
+          amount: number
+          created_at: string
+          currency: string
+          failure_reason: string | null
+          id: string
+          payment_method_type: string | null
+          processed_at: string | null
+          status: string
+          stripe_customer_id: string | null
+          stripe_payment_id: string | null
+        }
+        Insert: {
+          agency_id?: string | null
+          amount: number
+          created_at?: string
+          currency?: string
+          failure_reason?: string | null
+          id?: string
+          payment_method_type?: string | null
+          processed_at?: string | null
+          status: string
+          stripe_customer_id?: string | null
+          stripe_payment_id?: string | null
+        }
+        Update: {
+          agency_id?: string | null
+          amount?: number
+          created_at?: string
+          currency?: string
+          failure_reason?: string | null
+          id?: string
+          payment_method_type?: string | null
+          processed_at?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_payment_id?: string | null
+        }
+        Relationships: []
+      }
       payroll: {
         Row: {
           agency_id: string | null
@@ -1533,6 +1632,72 @@ export type Database = {
           start_date?: string
           status?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      plan_feature_mappings: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          feature_id: string
+          id: string
+          plan_id: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          feature_id: string
+          id?: string
+          plan_id: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          feature_id?: string
+          id?: string
+          plan_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_feature_mappings_feature_id_fkey"
+            columns: ["feature_id"]
+            isOneToOne: false
+            referencedRelation: "plan_features"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "plan_feature_mappings_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_features: {
+        Row: {
+          created_at: string
+          description: string | null
+          feature_key: string
+          id: string
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          feature_key: string
+          id?: string
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          feature_key?: string
+          id?: string
+          is_active?: boolean
+          name?: string
         }
         Relationships: []
       }
@@ -2129,6 +2294,210 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_analytics: {
+        Row: {
+          agency_id: string | null
+          canceled_at: string | null
+          created_at: string
+          currency: string
+          current_period_end: string | null
+          current_period_start: string | null
+          id: string
+          plan_amount: number
+          plan_name: string
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          trial_end: string | null
+          trial_start: string | null
+          updated_at: string
+        }
+        Insert: {
+          agency_id?: string | null
+          canceled_at?: string | null
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_amount?: number
+          plan_name: string
+          status: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_end?: string | null
+          trial_start?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agency_id?: string | null
+          canceled_at?: string | null
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          id?: string
+          plan_amount?: number
+          plan_name?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_end?: string | null
+          trial_start?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      subscription_plans: {
+        Row: {
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          interval: string
+          is_active: boolean
+          max_agencies: number | null
+          max_storage_gb: number | null
+          max_users: number | null
+          name: string
+          price: number
+          stripe_price_id: string | null
+          stripe_product_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          interval?: string
+          is_active?: boolean
+          max_agencies?: number | null
+          max_storage_gb?: number | null
+          max_users?: number | null
+          name: string
+          price?: number
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          interval?: string
+          is_active?: boolean
+          max_agencies?: number | null
+          max_storage_gb?: number | null
+          max_users?: number | null
+          name?: string
+          price?: number
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      support_tickets: {
+        Row: {
+          agency_id: string | null
+          assigned_to: string | null
+          category: string
+          created_at: string
+          description: string
+          first_response_at: string | null
+          id: string
+          priority: string
+          resolution_notes: string | null
+          resolved_at: string | null
+          status: string
+          tags: string[] | null
+          ticket_number: string
+          title: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          agency_id?: string | null
+          assigned_to?: string | null
+          category?: string
+          created_at?: string
+          description: string
+          first_response_at?: string | null
+          id?: string
+          priority?: string
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          status?: string
+          tags?: string[] | null
+          ticket_number: string
+          title: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          agency_id?: string | null
+          assigned_to?: string | null
+          category?: string
+          created_at?: string
+          description?: string
+          first_response_at?: string | null
+          id?: string
+          priority?: string
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          status?: string
+          tags?: string[] | null
+          ticket_number?: string
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      system_usage_logs: {
+        Row: {
+          action_type: string
+          agency_id: string | null
+          id: string
+          ip_address: unknown | null
+          metadata: Json | null
+          resource_id: string | null
+          resource_type: string
+          session_id: string | null
+          timestamp: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          agency_id?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          resource_id?: string | null
+          resource_type: string
+          session_id?: string | null
+          timestamp?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          agency_id?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          resource_id?: string | null
+          resource_type?: string
+          session_id?: string | null
+          timestamp?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           agency_id: string | null
@@ -2261,6 +2630,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      generate_ticket_number: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       get_employee_full_details: {
         Args: { target_user_id: string }
         Returns: {
@@ -2343,6 +2716,15 @@ export type Database = {
           phone: string
           user_id: string
         }[]
+      }
+      log_system_usage: {
+        Args: {
+          p_action_type: string
+          p_metadata?: Json
+          p_resource_id?: string
+          p_resource_type: string
+        }
+        Returns: string
       }
       mark_notification_read: {
         Args: { p_notification_id: string }
