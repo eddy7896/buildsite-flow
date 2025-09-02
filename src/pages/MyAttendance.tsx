@@ -48,13 +48,8 @@ const MyAttendance = () => {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold">My Attendance</h1>
-          <p className="text-muted-foreground">Track your work hours and attendance records</p>
+          <p className="text-muted-foreground">View your attendance history and records</p>
         </div>
-      </div>
-
-      {/* Clock In/Out Section */}
-      <div className="mb-6">
-        <ClockInOut />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">

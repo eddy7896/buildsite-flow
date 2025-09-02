@@ -6,6 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { LogOut, User, Building, Users, Calculator, DollarSign, Calendar, Clock, TrendingUp, AlertCircle } from 'lucide-react';
+import ClockInOut from '@/components/ClockInOut';
 
 const Index = () => {
   const { user, profile, userRole, signOut } = useAuth();
@@ -178,6 +179,13 @@ const Index = () => {
           <p className="text-sm lg:text-base text-muted-foreground">
             {getDashboardMessage(userRole || 'employee')}
           </p>
+        </div>
+
+        {/* Time Clock Section - Show for all users */}
+        <div className="mb-8">
+          <div className="max-w-md mx-auto lg:mx-0">
+            <ClockInOut />
+          </div>
         </div>
 
         {/* Quick Stats Cards */}
