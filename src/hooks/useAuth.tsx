@@ -143,98 +143,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    // Check for mock credentials first
+    // Check for mock credentials first with predefined user IDs
     const mockUsers: Array<{
       email: string;
       password: string;
       fullName: string;
       role: 'admin' | 'hr' | 'finance_manager' | 'employee';
+      userId: string;
     }> = [
-      { email: 'admin@buildflow.com', password: 'admin123', fullName: 'System Administrator', role: 'admin' },
-      { email: 'hr@buildflow.com', password: 'hr123', fullName: 'HR Manager', role: 'hr' },
-      { email: 'finance@buildflow.com', password: 'finance123', fullName: 'Finance Manager', role: 'finance_manager' },
-      { email: 'employee@buildflow.com', password: 'employee123', fullName: 'John Employee', role: 'employee' }
+      { email: 'admin@buildflow.com', password: 'admin123', fullName: 'System Administrator', role: 'admin', userId: '11111111-1111-1111-1111-111111111111' },
+      { email: 'hr@buildflow.com', password: 'hr123', fullName: 'HR Manager', role: 'hr', userId: '22222222-2222-2222-2222-222222222222' },
+      { email: 'finance@buildflow.com', password: 'finance123', fullName: 'Finance Manager', role: 'finance_manager', userId: '33333333-3333-3333-3333-333333333333' },
+      { email: 'employee@buildflow.com', password: 'employee123', fullName: 'John Employee', role: 'employee', userId: '44444444-4444-4444-4444-444444444444' }
     ];
 
     const mockUser = mockUsers.find(u => u.email === email && u.password === password);
     
     if (mockUser) {
-      // Simulate successful login with mock data
+      // Simulate successful login with mock data using existing database records
       try {
-        // Check if profile exists in database, create if needed
-        const { data: existingProfile } = await supabase
-          .from('profiles')
-          .select('user_id')
-          .eq('full_name', mockUser.fullName)
-          .maybeSingle();
-
-        let userId = existingProfile?.user_id;
-        
-        if (!existingProfile) {
-          // Create profile and role for mock user
-          userId = crypto.randomUUID();
-          
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .insert({
-              user_id: userId,
-              full_name: mockUser.fullName,
-              department: mockUser.role === 'admin' ? 'Administration' : 
-                         mockUser.role === 'hr' ? 'Human Resources' :
-                         mockUser.role === 'finance_manager' ? 'Finance' : 'Construction',
-              position: mockUser.role === 'admin' ? 'System Admin' :
-                       mockUser.role === 'hr' ? 'HR Manager' :
-                       mockUser.role === 'finance_manager' ? 'Finance Manager' : 'Site Worker',
-              is_active: true
-            });
-
-          if (profileError) {
-            console.error('Error creating mock profile:', profileError);
-          }
-
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .insert({
-              user_id: userId,
-              role: mockUser.role
-            });
-
-          if (roleError) {
-            console.error('Error creating mock role:', roleError);
-          }
-
-          // Create employee details for employee role
-          if (mockUser.role === 'employee') {
-            const { error: empError } = await supabase
-              .from('employee_details')
-              .insert({
-                user_id: userId,
-                employee_id: 'EMP-001',
-                first_name: 'John',
-                last_name: 'Employee',
-                employment_type: 'full_time',
-                is_active: true
-              });
-
-            if (empError) {
-              console.error('Error creating employee details:', empError);
-            }
-
-            // Add salary data for testing
-            const { error: salaryError } = await supabase
-              .from('employee_salary_details')
-              .insert({
-                employee_id: userId,
-                salary: 75000.00
-              });
-
-            if (salaryError) {
-              console.error('Error creating salary details:', salaryError);
-            }
-          }
-        }
-
-        // Create mock session
+        // Create mock session with the predefined user ID
         const mockSession = {
           access_token: 'mock-token',
           token_type: 'bearer',
@@ -242,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           expires_at: Date.now() + 3600000,
           refresh_token: 'mock-refresh',
           user: {
-            id: userId,
+            id: mockUser.userId,
             email: mockUser.email,
             email_confirmed_at: new Date().toISOString(),
             created_at: new Date().toISOString(),
@@ -256,9 +184,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(mockSession.user as any);
         setSession(mockSession as any);
         
-        // Fetch profile and role
-        await fetchUserProfile(userId);
-        await fetchUserRole(userId);
+        // Fetch profile and role from existing database records
+        await fetchUserProfile(mockUser.userId);
+        await fetchUserRole(mockUser.userId);
 
         toast({
           title: "Mock login successful",
