@@ -19,12 +19,21 @@ const SystemDashboard = () => {
   const { user, userRole } = useAuth();
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   
-  // Redirect non-super_admin users or unauthenticated users
-  if (!user || (userRole && userRole !== 'super_admin')) {
+  // Show loading while auth is being determined
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Redirect non-super_admin users
+  if (userRole && userRole !== 'super_admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
-  // Only initialize analytics after authentication check
+  // Only initialize analytics after authentication is confirmed
   const { metrics, agencies, loading, refreshMetrics } = useSystemAnalytics();
   const { toast } = useToast();
 
