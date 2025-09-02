@@ -2,9 +2,14 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 
+type AppRole = 'super_admin' | 'ceo' | 'cto' | 'cfo' | 'coo' | 'admin' | 'operations_manager' | 
+  'department_head' | 'team_lead' | 'project_manager' | 'hr' | 'finance_manager' | 'sales_manager' |
+  'marketing_manager' | 'quality_assurance' | 'it_support' | 'legal_counsel' | 'business_analyst' |
+  'customer_success' | 'employee' | 'contractor' | 'intern';
+
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: 'admin' | 'hr' | 'finance_manager' | 'employee' | 'super_admin';
+  requiredRole?: AppRole;
 }
 
 const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {

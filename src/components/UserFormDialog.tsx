@@ -299,10 +299,36 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="hr">HR</SelectItem>
-                  <SelectItem value="finance_manager">Finance Manager</SelectItem>
-                  <SelectItem value="employee">Employee</SelectItem>
+                  <optgroup label="Executive Level">
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                    <SelectItem value="ceo">Chief Executive Officer</SelectItem>
+                    <SelectItem value="cto">Chief Technology Officer</SelectItem>
+                    <SelectItem value="cfo">Chief Financial Officer</SelectItem>
+                    <SelectItem value="coo">Chief Operations Officer</SelectItem>
+                  </optgroup>
+                  <optgroup label="Management Level">
+                    <SelectItem value="admin">Administrator</SelectItem>
+                    <SelectItem value="operations_manager">Operations Manager</SelectItem>
+                    <SelectItem value="department_head">Department Head</SelectItem>
+                    <SelectItem value="team_lead">Team Lead</SelectItem>
+                    <SelectItem value="project_manager">Project Manager</SelectItem>
+                  </optgroup>
+                  <optgroup label="Specialized Roles">
+                    <SelectItem value="hr">Human Resources</SelectItem>
+                    <SelectItem value="finance_manager">Finance Manager</SelectItem>
+                    <SelectItem value="sales_manager">Sales Manager</SelectItem>
+                    <SelectItem value="marketing_manager">Marketing Manager</SelectItem>
+                    <SelectItem value="quality_assurance">Quality Assurance</SelectItem>
+                    <SelectItem value="it_support">IT Support</SelectItem>
+                    <SelectItem value="legal_counsel">Legal Counsel</SelectItem>
+                    <SelectItem value="business_analyst">Business Analyst</SelectItem>
+                    <SelectItem value="customer_success">Customer Success</SelectItem>
+                  </optgroup>
+                  <optgroup label="General Staff">
+                    <SelectItem value="employee">Employee</SelectItem>
+                    <SelectItem value="contractor">Contractor</SelectItem>
+                    <SelectItem value="intern">Intern</SelectItem>
+                  </optgroup>
                 </SelectContent>
               </Select>
             </div>

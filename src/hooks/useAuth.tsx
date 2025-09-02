@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { AppRole } from '@/utils/roleUtils';
 
 interface Profile {
   id: string;
@@ -16,14 +17,14 @@ interface Profile {
 }
 
 interface UserRole {
-  role: 'admin' | 'hr' | 'finance_manager' | 'employee' | 'super_admin';
+  role: AppRole;
 }
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
-  userRole: UserRole['role'] | null;
+  userRole: AppRole | null;
   loading: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
@@ -36,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [userRole, setUserRole] = useState<UserRole['role'] | null>(null);
+  const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -97,10 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Check if this is a mock user and handle them differently
       const mockUsers = [
-        { userId: '11111111-1111-1111-1111-111111111111', role: 'admin' },
-        { userId: '22222222-2222-2222-2222-222222222222', role: 'hr' },
-        { userId: '33333333-3333-3333-3333-333333333333', role: 'finance_manager' },
-        { userId: '44444444-4444-4444-4444-444444444444', role: 'employee' }
+        { userId: '11111111-1111-1111-1111-111111111111', role: 'admin' as AppRole },
+        { userId: '22222222-2222-2222-2222-222222222222', role: 'hr' as AppRole },
+        { userId: '33333333-3333-3333-3333-333333333333', role: 'finance_manager' as AppRole },
+        { userId: '44444444-4444-4444-4444-444444444444', role: 'employee' as AppRole }
       ];
 
       const mockUser = mockUsers.find(u => u.userId === userId);
@@ -108,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mockUser) {
         // For mock users, set role directly without database query
         console.log('Setting mock user role:', mockUser.role);
-        setUserRole(mockUser.role as 'admin' | 'hr' | 'finance_manager' | 'employee');
+        setUserRole(mockUser.role);
         return;
       }
 
@@ -166,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: string;
       password: string;
       fullName: string;
-      role: 'admin' | 'hr' | 'finance_manager' | 'employee';
+      role: AppRole;
       userId: string;
     }> = [
       { email: 'admin@buildflow.com', password: 'admin123', fullName: 'System Administrator', role: 'admin', userId: '11111111-1111-1111-1111-111111111111' },

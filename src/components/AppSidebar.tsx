@@ -37,6 +37,56 @@ import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 const navigationItems = {
+  // Executive Level
+  super_admin: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Agency Management', url: '/agency', icon: Building2 },
+    { title: 'Users', url: '/users', icon: Users },
+    { title: 'CRM', url: '/crm', icon: Users2 },
+    { title: 'Clients', url: '/clients', icon: Building2 },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'Employees', url: '/employees', icon: UserCheck },
+    { title: 'Attendance', url: '/attendance', icon: Clock },
+    { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
+    { title: 'Payroll', url: '/payroll', icon: Calculator },
+    { title: 'Invoices', url: '/invoices', icon: FileText },
+    { title: 'Payments', url: '/payments', icon: CreditCard },
+    { title: 'Receipts', url: '/receipts', icon: Receipt },
+    { title: 'Quotations', url: '/quotations', icon: FileCheck },
+    { title: 'Financial Management', url: '/financial-management', icon: Calculator },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+  ],
+  ceo: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Strategic Reports', url: '/reports', icon: ChartLine },
+    { title: 'Employees', url: '/employees', icon: UserCheck },
+    { title: 'Financial Management', url: '/financial-management', icon: Calculator },
+    { title: 'CRM', url: '/crm', icon: Users2 },
+    { title: 'Projects', url: '/projects', icon: Building },
+  ],
+  cto: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'Employees', url: '/employees', icon: UserCheck },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+  ],
+  cfo: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Financial Management', url: '/financial-management', icon: Calculator },
+    { title: 'Payroll', url: '/payroll', icon: Calculator },
+    { title: 'Invoices', url: '/invoices', icon: FileText },
+    { title: 'Payments', url: '/payments', icon: CreditCard },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+  ],
+  coo: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Employees', url: '/employees', icon: UserCheck },
+    { title: 'Attendance', url: '/attendance', icon: Clock },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+  ],
+  
+  // Management Level
   admin: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'Users', url: '/users', icon: Users },
@@ -54,6 +104,40 @@ const navigationItems = {
     { title: 'Financial Management', url: '/financial-management', icon: Calculator },
     { title: 'Reports', url: '/reports', icon: ChartLine },
   ],
+  operations_manager: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Employees', url: '/employees', icon: UserCheck },
+    { title: 'Attendance', url: '/attendance', icon: Clock },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+  ],
+  department_head: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Team Members', url: '/employees', icon: UserCheck },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'Attendance', url: '/attendance', icon: Clock },
+    { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+  ],
+  team_lead: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/employees', icon: UserCheck },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
+    { title: 'My Leave', url: '/my-leave', icon: Calendar },
+  ],
+  project_manager: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'Clients', url: '/clients', icon: Building2 },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
+    { title: 'My Leave', url: '/my-leave', icon: Calendar },
+  ],
+
+  // Specialized Roles
   hr: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'CRM', url: '/crm', icon: Users2 },
@@ -82,6 +166,53 @@ const navigationItems = {
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
   ],
+  sales_manager: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'CRM', url: '/crm', icon: Users2 },
+    { title: 'Clients', url: '/clients', icon: Building2 },
+    { title: 'Quotations', url: '/quotations', icon: FileCheck },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+  ],
+  marketing_manager: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'CRM', url: '/crm', icon: Users2 },
+    { title: 'Clients', url: '/clients', icon: Building2 },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+  ],
+  quality_assurance: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+  ],
+  it_support: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Users', url: '/users', icon: Users },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+  ],
+  legal_counsel: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Clients', url: '/clients', icon: Building2 },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+  ],
+  business_analyst: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+  ],
+  customer_success: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'Clients', url: '/clients', icon: Building2 },
+    { title: 'Projects', url: '/projects', icon: Building },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+  ],
+
+  // General Staff
   employee: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Projects', url: '/my-projects', icon: Briefcase },
@@ -90,23 +221,17 @@ const navigationItems = {
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
     { title: 'My Reimbursements', url: '/reimbursements', icon: DollarSign },
   ],
-  super_admin: [
+  contractor: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Agency Management', url: '/agency', icon: Building2 },
-    { title: 'Users', url: '/users', icon: Users },
-    { title: 'CRM', url: '/crm', icon: Users2 },
-    { title: 'Clients', url: '/clients', icon: Building2 },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'Employees', url: '/employees', icon: UserCheck },
-    { title: 'Attendance', url: '/attendance', icon: Clock },
-    { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
-    { title: 'Payroll', url: '/payroll', icon: Calculator },
-    { title: 'Invoices', url: '/invoices', icon: FileText },
-    { title: 'Payments', url: '/payments', icon: CreditCard },
-    { title: 'Receipts', url: '/receipts', icon: Receipt },
-    { title: 'Quotations', url: '/quotations', icon: FileCheck },
-    { title: 'Financial Management', url: '/financial-management', icon: Calculator },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'My Projects', url: '/my-projects', icon: Briefcase },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
+  ],
+  intern: [
+    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Projects', url: '/my-projects', icon: Briefcase },
+    { title: 'My Profile', url: '/my-profile', icon: User },
+    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
   ],
 };
 
