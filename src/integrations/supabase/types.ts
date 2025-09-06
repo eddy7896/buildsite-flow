@@ -231,6 +231,48 @@ export type Database = {
         }
         Relationships: []
       }
+      calendar_settings: {
+        Row: {
+          agency_id: string
+          created_at: string
+          default_view: string | null
+          id: string
+          show_birthdays: boolean | null
+          show_company_events: boolean | null
+          show_holidays: boolean | null
+          show_leave_requests: boolean | null
+          updated_at: string
+          working_days: Json | null
+          working_hours: Json | null
+        }
+        Insert: {
+          agency_id: string
+          created_at?: string
+          default_view?: string | null
+          id?: string
+          show_birthdays?: boolean | null
+          show_company_events?: boolean | null
+          show_holidays?: boolean | null
+          show_leave_requests?: boolean | null
+          updated_at?: string
+          working_days?: Json | null
+          working_hours?: Json | null
+        }
+        Update: {
+          agency_id?: string
+          created_at?: string
+          default_view?: string | null
+          id?: string
+          show_birthdays?: boolean | null
+          show_company_events?: boolean | null
+          show_holidays?: boolean | null
+          show_leave_requests?: boolean | null
+          updated_at?: string
+          working_days?: Json | null
+          working_hours?: Json | null
+        }
+        Relationships: []
+      }
       chart_of_accounts: {
         Row: {
           account_code: string
@@ -381,6 +423,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      company_events: {
+        Row: {
+          agency_id: string | null
+          all_day: boolean | null
+          attendees: Json | null
+          color: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          end_date: string | null
+          event_type: string
+          id: string
+          is_recurring: boolean | null
+          location: string | null
+          recurrence_pattern: Json | null
+          start_date: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          agency_id?: string | null
+          all_day?: boolean | null
+          attendees?: Json | null
+          color?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_date?: string | null
+          event_type?: string
+          id?: string
+          is_recurring?: boolean | null
+          location?: string | null
+          recurrence_pattern?: Json | null
+          start_date: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          agency_id?: string | null
+          all_day?: boolean | null
+          attendees?: Json | null
+          color?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_date?: string | null
+          event_type?: string
+          id?: string
+          is_recurring?: boolean | null
+          location?: string | null
+          recurrence_pattern?: Json | null
+          start_date?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       crm_activities: {
         Row: {
@@ -1064,6 +1163,42 @@ export type Database = {
           total_amount?: number
           transaction_type?: string
           unit_price?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      holidays: {
+        Row: {
+          agency_id: string | null
+          created_at: string
+          date: string
+          description: string | null
+          id: string
+          is_company_holiday: boolean | null
+          is_national_holiday: boolean | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          agency_id?: string | null
+          created_at?: string
+          date: string
+          description?: string | null
+          id?: string
+          is_company_holiday?: boolean | null
+          is_national_holiday?: boolean | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          agency_id?: string | null
+          created_at?: string
+          date?: string
+          description?: string | null
+          id?: string
+          is_company_holiday?: boolean | null
+          is_national_holiday?: boolean | null
+          name?: string
           updated_at?: string
         }
         Relationships: []

@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
 import { LogOut, User, Building, Users, Calculator, DollarSign, Calendar, Clock, TrendingUp, AlertCircle } from 'lucide-react';
 import ClockInOut from '@/components/ClockInOut';
+import { AgencyCalendar } from '@/components/AgencyCalendar';
 
 const Index = () => {
   const { user, profile, userRole, signOut } = useAuth();
@@ -233,11 +234,17 @@ const Index = () => {
           </Card>
         </div>
 
-        {/* Charts and Analytics Section - 2x2 Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Monthly Revenue vs Expenses */}
-          {(userRole === 'admin' || userRole === 'finance_manager') && (
-            <Card>
+        {/* Charts and Analytics Section with Calendar */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Calendar Widget */}
+          <div className="lg:col-span-1">
+            <AgencyCalendar compact />
+          </div>
+          {/* Charts Section */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Monthly Revenue vs Expenses */}
+            {(userRole === 'admin' || userRole === 'finance_manager') && (
+              <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base lg:text-lg">Monthly Revenue vs Expenses</CardTitle>
                 <CardDescription className="text-sm">Financial performance over the last 6 months</CardDescription>
@@ -278,12 +285,12 @@ const Index = () => {
                   </div>
                 </div>
               </CardContent>
-            </Card>
-          )}
+              </Card>
+            )}
 
-          {/* Weekly Attendance */}
-          {(userRole === 'admin' || userRole === 'hr') && (
-            <Card>
+            {/* Weekly Attendance */}
+            {(userRole === 'admin' || userRole === 'hr') && (
+              <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base lg:text-lg">Weekly Attendance</CardTitle>
                 <CardDescription className="text-sm">Employee attendance for this week</CardDescription>
@@ -319,12 +326,12 @@ const Index = () => {
                   </div>
                 </div>
               </CardContent>
-            </Card>
-          )}
+              </Card>
+            )}
 
-          {/* Project Status Overview */}
-          {userRole === 'admin' && (
-            <Card>
+            {/* Project Status Overview */}
+            {userRole === 'admin' && (
+              <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base lg:text-lg">Project Status Overview</CardTitle>
                 <CardDescription className="text-sm">Distribution of projects by status</CardDescription>
@@ -371,10 +378,13 @@ const Index = () => {
                   </div>
                 </div>
               </CardContent>
-            </Card>
-          )}
+              </Card>
+            )}
+          </div>
+        </div>
 
-          {/* Employee Task Progress / Upcoming Deadlines */}
+        {/* Employee Task Progress / Upcoming Deadlines Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {userRole === 'employee' ? (
             <Card>
               <CardHeader className="pb-3">

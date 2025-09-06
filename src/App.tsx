@@ -50,6 +50,7 @@ import GstCompliance from "./pages/GstCompliance";
 import EmployeeProjects from "./pages/EmployeeProjects";
 import { Reimbursements } from "./pages/Reimbursements";
 import SystemDashboard from "./pages/SystemDashboard";
+import Calendar from "./pages/Calendar";
 
 const queryClient = new QueryClient();
 
@@ -361,6 +362,16 @@ const App = () => (
                 <ProtectedRoute requiredRole="hr">
                   <DashboardLayout>
                     <CRM />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/calendar" 
+              element={
+                <ProtectedRoute requiredRole="hr">
+                  <DashboardLayout>
+                    <Calendar />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 
