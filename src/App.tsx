@@ -51,8 +51,8 @@ import GstCompliance from "./pages/GstCompliance";
 import EmployeeProjects from "./pages/EmployeeProjects";
 import { Reimbursements } from "./pages/Reimbursements";
 import SystemDashboard from "./pages/SystemDashboard";
-import { RoleChangeRequests } from "./components/RoleChangeRequests";
-import { AdvancedPermissions } from "./components/AdvancedPermissions";
+const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
+const AdvancedPermissions = React.lazy(() => import('./components/AdvancedPermissions').then(m => ({ default: m.AdvancedPermissions })));
 import Calendar from "./pages/Calendar";
 const HolidayManagement = React.lazy(() => import('./pages/HolidayManagement'));
 
@@ -477,7 +477,9 @@ const App = () => (
               element={
                 <ProtectedRoute requiredRole="hr">
                   <DashboardLayout>
-                    <RoleChangeRequests />
+                    <React.Suspense fallback={<div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+                      <RoleChangeRequests />
+                    </React.Suspense>
                   </DashboardLayout>
                 </ProtectedRoute>
               } 
@@ -487,7 +489,9 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <DashboardLayout>
-                    <AdvancedPermissions />
+                    <React.Suspense fallback={<div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
+                      <AdvancedPermissions />
+                    </React.Suspense>
                   </DashboardLayout>
                 </ProtectedRoute>
               } 
