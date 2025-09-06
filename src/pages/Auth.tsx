@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/hooks/useAuth';
 import { CreateDemoUsers } from '@/components/CreateDemoUsers';
-import { Loader2, Building, User, Shield, DollarSign, Users, CheckCircle2 } from 'lucide-react';
+import { Loader2, Building, User, Shield, DollarSign, Users, CheckCircle2, Crown, Code, TrendingUp, FolderKanban, Target, Megaphone, Settings, UserCheck, Wrench, Briefcase, GraduationCap } from 'lucide-react';
 
 const Auth = () => {
   const { signIn, user, loading } = useAuth();
@@ -73,6 +73,38 @@ const Auth = () => {
       variant: 'secondary' as const
     },
     {
+      role: 'ceo',
+      email: 'ceo@buildflow.com',
+      password: 'ceo123',
+      description: 'Chief Executive Officer',
+      icon: Crown,
+      variant: 'default' as const
+    },
+    {
+      role: 'cto',
+      email: 'cto@buildflow.com',
+      password: 'cto123',
+      description: 'Chief Technology Officer',
+      icon: Code,
+      variant: 'secondary' as const
+    },
+    {
+      role: 'cfo',
+      email: 'cfo@buildflow.com',
+      password: 'cfo123',
+      description: 'Chief Financial Officer',
+      icon: TrendingUp,
+      variant: 'secondary' as const
+    },
+    {
+      role: 'project_manager',
+      email: 'pm@buildflow.com',
+      password: 'pm123',
+      description: 'Project management',
+      icon: FolderKanban,
+      variant: 'outline' as const
+    },
+    {
       role: 'hr',
       email: 'hr@buildflow.com', 
       password: 'hr123',
@@ -89,11 +121,67 @@ const Auth = () => {
       variant: 'outline' as const
     },
     {
+      role: 'sales_manager',
+      email: 'sales@buildflow.com',
+      password: 'sales123',
+      description: 'Sales management',
+      icon: Target,
+      variant: 'outline' as const
+    },
+    {
+      role: 'marketing_manager',
+      email: 'marketing@buildflow.com',
+      password: 'marketing123',
+      description: 'Marketing management',
+      icon: Megaphone,
+      variant: 'outline' as const
+    },
+    {
+      role: 'operations_manager',
+      email: 'ops@buildflow.com',
+      password: 'ops123',
+      description: 'Operations management',
+      icon: Settings,
+      variant: 'outline' as const
+    },
+    {
+      role: 'team_lead',
+      email: 'lead@buildflow.com',
+      password: 'lead123',
+      description: 'Team leadership',
+      icon: UserCheck,
+      variant: 'outline' as const
+    },
+    {
+      role: 'it_support',
+      email: 'it@buildflow.com',
+      password: 'it123',
+      description: 'IT support specialist',
+      icon: Wrench,
+      variant: 'outline' as const
+    },
+    {
       role: 'employee',
       email: 'employee@buildflow.com',
       password: 'employee123',
       description: 'Employee portal access',
       icon: User,
+      variant: 'destructive' as const
+    },
+    {
+      role: 'contractor',
+      email: 'contractor@buildflow.com',
+      password: 'contractor123',
+      description: 'External contractor',
+      icon: Briefcase,
+      variant: 'destructive' as const
+    },
+    {
+      role: 'intern',
+      email: 'intern@buildflow.com',
+      password: 'intern123',
+      description: 'Intern access',
+      icon: GraduationCap,
       variant: 'destructive' as const
     }
   ];

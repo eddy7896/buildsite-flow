@@ -114,7 +114,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         { userId: '11111111111111111111111111111111', role: 'admin' as AppRole },
         { userId: '22222222222222222222222222222222', role: 'hr' as AppRole },
         { userId: '33333333333333333333333333333333', role: 'finance_manager' as AppRole },
-        { userId: '44444444444444444444444444444444', role: 'employee' as AppRole }
+        { userId: '44444444444444444444444444444444', role: 'employee' as AppRole },
+        { userId: '55555555555555555555555555555555', role: 'ceo' as AppRole },
+        { userId: '66666666666666666666666666666666', role: 'cto' as AppRole },
+        { userId: '77777777777777777777777777777777', role: 'cfo' as AppRole },
+        { userId: '88888888888888888888888888888888', role: 'project_manager' as AppRole },
+        { userId: '99999999999999999999999999999999', role: 'sales_manager' as AppRole },
+        { userId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', role: 'marketing_manager' as AppRole },
+        { userId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', role: 'operations_manager' as AppRole },
+        { userId: 'cccccccccccccccccccccccccccccccc', role: 'team_lead' as AppRole },
+        { userId: 'dddddddddddddddddddddddddddddddd', role: 'it_support' as AppRole },
+        { userId: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', role: 'contractor' as AppRole },
+        { userId: 'ffffffffffffffffffffffffffffffff', role: 'intern' as AppRole }
       ];
 
       const mockUser = mockUsers.find(u => u.userId === userId);
@@ -229,7 +240,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       { email: 'admin@buildflow.com', password: 'admin123', fullName: 'System Administrator', role: 'admin', userId: '11111111111111111111111111111111' },
       { email: 'hr@buildflow.com', password: 'hr123', fullName: 'HR Manager', role: 'hr', userId: '22222222222222222222222222222222' },
       { email: 'finance@buildflow.com', password: 'finance123', fullName: 'Finance Manager', role: 'finance_manager', userId: '33333333333333333333333333333333' },
-      { email: 'employee@buildflow.com', password: 'employee123', fullName: 'John Employee', role: 'employee', userId: '44444444444444444444444444444444' }
+      { email: 'employee@buildflow.com', password: 'employee123', fullName: 'John Employee', role: 'employee', userId: '44444444444444444444444444444444' },
+      { email: 'ceo@buildflow.com', password: 'ceo123', fullName: 'Sarah Wilson', role: 'ceo', userId: '55555555555555555555555555555555' },
+      { email: 'cto@buildflow.com', password: 'cto123', fullName: 'Michael Chen', role: 'cto', userId: '66666666666666666666666666666666' },
+      { email: 'cfo@buildflow.com', password: 'cfo123', fullName: 'Jennifer Davis', role: 'cfo', userId: '77777777777777777777777777777777' },
+      { email: 'pm@buildflow.com', password: 'pm123', fullName: 'David Rodriguez', role: 'project_manager', userId: '88888888888888888888888888888888' },
+      { email: 'sales@buildflow.com', password: 'sales123', fullName: 'Lisa Johnson', role: 'sales_manager', userId: '99999999999999999999999999999999' },
+      { email: 'marketing@buildflow.com', password: 'marketing123', fullName: 'Alex Thompson', role: 'marketing_manager', userId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      { email: 'ops@buildflow.com', password: 'ops123', fullName: 'Maria Garcia', role: 'operations_manager', userId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+      { email: 'lead@buildflow.com', password: 'lead123', fullName: 'Robert Kim', role: 'team_lead', userId: 'cccccccccccccccccccccccccccccccc' },
+      { email: 'it@buildflow.com', password: 'it123', fullName: 'Emily Brown', role: 'it_support', userId: 'dddddddddddddddddddddddddddddddd' },
+      { email: 'contractor@buildflow.com', password: 'contractor123', fullName: 'James Miller', role: 'contractor', userId: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
+      { email: 'intern@buildflow.com', password: 'intern123', fullName: 'Sophie Anderson', role: 'intern', userId: 'ffffffffffffffffffffffffffffffff' }
     ];
 
     const mockUser = mockUsers.find(u => u.email === email && u.password === password);
