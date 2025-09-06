@@ -50,6 +50,14 @@ export const GstSettingsDialog: React.FC<GstSettingsDialogProps> = ({
     composition_scheme: false
   });
 
+  // Debug logging for dialog state changes
+  useEffect(() => {
+    console.log('GstSettingsDialog - open prop changed:', open);
+    console.log('GstSettingsDialog - component mounted/updated');
+  }, [open]);
+
+  console.log('GstSettingsDialog rendering - open:', open);
+
   useEffect(() => {
     if (existingSettings) {
       setFormData({
@@ -185,7 +193,7 @@ export const GstSettingsDialog: React.FC<GstSettingsDialogProps> = ({
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl z-[9999]">
         <DialogHeader>
           <DialogTitle>
             {existingSettings ? 'Update GST Settings' : 'Configure GST Settings'}

@@ -493,6 +493,7 @@ const GstCompliance = () => {
       </Tabs>
 
       <GstSettingsDialog
+        key={`gst-dialog-${showSettingsDialog}`}
         open={showSettingsDialog}
         onOpenChange={setShowSettingsDialog}
         existingSettings={gstSettings}
