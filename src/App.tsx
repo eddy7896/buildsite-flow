@@ -51,6 +51,8 @@ import GstCompliance from "./pages/GstCompliance";
 import EmployeeProjects from "./pages/EmployeeProjects";
 import { Reimbursements } from "./pages/Reimbursements";
 import SystemDashboard from "./pages/SystemDashboard";
+import { RoleChangeRequests } from "./components/RoleChangeRequests";
+import { AdvancedPermissions } from "./components/AdvancedPermissions";
 import Calendar from "./pages/Calendar";
 const HolidayManagement = React.lazy(() => import('./pages/HolidayManagement'));
 
@@ -466,6 +468,26 @@ const App = () => (
                 <ProtectedRoute requiredRole="super_admin">
                   <DashboardLayout>
                     <SystemDashboard />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/role-requests" 
+              element={
+                <ProtectedRoute requiredRole="hr">
+                  <DashboardLayout>
+                    <RoleChangeRequests />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/permissions" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <AdvancedPermissions />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

@@ -24,7 +24,9 @@ import {
   Brain,
   Monitor,
   FolderKanban,
-  CalendarDays
+  CalendarDays,
+  UserCog,
+  Settings2
 } from 'lucide-react';
 import {
   Sidebar,
@@ -45,6 +47,8 @@ const navigationItems = {
   super_admin: [
     { title: 'System Dashboard', url: '/system', icon: Monitor },
     { title: 'Users', url: '/users', icon: Users },
+    { title: 'Role Requests', url: '/role-requests', icon: UserCog },
+    { title: 'Permissions', url: '/permissions', icon: Settings2 },
   ],
   ceo: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
@@ -148,8 +152,10 @@ const navigationItems = {
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
     { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
+    { title: 'Role Requests', url: '/role-requests', icon: UserCog },
     { title: 'Reimbursements', url: '/reimbursements', icon: DollarSign },
     { title: 'Reports', url: '/reports', icon: ChartLine },
+    { title: 'Permissions', url: '/permissions', icon: Settings2 },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
     { title: 'My Leave', url: '/my-leave', icon: Calendar },
