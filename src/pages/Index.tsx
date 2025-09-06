@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Area, AreaChart } from 'recharts';
-import { LogOut, User, Building, Users, Calculator, DollarSign, Calendar, Clock, TrendingUp, AlertCircle } from 'lucide-react';
+import { LogOut, User, Building, Users, Calculator, DollarSign, Calendar, Clock, TrendingUp, AlertCircle, CalendarDays } from 'lucide-react';
 import ClockInOut from '@/components/ClockInOut';
 import { AgencyCalendar } from '@/components/AgencyCalendar';
 
@@ -186,6 +186,42 @@ const Index = () => {
         <div className="mb-8">
           <ClockInOut compact={true} />
         </div>
+
+        {/* Quick Actions for Admin and HR */}
+        {(userRole === 'admin' || userRole === 'hr') && (
+          <div className="mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Quick Actions</CardTitle>
+                <CardDescription>
+                  Quickly manage events and holidays
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Button asChild className="h-12">
+                    <Link to="/calendar">
+                      <Calendar className="mr-2 h-4 w-4" />
+                      Create Event
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" className="h-12">
+                    <Link to="/holiday-management">
+                      <CalendarDays className="mr-2 h-4 w-4" />
+                      Add Holiday
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" className="h-12">
+                    <Link to="/calendar">
+                      <Clock className="mr-2 h-4 w-4" />
+                      Manage Calendar
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Quick Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

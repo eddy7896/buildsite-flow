@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/useAuth';
 import { useAgencyAnalytics } from '@/hooks/useAgencyAnalytics';
-import { RefreshCw, AlertTriangle, CheckCircle, TrendingUp, Users, Building, FileText, DollarSign } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle, TrendingUp, Users, Building, FileText, DollarSign, Calendar, CalendarDays } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
 
@@ -160,6 +160,40 @@ const AgencyDashboard = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Quick Actions for Admin and HR */}
+        {(userRole === 'admin' || userRole === 'hr') && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Quick Actions</CardTitle>
+              <CardDescription>
+                Manage events and holidays for your agency
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Button asChild>
+                  <a href="/calendar">
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Create Event
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href="/holiday-management">
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    Add Holiday
+                  </a>
+                </Button>
+                <Button asChild variant="outline">
+                  <a href="/calendar">
+                    <TrendingUp className="mr-2 h-4 w-4" />
+                    Manage Calendar
+                  </a>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Agency Status Alert */}
         <Card className="border-green-200 bg-green-50">
