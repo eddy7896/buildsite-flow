@@ -121,6 +121,51 @@ export type Database = {
           },
         ]
       }
+      api_access_logs: {
+        Row: {
+          agency_id: string | null
+          created_at: string | null
+          endpoint: string
+          id: string
+          ip_address: unknown | null
+          method: string
+          request_body: Json | null
+          response_body: Json | null
+          response_time_ms: number | null
+          status_code: number
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          agency_id?: string | null
+          created_at?: string | null
+          endpoint: string
+          id?: string
+          ip_address?: unknown | null
+          method: string
+          request_body?: Json | null
+          response_body?: Json | null
+          response_time_ms?: number | null
+          status_code: number
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          agency_id?: string | null
+          created_at?: string | null
+          endpoint?: string
+          id?: string
+          ip_address?: unknown | null
+          method?: string
+          request_body?: Json | null
+          response_body?: Json | null
+          response_time_ms?: number | null
+          status_code?: number
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       attendance: {
         Row: {
           agency_id: string | null
@@ -547,6 +592,60 @@ export type Database = {
           },
         ]
       }
+      custom_reports: {
+        Row: {
+          agency_id: string
+          aggregations: Json | null
+          created_at: string | null
+          data_sources: string[]
+          description: string | null
+          filters: Json | null
+          group_by: string[] | null
+          id: string
+          is_public: boolean | null
+          is_scheduled: boolean | null
+          name: string
+          schedule_config: Json | null
+          updated_at: string | null
+          user_id: string
+          visualizations: Json | null
+        }
+        Insert: {
+          agency_id: string
+          aggregations?: Json | null
+          created_at?: string | null
+          data_sources: string[]
+          description?: string | null
+          filters?: Json | null
+          group_by?: string[] | null
+          id?: string
+          is_public?: boolean | null
+          is_scheduled?: boolean | null
+          name: string
+          schedule_config?: Json | null
+          updated_at?: string | null
+          user_id: string
+          visualizations?: Json | null
+        }
+        Update: {
+          agency_id?: string
+          aggregations?: Json | null
+          created_at?: string | null
+          data_sources?: string[]
+          description?: string | null
+          filters?: Json | null
+          group_by?: string[] | null
+          id?: string
+          is_public?: boolean | null
+          is_scheduled?: boolean | null
+          name?: string
+          schedule_config?: Json | null
+          updated_at?: string | null
+          user_id?: string
+          visualizations?: Json | null
+        }
+        Relationships: []
+      }
       daily_analytics: {
         Row: {
           active_agencies: number | null
@@ -601,6 +700,48 @@ export type Database = {
           total_projects_created?: number | null
           total_revenue?: number | null
           total_users?: number | null
+        }
+        Relationships: []
+      }
+      dashboard_widgets: {
+        Row: {
+          agency_id: string
+          config: Json | null
+          created_at: string | null
+          data_source: string
+          id: string
+          is_active: boolean | null
+          position: Json | null
+          title: string
+          updated_at: string | null
+          user_id: string
+          widget_type: string
+        }
+        Insert: {
+          agency_id: string
+          config?: Json | null
+          created_at?: string | null
+          data_source: string
+          id?: string
+          is_active?: boolean | null
+          position?: Json | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+          widget_type: string
+        }
+        Update: {
+          agency_id?: string
+          config?: Json | null
+          created_at?: string | null
+          data_source?: string
+          id?: string
+          is_active?: boolean | null
+          position?: Json | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+          widget_type?: string
         }
         Relationships: []
       }
@@ -733,6 +874,182 @@ export type Database = {
             columns: ["parent_department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_folders: {
+        Row: {
+          agency_id: string
+          created_at: string | null
+          created_by: string
+          description: string | null
+          id: string
+          name: string
+          parent_folder_id: string | null
+        }
+        Insert: {
+          agency_id: string
+          created_at?: string | null
+          created_by: string
+          description?: string | null
+          id?: string
+          name: string
+          parent_folder_id?: string | null
+        }
+        Update: {
+          agency_id?: string
+          created_at?: string | null
+          created_by?: string
+          description?: string | null
+          id?: string
+          name?: string
+          parent_folder_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_folders_parent_folder_id_fkey"
+            columns: ["parent_folder_id"]
+            isOneToOne: false
+            referencedRelation: "document_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_permissions: {
+        Row: {
+          created_at: string | null
+          document_id: string
+          granted_by: string
+          id: string
+          permission_type: string
+          role: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          document_id: string
+          granted_by: string
+          id?: string
+          permission_type: string
+          role?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          document_id?: string
+          granted_by?: string
+          id?: string
+          permission_type?: string
+          role?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_permissions_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_versions: {
+        Row: {
+          change_summary: string | null
+          document_id: string
+          file_path: string
+          id: string
+          is_current: boolean | null
+          upload_date: string | null
+          uploaded_by: string
+          version_number: number
+        }
+        Insert: {
+          change_summary?: string | null
+          document_id: string
+          file_path: string
+          id?: string
+          is_current?: boolean | null
+          upload_date?: string | null
+          uploaded_by: string
+          version_number: number
+        }
+        Update: {
+          change_summary?: string | null
+          document_id?: string
+          file_path?: string
+          id?: string
+          is_current?: boolean | null
+          upload_date?: string | null
+          uploaded_by?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_versions_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          agency_id: string
+          created_at: string | null
+          description: string | null
+          download_count: number | null
+          file_path: string
+          file_size: number
+          file_type: string
+          folder_id: string | null
+          id: string
+          is_public: boolean | null
+          name: string
+          tags: string[] | null
+          updated_at: string | null
+          uploaded_by: string
+        }
+        Insert: {
+          agency_id: string
+          created_at?: string | null
+          description?: string | null
+          download_count?: number | null
+          file_path: string
+          file_size: number
+          file_type: string
+          folder_id?: string | null
+          id?: string
+          is_public?: boolean | null
+          name: string
+          tags?: string[] | null
+          updated_at?: string | null
+          uploaded_by: string
+        }
+        Update: {
+          agency_id?: string
+          created_at?: string | null
+          description?: string | null
+          download_count?: number | null
+          file_path?: string
+          file_size?: number
+          file_type?: string
+          folder_id?: string | null
+          id?: string
+          is_public?: boolean | null
+          name?: string
+          tags?: string[] | null
+          updated_at?: string | null
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "document_folders"
             referencedColumns: ["id"]
           },
         ]
@@ -1923,6 +2240,80 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      message_threads: {
+        Row: {
+          agency_id: string
+          created_at: string | null
+          created_by: string
+          id: string
+          project_id: string | null
+          thread_type: string
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          agency_id: string
+          created_at?: string | null
+          created_by: string
+          id?: string
+          project_id?: string | null
+          thread_type: string
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          agency_id?: string
+          created_at?: string | null
+          created_by?: string
+          id?: string
+          project_id?: string | null
+          thread_type?: string
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          attachment_url: string | null
+          content: string
+          created_at: string | null
+          id: string
+          message_type: string | null
+          read_by: Json | null
+          sender_id: string
+          thread_id: string
+        }
+        Insert: {
+          attachment_url?: string | null
+          content: string
+          created_at?: string | null
+          id?: string
+          message_type?: string | null
+          read_by?: Json | null
+          sender_id: string
+          thread_id: string
+        }
+        Update: {
+          attachment_url?: string | null
+          content?: string
+          created_at?: string | null
+          id?: string
+          message_type?: string | null
+          read_by?: Json | null
+          sender_id?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "message_threads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notification_preferences: {
         Row: {
@@ -3415,6 +3806,38 @@ export type Database = {
             columns: ["team_assignment_id"]
             isOneToOne: false
             referencedRelation: "team_assignments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      thread_participants: {
+        Row: {
+          id: string
+          joined_at: string | null
+          last_read_at: string | null
+          thread_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          joined_at?: string | null
+          last_read_at?: string | null
+          thread_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          joined_at?: string | null
+          last_read_at?: string | null
+          thread_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thread_participants_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "message_threads"
             referencedColumns: ["id"]
           },
         ]
