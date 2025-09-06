@@ -22,7 +22,8 @@ import {
   Users2,
   FileCheck,
   Brain,
-  Monitor
+  Monitor,
+  FolderKanban
 } from 'lucide-react';
 import {
   Sidebar,
@@ -101,6 +102,7 @@ const navigationItems = {
   operations_manager: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
+    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
     { title: 'Projects', url: '/projects', icon: Building },
@@ -110,6 +112,7 @@ const navigationItems = {
   department_head: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
+    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'Attendance', url: '/attendance', icon: Clock },
     { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
@@ -118,6 +121,7 @@ const navigationItems = {
   team_lead: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
+    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
@@ -126,6 +130,7 @@ const navigationItems = {
   project_manager: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
+    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'My Profile', url: '/my-profile', icon: User },
@@ -168,6 +173,7 @@ const navigationItems = {
   sales_manager: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
+    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'Quotations', url: '/quotations', icon: FileCheck },
@@ -177,6 +183,7 @@ const navigationItems = {
   marketing_manager: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
+    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'Reports', url: '/reports', icon: ChartLine },

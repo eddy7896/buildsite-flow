@@ -27,6 +27,7 @@ import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { GanttChart } from "@/components/project-management/GanttChart";
 import { ResourceManagement } from "@/components/project-management/ResourceManagement";
 import { ProjectTimeline } from "@/components/project-management/ProjectTimeline";
+import { TaskKanbanBoard } from "@/components/TaskKanbanBoard";
 
 
 interface Project {
@@ -363,6 +364,7 @@ export default function ProjectManagement() {
       <Tabs defaultValue="projects" className="space-y-4">
         <TabsList>
           <TabsTrigger value="projects">Projects</TabsTrigger>
+          <TabsTrigger value="tasks">Tasks</TabsTrigger>
           <TabsTrigger value="resources">Resources</TabsTrigger>
           <TabsTrigger value="planning">Planning</TabsTrigger>
         </TabsList>
@@ -454,6 +456,10 @@ export default function ProjectManagement() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="tasks" className="space-y-4">
+          <TaskKanbanBoard />
         </TabsContent>
 
         <TabsContent value="resources" className="space-y-4">

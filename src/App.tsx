@@ -105,6 +105,16 @@ const App = () => (
               } 
             />
             <Route 
+              path="/project-management" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <ProjectManagement />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
               path="/users" 
               element={
                 <ProtectedRoute requiredRole="admin">
