@@ -492,24 +492,8 @@ const GstCompliance = () => {
         </TabsContent>
       </Tabs>
 
-      {/* Test Dialog to verify Dialog component works */}
-      <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Test Dialog</DialogTitle>
-            <DialogDescription>This is a test to see if dialogs work</DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <p>If you can see this, the Dialog component is working properly.</p>
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShowSettingsDialog(false)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <GstSettingsDialog
-        open={false}
+        open={showSettingsDialog}
         onOpenChange={setShowSettingsDialog}
         existingSettings={gstSettings}
         onSave={(settings) => {
