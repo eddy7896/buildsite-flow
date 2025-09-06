@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { NotificationCenter } from './NotificationCenter';
 
 const navigationItems = {
   // Executive Level
@@ -322,11 +323,14 @@ export function AppSidebar() {
         
         <SidebarGroup className="flex-1 mt-6">
           <SidebarGroupLabel>
-            <div className="flex items-center space-x-2">
-              <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                <Building className="h-4 w-4 text-primary" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                  <Building className="h-4 w-4 text-primary" />
+                </div>
+                {(!collapsed || isMobile) && <span className="text-xl font-bold">BuildFlow</span>}
               </div>
-              {(!collapsed || isMobile) && <span className="text-xl font-bold">BuildFlow</span>}
+              {(!collapsed || isMobile) && <NotificationCenter />}
             </div>
           </SidebarGroupLabel>
           

@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { LoadingSpinner } from './LoadingSpinner';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Notification {
   id: string;
@@ -33,6 +34,7 @@ export const NotificationCenter: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('all');
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const { execute: fetchNotifications, loading: loadingNotifications } = useAsyncOperation({
     onError: (error) => toast({ variant: 'destructive', title: 'Failed to load notifications', description: error.message })
@@ -46,10 +48,13 @@ export const NotificationCenter: React.FC = () => {
   });
 
   const loadNotifications = async () => {
+    if (!user) return;
+    
     return fetchNotifications(async () => {
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -57,7 +62,9 @@ export const NotificationCenter: React.FC = () => {
       setNotifications((data || []) as Notification[]);
       
       // Get unread count
-      const { data: countData } = await supabase.rpc('get_unread_notification_count');
+      const { data: countData } = await supabase.rpc('get_unread_notification_count', {
+        p_user_id: user.id
+      });
       setUnreadCount(countData || 0);
       
       return data;
@@ -105,28 +112,36 @@ export const NotificationCenter: React.FC = () => {
   };
 
   useEffect(() => {
-    loadNotifications();
-    
-    // Set up real-time subscription
-    const subscription = supabase
-      .channel('notifications-changes')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
-        (payload) => {
-          setNotifications(prev => [payload.new as Notification, ...prev]);
-          setUnreadCount(prev => prev + 1);
-          toast({
-            title: 'New notification',
-            description: (payload.new as Notification).title
-          });
-        }
-      )
-      .subscribe();
+    if (user) {
+      loadNotifications();
+      
+      // Set up real-time subscription
+      const subscription = supabase
+        .channel('notifications-changes')
+        .on('postgres_changes', 
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`
+          },
+          (payload) => {
+            const newNotification = payload.new as Notification;
+            setNotifications(prev => [newNotification, ...prev]);
+            setUnreadCount(prev => prev + 1);
+            toast({
+              title: 'New notification',
+              description: newNotification.title
+            });
+          }
+        )
+        .subscribe();
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, [user]);
 
   const getPriorityIcon = (priority: string) => {
     switch (priority) {

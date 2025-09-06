@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { CheckCircle, XCircle, Download, Eye } from "lucide-react";
+import { CheckCircle, XCircle, Download, Eye, DollarSign } from "lucide-react";
 import { format } from "date-fns";
+import { PaymentDialog } from "./PaymentDialog";
 
 interface ReimbursementRequest {
   id: string;
@@ -49,11 +50,14 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
   request,
   onSuccess,
 }) => {
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+
+  const isFinanceUser = userRole === 'finance_manager' || userRole === 'cfo' || userRole === 'admin';
 
   useEffect(() => {
     if (open && request) {
@@ -98,6 +102,14 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
         description: "Reimbursement request approved",
       });
 
+      // Send email notification
+      await supabase.functions.invoke('send-reimbursement-notification', {
+        body: {
+          reimbursementId: request.id,
+          notificationType: 'approved'
+        }
+      });
+
       onSuccess?.();
       onOpenChange(false);
     } catch (error) {
@@ -139,6 +151,14 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
       toast({
         title: "Success",
         description: "Reimbursement request rejected",
+      });
+
+      // Send email notification
+      await supabase.functions.invoke('send-reimbursement-notification', {
+        body: {
+          reimbursementId: request.id,
+          notificationType: 'rejected'
+        }
       });
 
       setRejectionReason("");
@@ -358,8 +378,28 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
               </Button>
             </>
           )}
+
+          {request.status === "approved" && isFinanceUser && (
+            <Button
+              onClick={() => setShowPaymentDialog(true)}
+              className="flex items-center gap-2"
+            >
+              <DollarSign className="h-4 w-4" />
+              Process Payment
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
+
+      <PaymentDialog
+        open={showPaymentDialog}
+        onOpenChange={setShowPaymentDialog}
+        request={request}
+        onSuccess={() => {
+          onSuccess?.();
+          onOpenChange(false);
+        }}
+      />
     </Dialog>
   );
 };
