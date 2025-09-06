@@ -1,3 +1,4 @@
+import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -51,6 +52,7 @@ import EmployeeProjects from "./pages/EmployeeProjects";
 import { Reimbursements } from "./pages/Reimbursements";
 import SystemDashboard from "./pages/SystemDashboard";
 import Calendar from "./pages/Calendar";
+const HolidayManagement = React.lazy(() => import('./pages/HolidayManagement'));
 
 const queryClient = new QueryClient();
 
@@ -427,6 +429,26 @@ const App = () => (
               } 
             />
             <Route 
+              path="/calendar" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <Calendar />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/holiday-management" 
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <DashboardLayout>
+                    <HolidayManagement />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route
               path="/agency" 
               element={
                 <ProtectedRoute requiredRole="admin">

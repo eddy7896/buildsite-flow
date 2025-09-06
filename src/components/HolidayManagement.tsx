@@ -4,22 +4,20 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarDays, Plus, Search, Filter, Calendar as CalendarIcon, Trash2, Edit2 } from 'lucide-react';
+import { CalendarDays, Plus, Search, Calendar as CalendarIcon, Trash2, Edit2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { HolidayFormDialog } from './HolidayFormDialog';
-import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 
 interface Holiday {
   id: string;
   name: string;
   description: string | null;
   date: string;
-  holiday_type: string;
-  is_recurring: boolean;
-  color: string;
+  is_company_holiday: boolean;
+  is_national_holiday: boolean;
   created_at: string;
 }
 
@@ -32,8 +30,6 @@ export function HolidayManagement() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [holidayToDelete, setHolidayToDelete] = useState<Holiday | null>(null);
 
   const fetchHolidays = async () => {
     try {
@@ -66,29 +62,29 @@ export function HolidayManagement() {
   const filteredHolidays = holidays.filter(holiday => {
     const matchesSearch = holiday.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          holiday.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = typeFilter === 'all' || holiday.holiday_type === typeFilter;
+    const matchesType = typeFilter === 'all' || 
+                       (typeFilter === 'company' && holiday.is_company_holiday) ||
+                       (typeFilter === 'national' && holiday.is_national_holiday);
     const matchesYear = yearFilter === 'all' || new Date(holiday.date).getFullYear().toString() === yearFilter;
     
     return matchesSearch && matchesType && matchesYear;
   });
 
-  const handleDeleteHoliday = async () => {
-    if (!holidayToDelete) return;
-
+  const handleDeleteHoliday = async (holidayId: string) => {
     try {
       const { error } = await supabase
         .from('holidays')
         .delete()
-        .eq('id', holidayToDelete.id);
+        .eq('id', holidayId);
 
       if (error) throw error;
 
       toast({
         title: "Holiday Deleted",
-        description: `${holidayToDelete.name} has been removed.`
+        description: "Holiday has been removed."
       });
 
-      setHolidays(holidays.filter(h => h.id !== holidayToDelete.id));
+      setHolidays(holidays.filter(h => h.id !== holidayId));
     } catch (error) {
       console.error('Error deleting holiday:', error);
       toast({
@@ -96,30 +92,19 @@ export function HolidayManagement() {
         description: "Failed to delete holiday",
         variant: "destructive"
       });
-    } finally {
-      setDeleteDialogOpen(false);
-      setHolidayToDelete(null);
     }
   };
 
-  const getTypeLabel = (type: string) => {
-    switch (type) {
-      case 'national': return 'National';
-      case 'company': return 'Company';
-      case 'religious': return 'Religious';
-      case 'optional': return 'Optional';
-      default: return type;
-    }
+  const getTypeLabel = (holiday: Holiday) => {
+    if (holiday.is_national_holiday) return 'National';
+    if (holiday.is_company_holiday) return 'Company';
+    return 'Other';
   };
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'national': return 'bg-red-100 text-red-800';
-      case 'company': return 'bg-blue-100 text-blue-800';
-      case 'religious': return 'bg-purple-100 text-purple-800';
-      case 'optional': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+  const getTypeColor = (holiday: Holiday) => {
+    if (holiday.is_national_holiday) return 'bg-red-100 text-red-800';
+    if (holiday.is_company_holiday) return 'bg-blue-100 text-blue-800';
+    return 'bg-gray-100 text-gray-800';
   };
 
   const currentYear = new Date().getFullYear();
@@ -170,8 +155,6 @@ export function HolidayManagement() {
                 <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="national">National</SelectItem>
                 <SelectItem value="company">Company</SelectItem>
-                <SelectItem value="religious">Religious</SelectItem>
-                <SelectItem value="optional">Optional</SelectItem>
               </SelectContent>
             </Select>
 
@@ -221,19 +204,12 @@ export function HolidayManagement() {
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-4">
-                    <div 
-                      className="w-4 h-4 rounded-full mt-1"
-                      style={{ backgroundColor: holiday.color }}
-                    />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <h3 className="font-semibold text-lg">{holiday.name}</h3>
-                        <Badge className={getTypeColor(holiday.holiday_type)}>
-                          {getTypeLabel(holiday.holiday_type)}
+                        <Badge className={getTypeColor(holiday)}>
+                          {getTypeLabel(holiday)}
                         </Badge>
-                        {holiday.is_recurring && (
-                          <Badge variant="outline">Recurring</Badge>
-                        )}
                       </div>
                       
                       <p className="text-sm text-muted-foreground mb-2">
@@ -254,8 +230,9 @@ export function HolidayManagement() {
                       variant="outline" 
                       size="sm"
                       onClick={() => {
-                        setHolidayToDelete(holiday);
-                        setDeleteDialogOpen(true);
+                        if (confirm(`Are you sure you want to delete "${holiday.name}"?`)) {
+                          handleDeleteHoliday(holiday.id);
+                        }
                       }}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -272,14 +249,6 @@ export function HolidayManagement() {
         open={showCreateDialog}
         onOpenChange={setShowCreateDialog}
         onHolidayCreated={fetchHolidays}
-      />
-
-      <DeleteConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        onConfirm={handleDeleteHoliday}
-        title="Delete Holiday"
-        description={`Are you sure you want to delete "${holidayToDelete?.name}"? This action cannot be undone.`}
       />
     </div>
   );

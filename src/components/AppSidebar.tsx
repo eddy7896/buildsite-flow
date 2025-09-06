@@ -23,7 +23,8 @@ import {
   FileCheck,
   Brain,
   Monitor,
-  FolderKanban
+  FolderKanban,
+  CalendarDays
 } from 'lucide-react';
 import {
   Sidebar,
@@ -84,7 +85,7 @@ const navigationItems = {
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Calendar', url: '/calendar', icon: Calendar },
-    { title: 'Calendar', url: '/calendar', icon: Calendar },
+    { title: 'Holiday Management', url: '/holiday-management', icon: CalendarDays },
     { title: 'Users', url: '/users', icon: Users },
     { title: 'Department Management', url: '/department-management', icon: Building2 },
     { title: 'CRM', url: '/crm', icon: Users2 },
@@ -145,6 +146,8 @@ const navigationItems = {
   hr: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
+    { title: 'Calendar', url: '/calendar', icon: Calendar },
+    { title: 'Holiday Management', url: '/holiday-management', icon: CalendarDays },
     { title: 'Department Management', url: '/department-management', icon: Building2 },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Employees', url: '/employees', icon: UserCheck },
