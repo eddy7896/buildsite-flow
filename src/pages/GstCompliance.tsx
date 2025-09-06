@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -491,8 +492,24 @@ const GstCompliance = () => {
         </TabsContent>
       </Tabs>
 
+      {/* Test Dialog to verify Dialog component works */}
+      <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Test Dialog</DialogTitle>
+            <DialogDescription>This is a test to see if dialogs work</DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p>If you can see this, the Dialog component is working properly.</p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowSettingsDialog(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <GstSettingsDialog
-        open={showSettingsDialog}
+        open={false}
         onOpenChange={setShowSettingsDialog}
         existingSettings={gstSettings}
         onSave={(settings) => {

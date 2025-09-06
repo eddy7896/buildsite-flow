@@ -35,8 +35,10 @@ export const GstSettingsDialog: React.FC<GstSettingsDialogProps> = ({
   existingSettings, 
   onSave 
 }) => {
+  console.log('GstSettingsDialog props:', { open, onOpenChange });
   
   const { user } = useAuth();
+  console.log('User in GstSettingsDialog:', user);
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<GstSettings>({
