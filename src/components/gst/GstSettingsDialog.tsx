@@ -179,6 +179,8 @@ export const GstSettingsDialog: React.FC<GstSettingsDialogProps> = ({
 
   
   
+  console.log('GstSettingsDialog: rendering with open =', open);
+  
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">

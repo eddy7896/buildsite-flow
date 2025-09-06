@@ -199,7 +199,12 @@ const GstCompliance = () => {
             <p className="text-muted-foreground mb-4">
               Please configure your GST settings to start using the compliance features.
             </p>
-            <Button onClick={() => setShowSettingsDialog(true)}>
+            <Button onClick={() => {
+              console.log('Configure GST Settings button clicked');
+              console.log('Current showSettingsDialog state:', showSettingsDialog);
+              setShowSettingsDialog(true);
+              console.log('After setting showSettingsDialog to true');
+            }}>
               <Settings className="mr-2 h-4 w-4" />
               Configure GST Settings
             </Button>
@@ -472,7 +477,12 @@ const GstCompliance = () => {
                   </Select>
                 </div>
               </div>
-              <Button onClick={() => setShowSettingsDialog(true)}>
+              <Button onClick={() => {
+                console.log('Update Settings button clicked');
+                console.log('Current showSettingsDialog state:', showSettingsDialog);
+                setShowSettingsDialog(true);
+                console.log('After setting showSettingsDialog to true');
+              }}>
                 <Settings className="mr-2 h-4 w-4" />
                 Update Settings
               </Button>
