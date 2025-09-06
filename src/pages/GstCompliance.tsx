@@ -67,10 +67,6 @@ const GstCompliance = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<Date>(new Date());
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   
-  // Debug effect to track state changes
-  useEffect(() => {
-    console.log('showSettingsDialog state changed to:', showSettingsDialog);
-  }, [showSettingsDialog]);
 
   useEffect(() => {
     fetchGstSettings();
@@ -203,12 +199,7 @@ const GstCompliance = () => {
             <p className="text-muted-foreground mb-4">
               Please configure your GST settings to start using the compliance features.
             </p>
-            <Button onClick={() => {
-              console.log('Configure GST Settings button clicked');
-              console.log('Current showSettingsDialog state:', showSettingsDialog);
-              setShowSettingsDialog(true);
-              console.log('Setting showSettingsDialog to true');
-            }}>
+            <Button onClick={() => setShowSettingsDialog(true)}>
               <Settings className="mr-2 h-4 w-4" />
               Configure GST Settings
             </Button>
@@ -481,12 +472,7 @@ const GstCompliance = () => {
                   </Select>
                 </div>
               </div>
-              <Button onClick={() => {
-                console.log('Update Settings button clicked');
-                console.log('Current showSettingsDialog state:', showSettingsDialog);
-                setShowSettingsDialog(true);
-                console.log('Setting showSettingsDialog to true');
-              }}>
+              <Button onClick={() => setShowSettingsDialog(true)}>
                 <Settings className="mr-2 h-4 w-4" />
                 Update Settings
               </Button>
@@ -495,33 +481,11 @@ const GstCompliance = () => {
         </TabsContent>
       </Tabs>
 
-      {showSettingsDialog && (
-        <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center">
-          <div className="bg-background border border-border rounded-lg p-6 max-w-2xl w-full mx-4 shadow-lg">
-            <h2 className="text-lg font-semibold mb-4 text-foreground">GST Settings Test</h2>
-            <p className="text-muted-foreground">This is a test dialog to verify it's working.</p>
-            <button 
-              onClick={() => {
-                console.log('Test dialog close button clicked');
-                setShowSettingsDialog(false);
-              }}
-              className="mt-4 px-4 py-2 bg-secondary text-secondary-foreground rounded hover:bg-secondary/80"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
       <GstSettingsDialog
-        open={false}
-        onOpenChange={(open) => {
-          console.log('GstSettingsDialog onOpenChange called with:', open);
-          setShowSettingsDialog(open);
-        }}
+        open={showSettingsDialog}
+        onOpenChange={setShowSettingsDialog}
         existingSettings={gstSettings}
         onSave={(settings) => {
-          console.log('GstSettingsDialog onSave called with settings:', settings);
           setGstSettings(settings);
           fetchGstSettings(); // Refresh the data
           setShowSettingsDialog(false);

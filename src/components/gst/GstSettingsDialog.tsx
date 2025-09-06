@@ -35,7 +35,7 @@ export const GstSettingsDialog: React.FC<GstSettingsDialogProps> = ({
   existingSettings, 
   onSave 
 }) => {
-  console.log('GstSettingsDialog rendered with open:', open);
+  
   const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -177,7 +177,7 @@ export const GstSettingsDialog: React.FC<GstSettingsDialogProps> = ({
     }
   };
 
-  console.log('GstSettingsDialog rendering dialog with open:', open);
+  
   
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
