@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { hexToUuid } from '@/lib/utils';
 
 export interface GSTSettings {
   id?: string;
@@ -55,10 +56,13 @@ export const useGST = () => {
 
     try {
       setLoading(true);
+      // Convert hex agency_id to UUID format for database query
+      const dbAgencyId = hexToUuid(profile.agency_id);
+      
       const { data, error } = await supabase
         .from('gst_settings')
         .select('*')
-        .eq('agency_id', profile.agency_id)
+        .eq('agency_id', dbAgencyId)
         .eq('is_active', true)
         .maybeSingle();
 
@@ -84,10 +88,13 @@ export const useGST = () => {
 
     try {
       setLoading(true);
+      // Convert hex agency_id to UUID format for database query
+      const dbAgencyId = hexToUuid(profile.agency_id);
+      
       const { data, error } = await supabase
         .from('gst_returns')
         .select('*')
-        .eq('agency_id', profile.agency_id)
+        .eq('agency_id', dbAgencyId)
         .order('filing_period', { ascending: false });
 
       if (error) throw error;
@@ -112,8 +119,11 @@ export const useGST = () => {
 
     try {
       setLoading(true);
+      // Convert hex agency_id to UUID format for database query
+      const dbAgencyId = hexToUuid(profile.agency_id);
+      
       const { data, error } = await supabase.rpc('calculate_gst_liability', {
-        p_agency_id: profile.agency_id,
+        p_agency_id: dbAgencyId,
         p_start_date: startDate,
         p_end_date: endDate
       });
@@ -145,7 +155,8 @@ export const useGST = () => {
     try {
       setLoading(true);
       
-      const dataWithAgency = { ...settingsData, agency_id: profile.agency_id };
+      // Convert hex agency_id to UUID format for database operations
+      const dataWithAgency = { ...settingsData, agency_id: hexToUuid(profile.agency_id) };
       
       if (settings?.id) {
         const { error } = await supabase

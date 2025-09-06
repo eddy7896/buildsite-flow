@@ -3,6 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { AppRole } from '@/utils/roleUtils';
+import { hexToUuid, uuidToHex } from '@/lib/utils';
 
 interface Profile {
   id: string;
@@ -78,10 +79,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      // Convert hex ID to UUID format for database query
+      const dbUserId = hexToUuid(userId);
+      
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('user_id', userId)
+        .eq('user_id', dbUserId)
         .maybeSingle();
 
       if (error) {
@@ -89,7 +93,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setProfile(data);
+      // Convert response back to hex format if needed
+      if (data) {
+        setProfile({
+          ...data,
+          user_id: uuidToHex(data.user_id),
+          agency_id: uuidToHex(data.agency_id)
+        });
+      }
     } catch (error) {
       console.error('Error fetching profile:', error);
     }
@@ -99,11 +110,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Check if this is a mock user and handle them differently
       const mockUsers = [
-        { userId: '00000000-0000-0000-0000-000000000000', role: 'super_admin' as AppRole },
-        { userId: '11111111-1111-1111-1111-111111111111', role: 'admin' as AppRole },
-        { userId: '22222222-2222-2222-2222-222222222222', role: 'hr' as AppRole },
-        { userId: '33333333-3333-3333-3333-333333333333', role: 'finance_manager' as AppRole },
-        { userId: '44444444-4444-4444-4444-444444444444', role: 'employee' as AppRole }
+        { userId: '00000000000000000000000000000000', role: 'super_admin' as AppRole },
+        { userId: '11111111111111111111111111111111', role: 'admin' as AppRole },
+        { userId: '22222222222222222222222222222222', role: 'hr' as AppRole },
+        { userId: '33333333333333333333333333333333', role: 'finance_manager' as AppRole },
+        { userId: '44444444444444444444444444444444', role: 'employee' as AppRole }
       ];
 
       const mockUser = mockUsers.find(u => u.userId === userId);
@@ -116,10 +127,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // For real users, query the database and get ALL roles
+      const dbUserId = hexToUuid(userId);
+      
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId);
+        .eq('user_id', dbUserId);
 
       if (error) {
         console.error('Error fetching user role:', error);
@@ -212,11 +225,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: AppRole;
       userId: string;
     }> = [
-      { email: 'super@buildflow.com', password: 'super123', fullName: 'Super Administrator', role: 'super_admin', userId: '00000000-0000-0000-0000-000000000000' },
-      { email: 'admin@buildflow.com', password: 'admin123', fullName: 'System Administrator', role: 'admin', userId: '11111111-1111-1111-1111-111111111111' },
-      { email: 'hr@buildflow.com', password: 'hr123', fullName: 'HR Manager', role: 'hr', userId: '22222222-2222-2222-2222-222222222222' },
-      { email: 'finance@buildflow.com', password: 'finance123', fullName: 'Finance Manager', role: 'finance_manager', userId: '33333333-3333-3333-3333-333333333333' },
-      { email: 'employee@buildflow.com', password: 'employee123', fullName: 'John Employee', role: 'employee', userId: '44444444-4444-4444-4444-444444444444' }
+      { email: 'super@buildflow.com', password: 'super123', fullName: 'Super Administrator', role: 'super_admin', userId: '00000000000000000000000000000000' },
+      { email: 'admin@buildflow.com', password: 'admin123', fullName: 'System Administrator', role: 'admin', userId: '11111111111111111111111111111111' },
+      { email: 'hr@buildflow.com', password: 'hr123', fullName: 'HR Manager', role: 'hr', userId: '22222222222222222222222222222222' },
+      { email: 'finance@buildflow.com', password: 'finance123', fullName: 'Finance Manager', role: 'finance_manager', userId: '33333333333333333333333333333333' },
+      { email: 'employee@buildflow.com', password: 'employee123', fullName: 'John Employee', role: 'employee', userId: '44444444444444444444444444444444' }
     ];
 
     const mockUser = mockUsers.find(u => u.email === email && u.password === password);
@@ -248,7 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // Create mock profile data instead of fetching from database
         const mockProfile = {
-          id: `profile-${mockUser.userId}`,
+          id: `profile${mockUser.userId}`,
           user_id: mockUser.userId,
           full_name: mockUser.fullName,
           phone: null,
@@ -257,7 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           hire_date: null,
           avatar_url: null,
           is_active: true,
-          agency_id: '00000000-0000-0000-0000-000000000001' // Mock agency ID
+          agency_id: '00000000000000000000000000000001' // Mock agency ID in hex format
         };
         
         setProfile(mockProfile);
