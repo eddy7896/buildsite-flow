@@ -138,3 +138,34 @@ export function getAssignableRoles(userRole: AppRole): AppRole[] {
   const allRoles = Object.keys(ROLE_HIERARCHY) as AppRole[];
   return allRoles.filter(role => canManageRole(userRole, role));
 }
+
+/**
+ * Check if user has financial access (CFO, Finance Manager, Super Admin only)
+ */
+export function hasFinancialAccess(userRole: AppRole): boolean {
+  return ['super_admin', 'cfo', 'finance_manager'].includes(userRole);
+}
+
+/**
+ * Check if user can access employee data based on department restrictions
+ */
+export function canAccessEmployeeData(userRole: AppRole, userDepartment?: string, targetDepartment?: string): boolean {
+  // Super admins, CEOs, CFOs, and HR can access all employee data
+  if (['super_admin', 'ceo', 'cfo', 'hr'].includes(userRole)) {
+    return true;
+  }
+  
+  // Department heads can only access employees in their department
+  if (userRole === 'department_head' && userDepartment && targetDepartment) {
+    return userDepartment === targetDepartment;
+  }
+  
+  return false;
+}
+
+/**
+ * Check if user can manage user roles (CEO and Super Admin only)
+ */
+export function canManageUserRoles(userRole: AppRole): boolean {
+  return ['super_admin', 'ceo'].includes(userRole);
+}

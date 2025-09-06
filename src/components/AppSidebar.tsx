@@ -80,7 +80,7 @@ const navigationItems = {
     { title: 'Reports', url: '/reports', icon: ChartLine },
   ],
   
-  // Management Level
+  // Management Level - Admin (Restricted financial access)
   admin: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
@@ -94,12 +94,7 @@ const navigationItems = {
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
     { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
-    { title: 'Payroll', url: '/payroll', icon: Calculator },
-    { title: 'Invoices', url: '/invoices', icon: FileText },
-    { title: 'Payments', url: '/payments', icon: CreditCard },
-    { title: 'Receipts', url: '/receipts', icon: Receipt },
     { title: 'Quotations', url: '/quotations', icon: FileCheck },
-    { title: 'Financial Management', url: '/financial-management', icon: Calculator },
     { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'Analytics', url: '/analytics', icon: BarChart3 },
   ],
