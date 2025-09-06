@@ -41,7 +41,7 @@ import {
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { NotificationCenter } from './NotificationCenter';
+
 
 const navigationItems = {
   // Executive Level
@@ -330,7 +330,6 @@ export function AppSidebar() {
                 </div>
                 {(!collapsed || isMobile) && <span className="text-xl font-bold">BuildFlow</span>}
               </div>
-              {(!collapsed || isMobile) && <NotificationCenter />}
             </div>
           </SidebarGroupLabel>
           

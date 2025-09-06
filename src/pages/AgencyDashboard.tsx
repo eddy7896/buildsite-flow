@@ -8,6 +8,7 @@ import { useAgencyAnalytics } from '@/hooks/useAgencyAnalytics';
 import { RefreshCw, AlertTriangle, CheckCircle, TrendingUp, Users, Building, FileText, DollarSign, Calendar, CalendarDays } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Navigate } from 'react-router-dom';
+import { PageContainer, PageHeader, StatsGrid } from '@/components/layout';
 
 const AgencyDashboard = () => {
   const { user, userRole } = useAuth();
@@ -72,42 +73,32 @@ const AgencyDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b bg-card">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold">Agency Dashboard</h1>
-              <p className="text-muted-foreground mt-1">
-                Your agency's performance and activity overview
-              </p>
+    <PageContainer>
+      <PageHeader 
+        title="Agency Dashboard"
+        description="Your agency's performance and activity overview"
+        actions={
+          <div className="flex items-center gap-4">
+            <Badge variant="outline">
+              {userRole?.replace('_', ' ').toUpperCase()}
+            </Badge>
+            <div className="text-sm text-muted-foreground">
+              Last updated: {lastRefresh.toLocaleTimeString()}
             </div>
-            <div className="flex items-center gap-4">
-              <Badge variant="outline" className="text-xs">
-                {userRole?.replace('_', ' ').toUpperCase()}
-              </Badge>
-              <div className="text-sm text-muted-foreground">
-                Last updated: {lastRefresh.toLocaleTimeString()}
-              </div>
-              <Button 
-                onClick={handleManualRefresh} 
-                variant="outline" 
-                size="sm"
-                disabled={loading}
-              >
-                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-            </div>
+            <Button 
+              onClick={handleManualRefresh} 
+              variant="outline" 
+              size="sm"
+              disabled={loading}
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
           </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="container mx-auto px-6 py-6 space-y-6">
+        }
+      />
         {/* Quick Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatsGrid cols={4}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -159,7 +150,7 @@ const AgencyDashboard = () => {
               </p>
             </CardContent>
           </Card>
-        </div>
+        </StatsGrid>
 
         {/* Quick Actions for Admin and HR */}
         {(userRole === 'admin' || userRole === 'hr') && (
@@ -377,8 +368,7 @@ const AgencyDashboard = () => {
             </Card>
           </TabsContent>
         </Tabs>
-      </div>
-    </div>
+    </PageContainer>
   );
 };
 

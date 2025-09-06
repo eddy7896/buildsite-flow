@@ -38,20 +38,29 @@ All colors MUST be HSL.
 
     --radius: 0.5rem;
 
+    /* Layout spacing constants */
+    --page-padding-x: 1rem;
+    --page-padding-y: 1.5rem;
+    --section-spacing: 1.5rem;
+    --card-padding: 1.5rem;
+    --grid-gap: 1.5rem;
+
+    /* Typography scale */
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 1.875rem;
+
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 

@@ -8,6 +8,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { LogOut, User, Building, Users, Calculator, DollarSign, Calendar, Clock, TrendingUp, AlertCircle, CalendarDays } from 'lucide-react';
 import ClockInOut from '@/components/ClockInOut';
 import { AgencyCalendar } from '@/components/AgencyCalendar';
+import { PageContainer, StatsGrid, ContentGrid } from '@/components/layout';
 
 const Index = () => {
   const { user, profile, userRole, signOut } = useAuth();
@@ -144,43 +145,7 @@ const Index = () => {
   };
 
   return (
-    <div className="bg-background">
-      {/* Header */}
-      <div className="border-b bg-card px-4 lg:px-6 py-4">
-        <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
-          <div className="flex items-center space-x-4">
-            <div>
-              <h1 className="text-xl lg:text-2xl font-bold">Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Welcome back, {profile?.full_name || 'User'}</p>
-            </div>
-          </div>
-          
-          <div className="flex flex-col space-y-2 lg:flex-row lg:items-center lg:space-y-0 lg:space-x-4">
-            <div className="text-left lg:text-right">
-              <p className="font-medium text-sm lg:text-base">{profile?.full_name || user?.email}</p>
-              <div className="flex items-center lg:justify-end space-x-2">
-                {getRoleIcon(userRole || 'employee')}
-                <Badge variant="secondary" className="text-xs">
-                  {getRoleDisplay(userRole || 'employee')}
-                </Badge>
-              </div>
-            </div>
-            
-            <Button variant="outline" size="sm" onClick={signOut} className="w-full lg:w-auto">
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <main className="p-4 lg:p-6">
-        <div className="mb-6 lg:mb-8">
-          <p className="text-sm lg:text-base text-muted-foreground">
-            {getDashboardMessage(userRole || 'employee')}
-          </p>
-        </div>
+    <PageContainer>
 
         {/* Time Clock Section - Show for all users */}
         <div className="mb-8">
@@ -223,8 +188,39 @@ const Index = () => {
           </div>
         )}
 
+        {/* User Info Header */}
+        <div className="bg-card border rounded-lg p-6 mb-6">
+          <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
+            <div className="flex items-center space-x-4">
+              <div>
+                <h2 className="text-xl font-semibold">Welcome back, {profile?.full_name || 'User'}</h2>
+                <p className="text-muted-foreground">
+                  {getDashboardMessage(userRole || 'employee')}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex flex-col space-y-2 lg:flex-row lg:items-center lg:space-y-0 lg:space-x-4">
+              <div className="text-left lg:text-right">
+                <p className="font-medium">{profile?.full_name || user?.email}</p>
+                <div className="flex items-center lg:justify-end space-x-2">
+                  {getRoleIcon(userRole || 'employee')}
+                  <Badge variant="secondary">
+                    {getRoleDisplay(userRole || 'employee')}
+                  </Badge>
+                </div>
+              </div>
+              
+              <Button variant="outline" size="sm" onClick={signOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
+          </div>
+        </div>
+
         {/* Quick Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <StatsGrid cols={4}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Active Projects</CardTitle>
@@ -268,10 +264,10 @@ const Index = () => {
               <p className="text-xs text-muted-foreground">₹24,500 total</p>
             </CardContent>
           </Card>
-        </div>
+        </StatsGrid>
 
         {/* Charts and Analytics Section with Calendar */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Calendar Widget */}
           <div className="lg:col-span-1">
             <AgencyCalendar compact />
@@ -420,7 +416,7 @@ const Index = () => {
         </div>
 
         {/* Employee Task Progress / Upcoming Deadlines Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <ContentGrid cols={2}>
           {userRole === 'employee' ? (
             <Card>
               <CardHeader className="pb-3">
@@ -513,7 +509,7 @@ const Index = () => {
               </CardContent>
             </Card>
           )}
-        </div>
+        </ContentGrid>
 
         {/* Project Timeline Section */}
         <div className="mb-8">
@@ -790,8 +786,7 @@ const Index = () => {
             </CardContent>
           </Card>
         </div>
-      </main>
-    </div>
+    </PageContainer>
   );
 };
 

@@ -18,6 +18,13 @@ export default {
 			}
 		},
 		extend: {
+			spacing: {
+				'page-x': 'var(--page-padding-x)',
+				'page-y': 'var(--page-padding-y)',
+				'section': 'var(--section-spacing)',
+				'card': 'var(--card-padding)',
+				'grid': 'var(--grid-gap)',
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
