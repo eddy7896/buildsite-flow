@@ -646,6 +646,50 @@ export type Database = {
           },
         ]
       }
+      department_roles: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          created_at: string | null
+          department_id: string
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          created_at?: string | null
+          department_id: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          created_at?: string | null
+          department_id?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "department_roles_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       departments: {
         Row: {
           agency_id: string | null
@@ -984,6 +1028,42 @@ export type Database = {
           id?: string
           ip_address?: unknown | null
           user_agent?: string | null
+        }
+        Relationships: []
+      }
+      feature_flags: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_enabled: boolean | null
+          metadata: Json | null
+          name: string
+          required_permissions: string[] | null
+          required_roles: Database["public"]["Enums"]["app_role"][] | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          metadata?: Json | null
+          name: string
+          required_permissions?: string[] | null
+          required_roles?: Database["public"]["Enums"]["app_role"][] | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_enabled?: boolean | null
+          metadata?: Json | null
+          name?: string
+          required_permissions?: string[] | null
+          required_roles?: Database["public"]["Enums"]["app_role"][] | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -2096,6 +2176,33 @@ export type Database = {
         }
         Relationships: []
       }
+      permissions: {
+        Row: {
+          category: string
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+        }
+        Relationships: []
+      }
       plan_feature_mappings: {
         Row: {
           created_at: string
@@ -2662,6 +2769,54 @@ export type Database = {
         }
         Relationships: []
       }
+      role_change_requests: {
+        Row: {
+          approval_reason: string | null
+          approved_by: string | null
+          created_at: string | null
+          existing_role: Database["public"]["Enums"]["app_role"] | null
+          expires_at: string | null
+          id: string
+          reason: string | null
+          rejected_by: string | null
+          requested_by: string
+          requested_role: Database["public"]["Enums"]["app_role"]
+          status: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          approval_reason?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          existing_role?: Database["public"]["Enums"]["app_role"] | null
+          expires_at?: string | null
+          id?: string
+          reason?: string | null
+          rejected_by?: string | null
+          requested_by: string
+          requested_role: Database["public"]["Enums"]["app_role"]
+          status?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          approval_reason?: string | null
+          approved_by?: string | null
+          created_at?: string | null
+          existing_role?: Database["public"]["Enums"]["app_role"] | null
+          expires_at?: string | null
+          id?: string
+          reason?: string | null
+          rejected_by?: string | null
+          requested_by?: string
+          requested_role?: Database["public"]["Enums"]["app_role"]
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       role_metadata: {
         Row: {
           created_at: string | null
@@ -2694,6 +2849,38 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      role_permissions: {
+        Row: {
+          created_at: string | null
+          granted: boolean | null
+          id: string
+          permission_id: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Insert: {
+          created_at?: string | null
+          granted?: boolean | null
+          id?: string
+          permission_id: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Update: {
+          created_at?: string | null
+          granted?: boolean | null
+          id?: string
+          permission_id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_permission_id_fkey"
+            columns: ["permission_id"]
+            isOneToOne: false
+            referencedRelation: "permissions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sales_pipeline: {
         Row: {
@@ -3426,6 +3613,10 @@ export type Database = {
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_permission: {
+        Args: { permission_name: string; user_id: string }
+        Returns: boolean
       }
       has_role: {
         Args: {
