@@ -53,6 +53,9 @@ import { Reimbursements } from "./pages/Reimbursements";
 import SystemDashboard from "./pages/SystemDashboard";
 const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
 const AdvancedPermissions = React.lazy(() => import('./components/AdvancedPermissions').then(m => ({ default: m.AdvancedPermissions })));
+const AdvancedDashboard = React.lazy(() => import('./components/analytics/AdvancedDashboard').then(m => ({ default: m.AdvancedDashboard })));
+const DocumentManager = React.lazy(() => import('./components/documents/DocumentManager').then(m => ({ default: m.DocumentManager })));
+const MessageCenter = React.lazy(() => import('./components/communication/MessageCenter').then(m => ({ default: m.MessageCenter })));
 import Calendar from "./pages/Calendar";
 const HolidayManagement = React.lazy(() => import('./pages/HolidayManagement'));
 

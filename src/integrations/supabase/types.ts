@@ -3929,6 +3929,10 @@ export type Database = {
           total_taxable_value: number
         }[]
       }
+      can_access_department_data: {
+        Args: { target_user_id: string }
+        Returns: boolean
+      }
       can_access_employee_data: {
         Args: { target_user_id: string }
         Returns: boolean
