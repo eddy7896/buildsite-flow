@@ -505,6 +505,95 @@ export type Database = {
         }
         Relationships: []
       }
+      department_hierarchy: {
+        Row: {
+          agency_id: string | null
+          created_at: string
+          department_id: string
+          hierarchy_level: number
+          id: string
+          parent_department_id: string | null
+        }
+        Insert: {
+          agency_id?: string | null
+          created_at?: string
+          department_id: string
+          hierarchy_level?: number
+          id?: string
+          parent_department_id?: string | null
+        }
+        Update: {
+          agency_id?: string | null
+          created_at?: string
+          department_id?: string
+          hierarchy_level?: number
+          id?: string
+          parent_department_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "department_hierarchy_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "department_hierarchy_parent_department_id_fkey"
+            columns: ["parent_department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      departments: {
+        Row: {
+          agency_id: string | null
+          budget: number | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          manager_id: string | null
+          name: string
+          parent_department_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          agency_id?: string | null
+          budget?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          manager_id?: string | null
+          name: string
+          parent_department_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          agency_id?: string | null
+          budget?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          manager_id?: string | null
+          name?: string
+          parent_department_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "departments_parent_department_id_fkey"
+            columns: ["parent_department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_details: {
         Row: {
           address: string | null
@@ -2910,6 +2999,100 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_assignments: {
+        Row: {
+          agency_id: string | null
+          created_at: string
+          created_by: string
+          department_id: string
+          end_date: string | null
+          id: string
+          is_active: boolean | null
+          position_title: string | null
+          reporting_to: string | null
+          role_in_department: string | null
+          start_date: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agency_id?: string | null
+          created_at?: string
+          created_by?: string
+          department_id: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          position_title?: string | null
+          reporting_to?: string | null
+          role_in_department?: string | null
+          start_date?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agency_id?: string | null
+          created_at?: string
+          created_by?: string
+          department_id?: string
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          position_title?: string | null
+          reporting_to?: string | null
+          role_in_department?: string | null
+          start_date?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_assignments_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          agency_id: string | null
+          assigned_at: string
+          assigned_by: string
+          id: string
+          team_assignment_id: string
+          team_role: string | null
+          user_id: string
+        }
+        Insert: {
+          agency_id?: string | null
+          assigned_at?: string
+          assigned_by?: string
+          id?: string
+          team_assignment_id: string
+          team_role?: string | null
+          user_id: string
+        }
+        Update: {
+          agency_id?: string | null
+          assigned_at?: string
+          assigned_by?: string
+          id?: string
+          team_assignment_id?: string
+          team_role?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_team_assignment_id_fkey"
+            columns: ["team_assignment_id"]
+            isOneToOne: false
+            referencedRelation: "team_assignments"
             referencedColumns: ["id"]
           },
         ]

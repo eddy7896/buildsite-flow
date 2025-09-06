@@ -37,6 +37,7 @@ import Clients from "./pages/Clients";
 import Reports from "./pages/Reports";
 import Analytics from "./pages/Analytics";
 import ProjectManagement from "./pages/ProjectManagement";
+import DepartmentManagement from "./pages/DepartmentManagement";
 import AIFeatures from "./pages/AIFeatures";
 import CreateEmployee from "./pages/CreateEmployee";
 import AssignUserRoles from "./pages/AssignUserRoles";
@@ -290,6 +291,16 @@ const App = () => (
                 <ProtectedRoute>
                   <DashboardLayout>
                     <ProjectManagement />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/department-management" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <DepartmentManagement />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

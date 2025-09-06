@@ -84,6 +84,7 @@ const navigationItems = {
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Users', url: '/users', icon: Users },
+    { title: 'Department Management', url: '/department-management', icon: Building2 },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'Projects', url: '/projects', icon: Building },
@@ -142,6 +143,7 @@ const navigationItems = {
   hr: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
     { title: 'My Team', url: '/my-team', icon: Users2 },
+    { title: 'Department Management', url: '/department-management', icon: Building2 },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
