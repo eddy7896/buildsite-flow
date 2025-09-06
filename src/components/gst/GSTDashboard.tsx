@@ -15,11 +15,20 @@ import {
 } from 'lucide-react';
 import { useGST, GSTReturn } from '@/hooks/useGST';
 import { GSTSettingsDialog } from './GSTSettingsDialog';
-import { formatCurrency } from '@/lib/utils';
 
 export const GSTDashboard: React.FC = () => {
   const { settings, returns, liability, loading, saveSettings, fetchLiability } = useGST();
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  
+  // Simple currency formatter
+  const formatCurrency = (amount: number, currency: string = 'INR'): string => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount || 0);
+  };
   const [selectedPeriod, setSelectedPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
