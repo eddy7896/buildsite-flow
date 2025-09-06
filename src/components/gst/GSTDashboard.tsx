@@ -15,9 +15,11 @@ import {
 } from 'lucide-react';
 import { useGST, GSTReturn } from '@/hooks/useGST';
 import { GSTSettingsDialog } from './GSTSettingsDialog';
+import { useAuth } from '@/hooks/useAuth';
 
 export const GSTDashboard: React.FC = () => {
-  const { settings, returns, liability, loading, saveSettings, fetchLiability } = useGST();
+  const { settings, returns, liability, loading, saveSettings, fetchLiability, isAuthenticated } = useGST();
+  const { user, loading: authLoading } = useAuth();
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   
   // Simple currency formatter
@@ -35,13 +37,14 @@ export const GSTDashboard: React.FC = () => {
   });
 
   React.useEffect(() => {
-    if (selectedPeriod) {
+    // Only fetch liability if user is authenticated and has selected a period
+    if (isAuthenticated && selectedPeriod) {
       const [year, month] = selectedPeriod.split('-');
       const startDate = `${year}-${month}-01`;
       const endDate = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0];
       fetchLiability(startDate, endDate);
     }
-  }, [selectedPeriod, fetchLiability]);
+  }, [selectedPeriod, fetchLiability, isAuthenticated]);
 
   const getStatusColor = (status: GSTReturn['status']) => {
     switch (status) {
@@ -60,6 +63,27 @@ export const GSTDashboard: React.FC = () => {
       default: return <FileText className="h-4 w-4" />;
     }
   };
+
+  // Show loading state while auth is loading or GST data is loading
+  if (authLoading || loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Show authentication required message if user is not authenticated
+  if (!user || !isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <h2 className="text-lg font-semibold mb-2">Authentication Required</h2>
+          <p className="text-muted-foreground">Please log in to access GST compliance features.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!settings) {
     return (

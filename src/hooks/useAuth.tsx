@@ -14,6 +14,7 @@ interface Profile {
   hire_date: string | null;
   avatar_url: string | null;
   is_active: boolean;
+  agency_id: string;
 }
 
 interface UserRole {
