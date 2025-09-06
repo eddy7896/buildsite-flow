@@ -246,9 +246,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(mockSession.user as any);
         setSession(mockSession as any);
         
-        // Fetch profile and role from existing database records
-        await fetchUserProfile(mockUser.userId);
-        await fetchUserRole(mockUser.userId);
+        // Create mock profile data instead of fetching from database
+        const mockProfile = {
+          id: `profile-${mockUser.userId}`,
+          user_id: mockUser.userId,
+          full_name: mockUser.fullName,
+          phone: null,
+          department: null,
+          position: null,
+          hire_date: null,
+          avatar_url: null,
+          is_active: true,
+          agency_id: '00000000-0000-0000-0000-000000000001' // Mock agency ID
+        };
+        
+        setProfile(mockProfile);
+        setUserRole(mockUser.role);
 
         toast({
           title: "Mock login successful",

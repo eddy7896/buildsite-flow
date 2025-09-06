@@ -49,7 +49,7 @@ export const useGST = () => {
 
   const fetchSettings = async () => {
     if (!user || !profile?.agency_id) {
-      console.log('Cannot fetch GST settings: user not authenticated or no agency_id');
+      console.log('Cannot fetch GST settings: user not authenticated or no agency_id', { user: !!user, agencyId: profile?.agency_id });
       return;
     }
 
@@ -78,7 +78,7 @@ export const useGST = () => {
 
   const fetchReturns = async () => {
     if (!user || !profile?.agency_id) {
-      console.log('Cannot fetch GST returns: user not authenticated or no agency_id');
+      console.log('Cannot fetch GST returns: user not authenticated or no agency_id', { user: !!user, agencyId: profile?.agency_id });
       return;
     }
 
@@ -182,7 +182,9 @@ export const useGST = () => {
 
   useEffect(() => {
     // Only fetch data when user is authenticated and profile is loaded
+    console.log('GST useEffect triggered:', { authLoading, user: !!user, agencyId: profile?.agency_id });
     if (!authLoading && user && profile?.agency_id) {
+      console.log('Fetching GST data for agency:', profile.agency_id);
       fetchSettings();
       fetchReturns();
     }
