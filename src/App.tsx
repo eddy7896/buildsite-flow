@@ -28,6 +28,7 @@ import Payroll from "./pages/Payroll";
 import Invoices from "./pages/Invoices";
 import Payments from "./pages/Payments";
 import Receipts from "./pages/Receipts";
+import MyTeam from "./pages/MyTeam";
 import MyProfile from "./pages/MyProfile";
 import MyAttendance from "./pages/MyAttendance";
 import MyLeave from "./pages/MyLeave";
@@ -89,6 +90,16 @@ const App = () => (
                 <ProtectedRoute>
                   <DashboardLayout>
                     <Index />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/my-team" 
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <MyTeam />
                   </DashboardLayout>
                 </ProtectedRoute>
               } 

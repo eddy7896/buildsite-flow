@@ -46,6 +46,7 @@ const navigationItems = {
   ],
   ceo: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Strategic Reports', url: '/reports', icon: ChartLine },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Financial Management', url: '/financial-management', icon: Calculator },
@@ -54,12 +55,14 @@ const navigationItems = {
   ],
   cto: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Reports', url: '/reports', icon: ChartLine },
   ],
   cfo: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Financial Management', url: '/financial-management', icon: Calculator },
     { title: 'Payroll', url: '/payroll', icon: Calculator },
     { title: 'Invoices', url: '/invoices', icon: FileText },
@@ -68,6 +71,7 @@ const navigationItems = {
   ],
   coo: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
     { title: 'Projects', url: '/projects', icon: Building },
@@ -77,6 +81,7 @@ const navigationItems = {
   // Management Level
   admin: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Users', url: '/users', icon: Users },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
@@ -95,6 +100,7 @@ const navigationItems = {
   ],
   operations_manager: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
     { title: 'Projects', url: '/projects', icon: Building },
@@ -103,7 +109,7 @@ const navigationItems = {
   ],
   department_head: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Team Members', url: '/employees', icon: UserCheck },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'Attendance', url: '/attendance', icon: Clock },
     { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
@@ -111,7 +117,7 @@ const navigationItems = {
   ],
   team_lead: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'My Team', url: '/employees', icon: UserCheck },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
@@ -119,6 +125,7 @@ const navigationItems = {
   ],
   project_manager: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'My Profile', url: '/my-profile', icon: User },
@@ -129,6 +136,7 @@ const navigationItems = {
   // Specialized Roles
   hr: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Attendance', url: '/attendance', icon: Clock },
@@ -141,6 +149,7 @@ const navigationItems = {
   ],
   finance_manager: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Employees', url: '/employees', icon: UserCheck },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'Payroll', url: '/payroll', icon: Calculator },
@@ -158,6 +167,7 @@ const navigationItems = {
   ],
   sales_manager: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'Quotations', url: '/quotations', icon: FileCheck },
@@ -166,6 +176,7 @@ const navigationItems = {
   ],
   marketing_manager: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'CRM', url: '/crm', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'Reports', url: '/reports', icon: ChartLine },
@@ -173,30 +184,35 @@ const navigationItems = {
   ],
   quality_assurance: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'My Profile', url: '/my-profile', icon: User },
   ],
   it_support: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Users', url: '/users', icon: Users },
     { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'My Profile', url: '/my-profile', icon: User },
   ],
   legal_counsel: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'My Profile', url: '/my-profile', icon: User },
   ],
   business_analyst: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Reports', url: '/reports', icon: ChartLine },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'My Profile', url: '/my-profile', icon: User },
   ],
   customer_success: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'Clients', url: '/clients', icon: Building2 },
     { title: 'Projects', url: '/projects', icon: Building },
     { title: 'My Profile', url: '/my-profile', icon: User },
@@ -205,6 +221,7 @@ const navigationItems = {
   // General Staff
   employee: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'My Projects', url: '/my-projects', icon: Briefcase },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
@@ -213,12 +230,14 @@ const navigationItems = {
   ],
   contractor: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'My Projects', url: '/my-projects', icon: Briefcase },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
   ],
   intern: [
     { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
+    { title: 'My Team', url: '/my-team', icon: Users2 },
     { title: 'My Projects', url: '/my-projects', icon: Briefcase },
     { title: 'My Profile', url: '/my-profile', icon: User },
     { title: 'My Attendance', url: '/my-attendance', icon: Clock },
