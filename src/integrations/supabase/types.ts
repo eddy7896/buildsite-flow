@@ -1073,6 +1073,7 @@ export type Database = {
           marital_status: string | null
           nationality: string | null
           notes: string | null
+          phone: string | null
           skills: Json | null
           social_security_number: string | null
           supervisor_id: string | null
@@ -1098,6 +1099,7 @@ export type Database = {
           marital_status?: string | null
           nationality?: string | null
           notes?: string | null
+          phone?: string | null
           skills?: Json | null
           social_security_number?: string | null
           supervisor_id?: string | null
@@ -1123,6 +1125,7 @@ export type Database = {
           marital_status?: string | null
           nationality?: string | null
           notes?: string | null
+          phone?: string | null
           skills?: Json | null
           social_security_number?: string | null
           supervisor_id?: string | null
@@ -2968,10 +2971,61 @@ export type Database = {
           },
         ]
       }
+      reimbursement_payments: {
+        Row: {
+          agency_id: string | null
+          amount: number
+          created_at: string | null
+          id: string
+          notes: string | null
+          payment_method: string
+          payment_reference: string | null
+          processed_at: string | null
+          processed_by: string | null
+          reimbursement_id: string
+          stripe_payment_intent_id: string | null
+        }
+        Insert: {
+          agency_id?: string | null
+          amount: number
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          payment_reference?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          reimbursement_id: string
+          stripe_payment_intent_id?: string | null
+        }
+        Update: {
+          agency_id?: string | null
+          amount?: number
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          payment_reference?: string | null
+          processed_at?: string | null
+          processed_by?: string | null
+          reimbursement_id?: string
+          stripe_payment_intent_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reimbursement_payments_reimbursement_id_fkey"
+            columns: ["reimbursement_id"]
+            isOneToOne: false
+            referencedRelation: "reimbursement_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reimbursement_requests: {
         Row: {
           agency_id: string | null
           amount: number
+          approved_amount: number | null
           business_purpose: string | null
           category_id: string
           created_at: string
@@ -2985,7 +3039,9 @@ export type Database = {
           mileage_amount: number | null
           mileage_distance: number | null
           mileage_rate: number | null
+          paid_at: string | null
           payment_date: string | null
+          payment_reference: string | null
           policy_violation: string | null
           receipt_required: boolean | null
           rejection_reason: string | null
@@ -2998,6 +3054,7 @@ export type Database = {
         Insert: {
           agency_id?: string | null
           amount: number
+          approved_amount?: number | null
           business_purpose?: string | null
           category_id: string
           created_at?: string
@@ -3011,7 +3068,9 @@ export type Database = {
           mileage_amount?: number | null
           mileage_distance?: number | null
           mileage_rate?: number | null
+          paid_at?: string | null
           payment_date?: string | null
+          payment_reference?: string | null
           policy_violation?: string | null
           receipt_required?: boolean | null
           rejection_reason?: string | null
@@ -3024,6 +3083,7 @@ export type Database = {
         Update: {
           agency_id?: string | null
           amount?: number
+          approved_amount?: number | null
           business_purpose?: string | null
           category_id?: string
           created_at?: string
@@ -3037,7 +3097,9 @@ export type Database = {
           mileage_amount?: number | null
           mileage_distance?: number | null
           mileage_rate?: number | null
+          paid_at?: string | null
           payment_date?: string | null
+          payment_reference?: string | null
           policy_violation?: string | null
           receipt_required?: boolean | null
           rejection_reason?: string | null
@@ -4114,6 +4176,14 @@ export type Database = {
         Returns: boolean
       }
       validate_expense_policy: {
+        Args: {
+          p_amount: number
+          p_category_id: string
+          p_has_receipt?: boolean
+        }
+        Returns: Json
+      }
+      validate_reimbursement_policy: {
         Args: {
           p_amount: number
           p_category_id: string
