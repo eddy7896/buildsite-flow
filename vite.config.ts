@@ -32,5 +32,15 @@ export default defineConfig(({ mode }) => ({
       },
     },
     chunkSizeWarningLimit: 1000,
+    cssCodeSplit: true,
+    cssMinify: true,
+  },
+  css: {
+    devSourcemap: true,
+    preprocessorOptions: {
+      css: {
+        charset: false,
+      },
+    },
   },
 }));
