@@ -34,41 +34,16 @@ const Employees = () => {
     try {
       setLoading(true);
       
-      // Query employee basic info using the secure view (excludes SSN)
-      const { data: employeeData, error: employeeError } = await supabase
-        .from('employee_basic_info')
-        .select(`
-          id,
-          user_id,
-          employee_id,
-          first_name,
-          last_name,
-          phone,
-          employment_type,
-          is_active,
-          created_at
-        `)
-        .order('first_name', { ascending: true });
+      // Use the secure function that excludes SSN data
+      const { data: employeeData, error: employeeError } = await supabase.rpc('list_employees_secure');
       
-      // Get additional profile data for department and position
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('user_id, department, position, hire_date');
-
       if (employeeError) {
+        console.error('Employee fetch error:', employeeError);
         throw employeeError;
       }
-      
-      if (profileError) {
-        throw profileError;
-      }
-
-      // Create a map of user profiles for quick lookup
-      const profileMap = new Map(profileData?.map(profile => [profile.user_id, profile]) || []);
 
       // Transform the data to match our interface
       const transformedEmployees: Employee[] = employeeData?.map((emp: any) => {
-        const profile = profileMap.get(emp.user_id);
         return {
           id: emp.id,
           user_id: emp.user_id,
@@ -77,10 +52,10 @@ const Employees = () => {
           last_name: emp.last_name,
           email: `${emp.first_name.toLowerCase()}.${emp.last_name.toLowerCase()}@company.com`,
           phone: emp.phone,
-          department: profile?.department,
-          position: profile?.position,
+          department: emp.department,
+          position: emp.emp_position,
           is_active: emp.is_active,
-          hire_date: profile?.hire_date,
+          hire_date: emp.hire_date,
           employment_type: emp.employment_type
         };
       }) || [];
