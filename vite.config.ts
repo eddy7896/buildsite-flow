@@ -29,11 +29,19 @@ export default defineConfig(({ mode }) => ({
           forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
           supabase: ['@supabase/supabase-js', '@tanstack/react-query'],
         },
+        // Generate content-hashed filenames for better caching
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]',
       },
     },
     chunkSizeWarningLimit: 1000,
     cssCodeSplit: true,
     cssMinify: true,
+    // Enable source maps for production debugging while maintaining performance
+    sourcemap: false,
+    // Optimize asset inlining threshold
+    assetsInlineLimit: 4096,
   },
   css: {
     devSourcemap: true,
