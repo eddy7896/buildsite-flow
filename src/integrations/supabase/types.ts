@@ -4176,6 +4176,10 @@ export type Database = {
         Args: { employee_user_id: string }
         Returns: string
       }
+      get_employee_ssn_authorized: {
+        Args: { employee_user_id: string }
+        Returns: string
+      }
       get_leave_balance_summary: {
         Args: { p_employee_id?: string; p_year?: number }
         Returns: {
