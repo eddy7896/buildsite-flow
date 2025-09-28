@@ -38,8 +38,8 @@ export default defineConfig(({ mode }) => ({
     chunkSizeWarningLimit: 1000,
     cssCodeSplit: true,
     cssMinify: true,
-    // Enable source maps for production debugging while maintaining performance
-    sourcemap: false,
+    // Enable source maps for better debugging and SEO insights
+    sourcemap: true,
     // Optimize asset inlining threshold
     assetsInlineLimit: 4096,
   },
