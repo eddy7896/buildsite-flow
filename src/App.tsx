@@ -11,53 +11,71 @@ import { AgencyHeader } from "@/components/AgencyHeader";
 import { AuthRedirect } from "@/components/AuthRedirect";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import Index from "./pages/Index";
-import Landing from "./pages/Landing";
-import Pricing from "./pages/Pricing";
-import Auth from "./pages/Auth";
-import SignupSuccess from "./pages/SignupSuccess";
-import AgencyDashboard from "./pages/AgencyDashboard";
-import SignUp from "./pages/SignUp";
-import NotFound from "./pages/NotFound";
-import Users from "./pages/Users";
-import Projects from "./pages/Projects";
-import Settings from "./pages/Settings";
-import Employees from "./pages/Employees";
-import Attendance from "./pages/Attendance";
-import LeaveRequests from "./pages/LeaveRequests";
-import Payroll from "./pages/Payroll";
-import Invoices from "./pages/Invoices";
-import Payments from "./pages/Payments";
-import Receipts from "./pages/Receipts";
-import MyTeam from "./pages/MyTeam";
-import MyProfile from "./pages/MyProfile";
-import MyAttendance from "./pages/MyAttendance";
-import MyLeave from "./pages/MyLeave";
-import Ledger from "./pages/Ledger";
-import Clients from "./pages/Clients";
-import Reports from "./pages/Reports";
-import Analytics from "./pages/Analytics";
-import ProjectManagement from "./pages/ProjectManagement";
-import DepartmentManagement from "./pages/DepartmentManagement";
-import AIFeatures from "./pages/AIFeatures";
-import CreateEmployee from "./pages/CreateEmployee";
-import AssignUserRoles from "./pages/AssignUserRoles";
-import JobCosting from "./pages/JobCosting";
-import Quotations from "./pages/Quotations";
-import CRM from "./pages/CRM";
-import Accounting from "./pages/Accounting";
-import FinancialManagement from "./pages/FinancialManagement";
-import GstCompliance from "./pages/GstCompliance";
-import EmployeeProjects from "./pages/EmployeeProjects";
-import { Reimbursements } from "./pages/Reimbursements";
-import SystemDashboard from "./pages/SystemDashboard";
+
+// Lazy load all page components for better code splitting
+const Index = React.lazy(() => import("./pages/Index"));
+const Landing = React.lazy(() => import("./pages/Landing"));
+const Pricing = React.lazy(() => import("./pages/Pricing"));
+const Auth = React.lazy(() => import("./pages/Auth"));
+const SignupSuccess = React.lazy(() => import("./pages/SignupSuccess"));
+const AgencyDashboard = React.lazy(() => import("./pages/AgencyDashboard"));
+const SignUp = React.lazy(() => import("./pages/SignUp"));
+const NotFound = React.lazy(() => import("./pages/NotFound"));
+const Users = React.lazy(() => import("./pages/Users"));
+const Projects = React.lazy(() => import("./pages/Projects"));
+const Settings = React.lazy(() => import("./pages/Settings"));
+const Employees = React.lazy(() => import("./pages/Employees"));
+const Attendance = React.lazy(() => import("./pages/Attendance"));
+const LeaveRequests = React.lazy(() => import("./pages/LeaveRequests"));
+const Payroll = React.lazy(() => import("./pages/Payroll"));
+const Invoices = React.lazy(() => import("./pages/Invoices"));
+const Payments = React.lazy(() => import("./pages/Payments"));
+const Receipts = React.lazy(() => import("./pages/Receipts"));
+const MyTeam = React.lazy(() => import("./pages/MyTeam"));
+const MyProfile = React.lazy(() => import("./pages/MyProfile"));
+const MyAttendance = React.lazy(() => import("./pages/MyAttendance"));
+const MyLeave = React.lazy(() => import("./pages/MyLeave"));
+const Ledger = React.lazy(() => import("./pages/Ledger"));
+const Clients = React.lazy(() => import("./pages/Clients"));
+const Reports = React.lazy(() => import("./pages/Reports"));
+const Analytics = React.lazy(() => import("./pages/Analytics"));
+const ProjectManagement = React.lazy(() => import("./pages/ProjectManagement"));
+const DepartmentManagement = React.lazy(() => import("./pages/DepartmentManagement"));
+const AIFeatures = React.lazy(() => import("./pages/AIFeatures"));
+const CreateEmployee = React.lazy(() => import("./pages/CreateEmployee"));
+const AssignUserRoles = React.lazy(() => import("./pages/AssignUserRoles"));
+const JobCosting = React.lazy(() => import("./pages/JobCosting"));
+const Quotations = React.lazy(() => import("./pages/Quotations"));
+const CRM = React.lazy(() => import("./pages/CRM"));
+const Accounting = React.lazy(() => import("./pages/Accounting"));
+const FinancialManagement = React.lazy(() => import("./pages/FinancialManagement"));
+const GstCompliance = React.lazy(() => import("./pages/GstCompliance"));
+const EmployeeProjects = React.lazy(() => import("./pages/EmployeeProjects"));
+const Reimbursements = React.lazy(() => import("./pages/Reimbursements").then(m => ({ default: m.Reimbursements })));
+const SystemDashboard = React.lazy(() => import("./pages/SystemDashboard"));
+const Calendar = React.lazy(() => import("./pages/Calendar"));
+const HolidayManagement = React.lazy(() => import('./pages/HolidayManagement'));
+
+// Lazy load component modules
 const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
 const AdvancedPermissions = React.lazy(() => import('./components/AdvancedPermissions').then(m => ({ default: m.AdvancedPermissions })));
 const AdvancedDashboard = React.lazy(() => import('./components/analytics/AdvancedDashboard').then(m => ({ default: m.AdvancedDashboard })));
 const DocumentManager = React.lazy(() => import('./components/documents/DocumentManager').then(m => ({ default: m.DocumentManager })));
 const MessageCenter = React.lazy(() => import('./components/communication/MessageCenter').then(m => ({ default: m.MessageCenter })));
-import Calendar from "./pages/Calendar";
-const HolidayManagement = React.lazy(() => import('./pages/HolidayManagement'));
+
+// Loading fallback component
+const LoadingFallback = () => (
+  <div className="flex items-center justify-center p-8">
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+  </div>
+);
+
+// Suspense wrapper utility
+const SuspenseRoute = ({ children }: { children: React.ReactNode }) => (
+  <React.Suspense fallback={<LoadingFallback />}>
+    {children}
+  </React.Suspense>
+);
 
 const queryClient = new QueryClient();
 
@@ -88,426 +106,468 @@ const App = () => (
           <BrowserRouter>
             <AuthRedirect />
             <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/signup" element={<SignUp />} />
-            <Route path="/signup-success" element={<SignupSuccess />} />
-            <Route 
-              path="/dashboard" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Index />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/my-team" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <MyTeam />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/project-management" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <ProjectManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/users" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <DashboardLayout>
-                    <Users />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/projects" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <DashboardLayout>
-                    <Projects />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/settings" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Settings />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/employees" 
-              element={
-                <ProtectedRoute requiredRole="hr">
-                  <DashboardLayout>
-                    <Employees />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/attendance" 
-              element={
-                <ProtectedRoute requiredRole="hr">
-                  <DashboardLayout>
-                    <Attendance />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/leave-requests" 
-              element={
-                <ProtectedRoute requiredRole="hr">
-                  <DashboardLayout>
-                    <LeaveRequests />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/payroll" 
-              element={
-                <ProtectedRoute requiredRole="finance_manager">
-                  <DashboardLayout>
-                    <Payroll />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/invoices" 
-              element={
-                <ProtectedRoute requiredRole="finance_manager">
-                  <DashboardLayout>
-                    <Invoices />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/payments" 
-              element={
-                <ProtectedRoute requiredRole="finance_manager">
-                  <DashboardLayout>
-                    <Payments />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/receipts" 
-              element={
-                <ProtectedRoute requiredRole="finance_manager">
-                  <DashboardLayout>
-                    <Receipts />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/my-profile" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <MyProfile />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/my-attendance" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <MyAttendance />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/my-leave" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <MyLeave />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/ledger" 
-              element={
-                <ProtectedRoute requiredRole="finance_manager">
-                  <DashboardLayout>
-                    <Ledger />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/clients" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Clients />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/reports" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <DashboardLayout>
-                    <Reports />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/analytics" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <DashboardLayout>
-                    <Analytics />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/project-management" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <ProjectManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/department-management" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <DepartmentManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/ai-features" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <AIFeatures />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/create-employee" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <DashboardLayout>
-                    <CreateEmployee />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/assign-user-roles" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <DashboardLayout>
-                    <AssignUserRoles />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/jobs" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <JobCosting />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/quotations" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Quotations />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/crm" 
-              element={
-                <ProtectedRoute requiredRole="hr">
-                  <DashboardLayout>
-                    <CRM />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/calendar" 
-              element={
-                <ProtectedRoute requiredRole="hr">
-                  <DashboardLayout>
-                    <Calendar />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/accounting" 
-              element={
-                <ProtectedRoute requiredRole="finance_manager">
-                  <DashboardLayout>
-                    <Accounting />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/financial-management" 
-              element={
-                <ProtectedRoute requiredRole="finance_manager">
-                  <DashboardLayout>
-                    <FinancialManagement />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/gst-compliance" 
-              element={
-                <ProtectedRoute requiredRole="finance_manager">
-                  <DashboardLayout>
-                    <GstCompliance />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/my-projects" 
-              element={
-                <ProtectedRoute requiredRole="employee">
-                  <DashboardLayout>
-                    <EmployeeProjects />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/reimbursements" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Reimbursements />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/calendar" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <Calendar />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/holiday-management" 
-              element={
-                <ProtectedRoute requiredRole="hr">
-                  <DashboardLayout>
-                    <React.Suspense fallback={<div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-                      <HolidayManagement />
-                    </React.Suspense>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route
-              path="/agency" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <DashboardLayout>
-                    <AgencyDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/system" 
-              element={
-                <ProtectedRoute requiredRole="super_admin">
-                  <DashboardLayout>
-                    <SystemDashboard />
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/role-requests" 
-              element={
-                <ProtectedRoute requiredRole="hr">
-                  <DashboardLayout>
-                    <React.Suspense fallback={<div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-                      <RoleChangeRequests />
-                    </React.Suspense>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/permissions" 
-              element={
-                <ProtectedRoute>
-                  <DashboardLayout>
-                    <React.Suspense fallback={<div className="flex items-center justify-center p-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>}>
-                      <AdvancedPermissions />
-                    </React.Suspense>
-                  </DashboardLayout>
-                </ProtectedRoute>
-              } 
-            />
-            {/* Redirect old agency signup route to new unified signup */}
-            <Route path="/agency-signup" element={<Navigate to="/signup" replace />} />
-            
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </ErrorBoundary>
+              <Route path="/" element={<SuspenseRoute><Landing /></SuspenseRoute>} />
+              <Route path="/pricing" element={<SuspenseRoute><Pricing /></SuspenseRoute>} />
+              <Route path="/auth" element={<SuspenseRoute><Auth /></SuspenseRoute>} />
+              <Route path="/signup" element={<SuspenseRoute><SignUp /></SuspenseRoute>} />
+              <Route path="/signup-success" element={<SuspenseRoute><SignupSuccess /></SuspenseRoute>} />
+              
+              <Route 
+                path="/dashboard" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><Index /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/my-team" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><MyTeam /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/project-management" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProjectManagement /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/users" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><Users /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/projects" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><Projects /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/settings" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><Settings /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/employees" 
+                element={
+                  <ProtectedRoute requiredRole="hr">
+                    <DashboardLayout>
+                      <SuspenseRoute><Employees /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/attendance" 
+                element={
+                  <ProtectedRoute requiredRole="hr">
+                    <DashboardLayout>
+                      <SuspenseRoute><Attendance /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/leave-requests" 
+                element={
+                  <ProtectedRoute requiredRole="hr">
+                    <DashboardLayout>
+                      <SuspenseRoute><LeaveRequests /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/payroll" 
+                element={
+                  <ProtectedRoute requiredRole="finance_manager">
+                    <DashboardLayout>
+                      <SuspenseRoute><Payroll /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/invoices" 
+                element={
+                  <ProtectedRoute requiredRole="finance_manager">
+                    <DashboardLayout>
+                      <SuspenseRoute><Invoices /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/payments" 
+                element={
+                  <ProtectedRoute requiredRole="finance_manager">
+                    <DashboardLayout>
+                      <SuspenseRoute><Payments /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/receipts" 
+                element={
+                  <ProtectedRoute requiredRole="finance_manager">
+                    <DashboardLayout>
+                      <SuspenseRoute><Receipts /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/my-profile" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><MyProfile /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/my-attendance" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><MyAttendance /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/my-leave" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><MyLeave /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/ledger" 
+                element={
+                  <ProtectedRoute requiredRole="finance_manager">
+                    <DashboardLayout>
+                      <SuspenseRoute><Ledger /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/clients" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><Clients /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/reports" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><Reports /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/analytics" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><Analytics /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/department-management" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><DepartmentManagement /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/ai-features" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><AIFeatures /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/create-employee" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><CreateEmployee /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/assign-user-roles" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><AssignUserRoles /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/jobs" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><JobCosting /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/quotations" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><Quotations /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/crm" 
+                element={
+                  <ProtectedRoute requiredRole="hr">
+                    <DashboardLayout>
+                      <SuspenseRoute><CRM /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/calendar" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><Calendar /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/accounting" 
+                element={
+                  <ProtectedRoute requiredRole="finance_manager">
+                    <DashboardLayout>
+                      <SuspenseRoute><Accounting /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/financial-management" 
+                element={
+                  <ProtectedRoute requiredRole="finance_manager">
+                    <DashboardLayout>
+                      <SuspenseRoute><FinancialManagement /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/gst-compliance" 
+                element={
+                  <ProtectedRoute requiredRole="finance_manager">
+                    <DashboardLayout>
+                      <SuspenseRoute><GstCompliance /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/my-projects" 
+                element={
+                  <ProtectedRoute requiredRole="employee">
+                    <DashboardLayout>
+                      <SuspenseRoute><EmployeeProjects /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/reimbursements" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><Reimbursements /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/holiday-management" 
+                element={
+                  <ProtectedRoute requiredRole="hr">
+                    <DashboardLayout>
+                      <SuspenseRoute><HolidayManagement /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route
+                path="/agency" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><AgencyDashboard /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/system" 
+                element={
+                  <ProtectedRoute requiredRole="super_admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><SystemDashboard /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/role-requests" 
+                element={
+                  <ProtectedRoute requiredRole="hr">
+                    <DashboardLayout>
+                      <SuspenseRoute><RoleChangeRequests /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/permissions" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><AdvancedPermissions /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/advanced-dashboard" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><AdvancedDashboard /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/documents" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><DocumentManager /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/messages" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><MessageCenter /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route path="*" element={<SuspenseRoute><NotFound /></SuspenseRoute>} />
+            </Routes>
+          </BrowserRouter>
+        </AuthProvider>
+      </ErrorBoundary>
     </TooltipProvider>
   </QueryClientProvider>
 );
