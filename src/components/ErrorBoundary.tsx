@@ -3,6 +3,7 @@ import { AlertTriangle, RefreshCw, Home, Shield, Wifi, WifiOff } from 'lucide-re
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ROUTES, ERROR_TYPES, RETRY_CONFIG } from '@/constants';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -101,7 +102,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   };
 
   handleGoHome = () => {
-    window.location.href = '/';
+    window.location.href = ROUTES.HOME;
   };
 
   renderErrorContent() {
@@ -188,7 +189,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
               {errorType === 'auth' ? (
                 <Button 
-                  onClick={() => window.location.href = '/auth'} 
+                  onClick={() => window.location.href = ROUTES.AUTH} 
                   className="w-full"
                   variant="outline"
                 >
