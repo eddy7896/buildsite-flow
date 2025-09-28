@@ -1182,6 +1182,13 @@ export type Database = {
             foreignKeyName: "employee_files_employee_id_fkey"
             columns: ["employee_id"]
             isOneToOne: false
+            referencedRelation: "employee_basic_info"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_files_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
             referencedRelation: "employee_details"
             referencedColumns: ["id"]
           },
@@ -3977,7 +3984,95 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      employee_basic_info: {
+        Row: {
+          address: string | null
+          agency_id: string | null
+          created_at: string | null
+          created_by: string | null
+          date_of_birth: string | null
+          emergency_contact_name: string | null
+          emergency_contact_phone: string | null
+          emergency_contact_relationship: string | null
+          employee_id: string | null
+          employment_type: string | null
+          first_name: string | null
+          id: string | null
+          is_active: boolean | null
+          last_name: string | null
+          marital_status: string | null
+          nationality: string | null
+          notes: string | null
+          phone: string | null
+          skills: Json | null
+          social_security_number: string | null
+          supervisor_id: string | null
+          updated_at: string | null
+          user_id: string | null
+          work_location: string | null
+        }
+        Insert: {
+          address?: string | null
+          agency_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          date_of_birth?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          emergency_contact_relationship?: string | null
+          employee_id?: string | null
+          employment_type?: string | null
+          first_name?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          last_name?: string | null
+          marital_status?: string | null
+          nationality?: string | null
+          notes?: string | null
+          phone?: string | null
+          skills?: Json | null
+          social_security_number?: never
+          supervisor_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          work_location?: string | null
+        }
+        Update: {
+          address?: string | null
+          agency_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          date_of_birth?: string | null
+          emergency_contact_name?: string | null
+          emergency_contact_phone?: string | null
+          emergency_contact_relationship?: string | null
+          employee_id?: string | null
+          employment_type?: string | null
+          first_name?: string | null
+          id?: string | null
+          is_active?: boolean | null
+          last_name?: string | null
+          marital_status?: string | null
+          nationality?: string | null
+          notes?: string | null
+          phone?: string | null
+          skills?: Json | null
+          social_security_number?: never
+          supervisor_id?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+          work_location?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_details_agency_id_fkey"
+            columns: ["agency_id"]
+            isOneToOne: false
+            referencedRelation: "agencies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       calculate_gst_liability: {
@@ -4130,6 +4225,23 @@ export type Database = {
         Returns: boolean
       }
       list_employees: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          department: string
+          emp_position: string
+          employee_id: string
+          employment_type: string
+          first_name: string
+          full_name: string
+          hire_date: string
+          id: string
+          is_active: boolean
+          last_name: string
+          phone: string
+          user_id: string
+        }[]
+      }
+      list_employees_secure: {
         Args: Record<PropertyKey, never>
         Returns: {
           department: string
