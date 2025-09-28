@@ -63,7 +63,7 @@ const SignupSuccess = () => {
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
-            <Link to="/" className="flex items-center gap-2">
+            <Link to="/" className="flex items-center gap-2" aria-label="BuildFlow Home">
               <Building className="h-8 w-8 text-primary" />
               <span className="text-xl font-bold">BuildFlow</span>
             </Link>
