@@ -1,6 +1,6 @@
-import { supabase } from '@/integrations/supabase/client';
 import { TIMEOUT_CONFIG, RETRY_CONFIG, ERROR_MESSAGES } from '@/constants';
 import { useAppStore } from '@/stores/appStore';
+import { pgClient } from '@/integrations/postgresql/client';
 
 export interface ApiResponse<T = any> {
   data: T | null;
@@ -76,7 +76,7 @@ export class BaseApiService {
   }
 
   protected static async execute<T>(
-    operation: () => Promise<{ data: T; error: any }>,
+    operation: () => Promise<T>,
     options: ApiOptions = {}
   ): Promise<ApiResponse<T>> {
     const { setLoading, addNotification } = useAppStore.getState();
@@ -91,34 +91,15 @@ export class BaseApiService {
         options.timeout
       );
 
-      if (result.error) {
-        const errorMessage = this.formatError(result.error);
-        
-        if (options.showErrorToast) {
-          addNotification({
-            type: 'error',
-            title: 'Operation Failed',
-            message: errorMessage,
-            priority: 'high'
-          });
-        }
-
-        return {
-          data: null,
-          error: errorMessage,
-          success: false
-        };
-      }
-
       return {
-        data: result.data,
+        data: result,
         error: null,
         success: true
       };
     } catch (error) {
       const errorMessage = error instanceof ApiError 
         ? error.message 
-        : ERROR_MESSAGES.SERVER_ERROR;
+        : (error as any)?.message || ERROR_MESSAGES.SERVER_ERROR;
 
       if (options.showErrorToast) {
         addNotification({
@@ -141,27 +122,7 @@ export class BaseApiService {
     }
   }
 
-  private static formatError(error: any): string {
-    if (typeof error === 'string') {
-      return error;
-    }
-
-    if (error?.message) {
-      return error.message;
-    }
-
-    if (error?.error_description) {
-      return error.error_description;
-    }
-
-    if (error?.details) {
-      return error.details;
-    }
-
-    return ERROR_MESSAGES.SERVER_ERROR;
-  }
-
-  // Simplified Supabase helpers - avoiding complex generic constraints
+  // PostgreSQL query helpers
   protected static async query<T = any>(
     table: string,
     options: {
@@ -174,31 +135,45 @@ export class BaseApiService {
     apiOptions: ApiOptions = {}
   ): Promise<ApiResponse<T>> {
     return this.execute(async () => {
-      let query = (supabase as any).from(table).select(options.select || '*');
+      const columns = options.select || '*';
+      let query = `SELECT ${columns} FROM ${table}`;
+      const params: any[] = [];
+      let paramIndex = 1;
 
-      if (options.filters) {
-        Object.entries(options.filters).forEach(([key, value]) => {
-          if (value !== undefined && value !== null) {
-            query = query.eq(key, value);
-          }
-        });
+      // Add filters
+      if (options.filters && Object.keys(options.filters).length > 0) {
+        const conditions = Object.entries(options.filters)
+          .filter(([, value]) => value !== undefined && value !== null)
+          .map(([key]) => `${key} = $${paramIndex++}`)
+          .join(' AND ');
+
+        if (conditions) {
+          query += ` WHERE ${conditions}`;
+          Object.values(options.filters).forEach((value) => {
+            if (value !== undefined && value !== null) {
+              params.push(value);
+            }
+          });
+        }
       }
 
+      // Add ordering
       if (options.orderBy) {
-        query = query.order(options.orderBy.column, { 
-          ascending: options.orderBy.ascending ?? true 
-        });
+        query += ` ORDER BY ${options.orderBy.column} ${options.orderBy.ascending ? 'ASC' : 'DESC'}`;
       }
 
+      // Add limit
       if (options.limit) {
-        query = query.limit(options.limit);
+        query += ` LIMIT ${options.limit}`;
       }
 
+      const result = await pgClient.query(query, params);
+      
       if (options.single) {
-        return await query.maybeSingle();
+        return result.rows[0] || null;
       }
 
-      return await query;
+      return result.rows as T[];
     }, apiOptions);
   }
 
@@ -208,7 +183,18 @@ export class BaseApiService {
     options: ApiOptions = {}
   ): Promise<ApiResponse<T>> {
     return this.execute(async () => {
-      return await (supabase as any).from(table).insert(data).select().single();
+      const columns = Object.keys(data);
+      const values = Object.values(data);
+      const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+
+      const query = `
+        INSERT INTO ${table} (${columns.join(', ')})
+        VALUES (${placeholders})
+        RETURNING *
+      `;
+
+      const result = await pgClient.query(query, values);
+      return result.rows[0] as T;
     }, options);
   }
 
@@ -219,13 +205,24 @@ export class BaseApiService {
     options: ApiOptions = {}
   ): Promise<ApiResponse<T>> {
     return this.execute(async () => {
-      let query = (supabase as any).from(table).update(data);
+      const updateColumns = Object.keys(data);
+      const updateValues = Object.values(data);
+      const setClause = updateColumns.map((col, i) => `${col} = $${i + 1}`).join(', ');
 
-      Object.entries(filters).forEach(([key, value]) => {
-        query = query.eq(key, value);
-      });
+      const filterKeys = Object.keys(filters);
+      const filterValues = Object.values(filters);
+      const whereClause = filterKeys.map((key, i) => `${key} = $${updateColumns.length + i + 1}`).join(' AND ');
 
-      return await query.select().single();
+      const query = `
+        UPDATE ${table}
+        SET ${setClause}
+        WHERE ${whereClause}
+        RETURNING *
+      `;
+
+      const allValues = [...updateValues, ...filterValues];
+      const result = await pgClient.query(query, allValues);
+      return result.rows[0] as T;
     }, options);
   }
 
@@ -235,13 +232,14 @@ export class BaseApiService {
     options: ApiOptions = {}
   ): Promise<ApiResponse<T>> {
     return this.execute(async () => {
-      let query = (supabase as any).from(table).delete();
+      const filterKeys = Object.keys(filters);
+      const filterValues = Object.values(filters);
+      const whereClause = filterKeys.map((key, i) => `${key} = $${i + 1}`).join(' AND ');
 
-      Object.entries(filters).forEach(([key, value]) => {
-        query = query.eq(key, value);
-      });
+      const query = `DELETE FROM ${table} WHERE ${whereClause}`;
 
-      return await query;
+      await pgClient.query(query, filterValues);
+      return null as T;
     }, options);
   }
 
@@ -251,7 +249,13 @@ export class BaseApiService {
     options: ApiOptions = {}
   ): Promise<ApiResponse<T>> {
     return this.execute(async () => {
-      return await (supabase.rpc as any)(functionName, params);
+      const paramNames = Object.keys(params);
+      const paramValues = Object.values(params);
+      const paramString = paramNames.map((name, i) => `$${i + 1}`).join(', ');
+
+      const query = `SELECT * FROM ${functionName}(${paramString})`;
+      const result = await pgClient.query(query, paramValues);
+      return result.rows as T[];
     }, options);
   }
 }

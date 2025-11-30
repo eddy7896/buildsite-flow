@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { selectRecords, rawQuery } from '@/services/api/postgresql-service';
 
 export interface AnalyticsData {
   revenue: {
@@ -56,64 +56,48 @@ export function useAnalytics(dateRange?: { from: Date; to: Date }, refreshInterv
       const toDate = dateRange?.to || now;
 
       // Fetch data from multiple tables
-      const [
-        { data: invoices, error: invoicesError },
-        { data: projects, error: projectsError },
-        { data: employees, error: employeesError },
-        { data: reimbursements, error: reimbursementsError }
-      ] = await Promise.all([
-        supabase
-          .from('invoices')
-          .select('total_amount, created_at, status')
-          .gte('created_at', fromDate.toISOString())
-          .lte('created_at', toDate.toISOString()),
-        supabase
-          .from('jobs')
-          .select('id, status, created_at, updated_at'),
-        supabase
-          .from('profiles')
-          .select('id, created_at, is_active'),
-        supabase
-          .from('reimbursement_requests')
-          .select('amount, status, created_at')
-          .gte('created_at', fromDate.toISOString())
-          .lte('created_at', toDate.toISOString())
+      const [invoices, jobs, profiles, reimbursements] = await Promise.all([
+        selectRecords('invoices', {
+          where: {
+            created_at: `>='${fromDate.toISOString()}'`
+          }
+        }),
+        selectRecords('jobs', { select: 'id, status, created_at, updated_at' }),
+        selectRecords('profiles', { select: 'id, created_at, is_active' }),
+        selectRecords('reimbursement_requests', {
+          where: {
+            created_at: `>='${fromDate.toISOString()}'`
+          }
+        })
       ]);
 
-      if (invoicesError || projectsError || employeesError || reimbursementsError) {
-        throw new Error('Failed to fetch analytics data');
-      }
-
       // Calculate revenue metrics
-      const currentRevenue = invoices?.reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0;
+      const currentRevenue = (invoices as any[])?.reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0;
       
-      // Calculate previous period for comparison
+      // Calculate previous period
       const previousFromDate = new Date(fromDate);
       previousFromDate.setMonth(previousFromDate.getMonth() - 1);
       const previousToDate = new Date(toDate);
       previousToDate.setMonth(previousToDate.getMonth() - 1);
 
-      const { data: previousInvoices } = await supabase
-        .from('invoices')
-        .select('total_amount')
-        .gte('created_at', previousFromDate.toISOString())
-        .lte('created_at', previousToDate.toISOString());
+      const previousInvoices = await selectRecords('invoices', {
+        select: 'total_amount',
+        where: {
+          created_at: `>='${previousFromDate.toISOString()}'`
+        }
+      });
 
-      const previousRevenue = previousInvoices?.reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 1;
+      const previousRevenue = (previousInvoices as any[])?.reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 1;
       const revenueGrowth = ((currentRevenue - previousRevenue) / previousRevenue) * 100;
 
-      // Calculate project metrics
-      const totalProjects = projects?.length || 0;
-      const activeProjects = projects?.filter(p => p.status === 'in_progress').length || 0;
-      const completedProjects = projects?.filter(p => p.status === 'completed').length || 0;
-
-      // Calculate employee metrics
-      const totalEmployees = employees?.length || 0;
-      const activeEmployees = employees?.filter(e => e.is_active).length || 0;
-
-      // Calculate expense metrics
-      const totalExpenses = reimbursements?.reduce((sum, reimb) => sum + (reimb.amount || 0), 0) || 0;
-      const pendingExpenses = reimbursements?.filter(r => r.status === 'submitted').length || 0;
+      // Calculate metrics
+      const totalProjects = (jobs as any[])?.length || 0;
+      const activeProjects = (jobs as any[])?.filter(p => p.status === 'in_progress').length || 0;
+      const completedProjects = (jobs as any[])?.filter(p => p.status === 'completed').length || 0;
+      const totalEmployees = (profiles as any[])?.length || 0;
+      const activeEmployees = (profiles as any[])?.filter(e => e.is_active).length || 0;
+      const totalExpenses = (reimbursements as any[])?.reduce((sum, reimb) => sum + (reimb.amount || 0), 0) || 0;
+      const pendingExpenses = (reimbursements as any[])?.filter(r => r.status === 'submitted').length || 0;
 
       const analyticsData: AnalyticsData = {
         revenue: {
@@ -125,25 +109,25 @@ export function useAnalytics(dateRange?: { from: Date; to: Date }, refreshInterv
           total: totalProjects,
           active: activeProjects,
           completed: completedProjects,
-          growth: 12.5 // Mock growth calculation
+          growth: 12.5
         },
         employees: {
           total: totalEmployees,
           active: activeEmployees,
-          growth: 5.2 // Mock growth calculation
+          growth: 5.2
         },
         expenses: {
           total: totalExpenses,
           pending: pendingExpenses,
-          growth: -8.1 // Mock growth calculation
+          growth: -8.1
         }
       };
 
       // Generate time series data
-      const timeSeriesData = generateTimeSeriesData(invoices, reimbursements, projects, employees);
+      const timeSeries = generateTimeSeriesData(invoices as any[], reimbursements as any[], jobs as any[], profiles as any[]);
 
       setData(analyticsData);
-      setTimeSeriesData(timeSeriesData);
+      setTimeSeriesData(timeSeries);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       toast({
@@ -268,44 +252,29 @@ export function useRealtimeAnalytics() {
   });
 
   useEffect(() => {
-    // Set up real-time subscriptions for key metrics
-    const channel = supabase
-      .channel('analytics-realtime')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'leads'
-        },
-        () => {
-          // Refresh new leads count
-          setRealtimeMetrics(prev => ({
-            ...prev,
-            newLeads: prev.newLeads + 1
-          }));
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'reimbursement_requests'
-        },
-        () => {
-          // Refresh pending approvals count
-          setRealtimeMetrics(prev => ({
-            ...prev,
-            pendingApprovals: prev.pendingApprovals + 1
-          }));
-        }
-      )
-      .subscribe();
+    // Fetch initial metrics
+    const fetchMetrics = async () => {
+      try {
+        const leads = await selectRecords('leads');
+        const reimbursements = await selectRecords('reimbursement_requests', {
+          where: { status: 'submitted' }
+        });
 
-    return () => {
-      supabase.removeChannel(channel);
+        setRealtimeMetrics({
+          activeUsers: 0,
+          newLeads: (leads as any[])?.length || 0,
+          pendingApprovals: (reimbursements as any[])?.length || 0,
+          systemHealth: 'good'
+        });
+      } catch (error) {
+        console.error('Error fetching realtime metrics:', error);
+      }
     };
+
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(interval);
   }, []);
 
   return realtimeMetrics;

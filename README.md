@@ -1,73 +1,173 @@
-# Welcome to your Lovable project
+# BuildFlow Agency Management System
 
-## Project info
+A comprehensive multi-tenant SaaS ERP platform for construction and agency management.
 
-**URL**: https://lovable.dev/projects/d52d57a0-24a7-49cc-89b0-04c112935ebc
+## 🚀 Quick Start
 
-## How can I edit this code?
+### Prerequisites
+- Node.js 18+ 
+- npm or bun
 
-There are several ways of editing your application.
+### Installation
 
-**Use Lovable**
+```bash
+# Install dependencies
+npm install
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/d52d57a0-24a7-49cc-89b0-04c112935ebc) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The app will be available at `http://localhost:8080` (or next available port).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Test Credentials
 
-**Use GitHub Codespaces**
+The application comes with pre-configured test accounts:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+| Email | Password | Role |
+|-------|----------|------|
+| super@buildflow.local | super123 | Super Admin |
+| admin@buildflow.local | admin123 | Admin |
+| hr@buildflow.local | hr123 | HR Manager |
+| finance@buildflow.local | finance123 | Finance Manager |
+| employee@buildflow.local | employee123 | Employee |
 
-## What technologies are used for this project?
+## 📦 Technology Stack
 
-This project is built with:
+- **Frontend:** React 18, TypeScript, Vite
+- **UI:** TailwindCSS, Radix UI, Shadcn/ui
+- **State:** Zustand, React Query
+- **Forms:** React Hook Form, Zod
+- **Charts:** Recharts
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 🗃️ Data Storage
 
-## How can I deploy this project?
+The application uses a browser-based database (localStorage) for development and demonstration purposes. Data persists across sessions in the same browser.
 
-Simply open [Lovable](https://lovable.dev/projects/d52d57a0-24a7-49cc-89b0-04c112935ebc) and click on Share -> Publish.
+### Reset Database
 
-## Can I connect a custom domain to my Lovable project?
+To reset the database to initial seed data, open browser console and run:
+```javascript
+import('/src/lib/seedDatabase').then(m => m.resetDatabase())
+```
 
-Yes, you can!
+Or clear localStorage:
+```javascript
+localStorage.clear()
+```
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## 📁 Project Structure
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+```
+src/
+├── components/     # React components
+│   ├── ui/        # Shadcn UI components
+│   ├── layout/    # Layout components
+│   └── ...        # Feature components
+├── pages/         # Page components (42 pages)
+├── hooks/         # Custom React hooks
+├── services/      # API services
+├── stores/        # Zustand stores
+├── lib/           # Utilities
+│   ├── database.ts    # Supabase-compatible query builder
+│   ├── seedDatabase.ts # Database seeder
+│   └── utils.ts       # Helper functions
+├── integrations/
+│   └── postgresql/    # Database client
+├── config/        # App configuration
+└── constants/     # App constants
+```
+
+## 🔐 Features
+
+### Core Modules
+- ✅ Multi-tenant architecture
+- ✅ Role-based access control (22 roles)
+- ✅ User authentication & sessions
+
+### HR Management
+- ✅ Employee records & profiles
+- ✅ Attendance tracking (clock in/out)
+- ✅ Leave management
+- ✅ Payroll processing
+- ✅ Department management
+
+### Project Management
+- ✅ Project/job tracking
+- ✅ Task management (Kanban board)
+- ✅ Resource allocation
+- ✅ Client management
+
+### Financial Management
+- ✅ Invoicing & billing
+- ✅ Payment tracking
+- ✅ Expense reimbursements
+- ✅ GST compliance (India)
+
+### CRM
+- ✅ Lead tracking
+- ✅ Sales pipeline
+- ✅ Quotation system
+
+## 🛠️ Development
+
+### Build for Production
+
+```bash
+npm run build
+```
+
+### Preview Production Build
+
+```bash
+npm run preview
+```
+
+### Lint Code
+
+```bash
+npm run lint
+```
+
+## 📝 Architecture Notes
+
+### Database Layer
+
+The application uses a Supabase-compatible API interface (`src/lib/database.ts`) that currently stores data in localStorage. This design allows for:
+
+1. **Easy Development:** No external database setup required
+2. **Future Migration:** Same API works with real PostgreSQL backend
+3. **Persistence:** Data survives page refreshes
+
+To connect a real PostgreSQL backend:
+1. Set up an API server with the PostgreSQL connection
+2. Update `src/integrations/postgresql/client.ts` to make HTTP calls instead of localStorage operations
+
+### Authentication
+
+Authentication uses mock credentials with simulated JWT tokens stored in localStorage. For production:
+1. Implement a proper backend auth service
+2. Use secure token storage (httpOnly cookies)
+3. Add proper session management
+
+## 🔧 Configuration
+
+### Environment Variables
+
+Create a `.env` file:
+
+```env
+VITE_APP_NAME=BuildFlow
+VITE_APP_ENVIRONMENT=development
+VITE_DATABASE_URL=your-database-url
+VITE_API_URL=your-api-url
+```
+
+## 📄 License
+
+Private - All rights reserved.
+
+---
+
+**Status:** Development/Demo Ready  
+**Last Updated:** November 2025

@@ -1,8 +1,7 @@
 // Environment variable validation and type safety
 const requiredEnvVars = [
-  'VITE_SUPABASE_URL',
-  'VITE_SUPABASE_PUBLISHABLE_KEY',
-  'VITE_SUPABASE_PROJECT_ID',
+  'VITE_DATABASE_URL',
+  'VITE_API_URL',
 ] as const;
 
 const optionalEnvVars = [

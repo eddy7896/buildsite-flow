@@ -8,10 +8,11 @@ export const config = {
     version: env.VITE_APP_VERSION,
     environment: env.VITE_APP_ENVIRONMENT,
   },
-  supabase: {
-    url: env.VITE_SUPABASE_URL,
-    anonKey: env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    projectId: env.VITE_SUPABASE_PROJECT_ID,
+  database: {
+    url: env.VITE_DATABASE_URL,
+  },
+  api: {
+    url: env.VITE_API_URL,
   },
   features,
   services,

@@ -1,9 +1,9 @@
-import { supabase } from '@/integrations/supabase/client';
 import { BaseApiService, type ApiResponse, type ApiOptions } from './base';
 import { MOCK_USERS, ROUTES, ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/constants';
 import { useAuthStore } from '@/stores/authStore';
 import { useAppStore } from '@/stores/appStore';
 import type { AppRole } from '@/utils/roleUtils';
+import { loginUser, registerUser } from '@/services/api/auth-postgresql';
 
 interface SignUpData {
   email: string;
@@ -34,32 +34,27 @@ interface UserRole {
 
 export class AuthService extends BaseApiService {
   static async signUp(data: SignUpData, options: ApiOptions = {}): Promise<ApiResponse<any>> {
-    const redirectUrl = `${window.location.origin}${ROUTES.HOME}`;
-    
     return this.execute(async () => {
-      const { data: authData, error } = await supabase.auth.signUp({
+      const result = await registerUser({
         email: data.email,
         password: data.password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            full_name: data.fullName
-          }
-        }
+        fullName: data.fullName,
+        agencyId: '550e8400-e29b-41d4-a716-446655440000' // Default agency
       });
 
-      if (error) throw error;
+      // Store token
+      localStorage.setItem('auth_token', result.token);
 
       // Show success notification
       const { addNotification } = useAppStore.getState();
       addNotification({
         type: 'success',
-        title: 'Check your email',
+        title: 'Account created',
         message: SUCCESS_MESSAGES.CREATE_SUCCESS,
         priority: 'medium'
       });
 
-      return { data: authData, error: null };
+      return result;
     }, { showErrorToast: true, ...options });
   }
 
@@ -71,14 +66,15 @@ export class AuthService extends BaseApiService {
       return this.handleMockUserSignIn(mockUser);
     }
 
-    // Regular Supabase authentication
+    // Real database authentication
     return this.execute(async () => {
-      const { data: authData, error } = await supabase.auth.signInWithPassword({
+      const result = await loginUser({
         email: data.email,
         password: data.password
       });
 
-      if (error) throw error;
+      // Store token
+      localStorage.setItem('auth_token', result.token);
 
       // Show success notification
       const { addNotification } = useAppStore.getState();
@@ -89,15 +85,14 @@ export class AuthService extends BaseApiService {
         priority: 'medium'
       });
 
-      return { data: authData, error: null };
+      return result;
     }, { showErrorToast: true, ...options });
   }
 
   static async signOut(options: ApiOptions = {}): Promise<ApiResponse<any>> {
     return this.execute(async () => {
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) throw error;
+      // Clear token
+      localStorage.removeItem('auth_token');
 
       // Clear stores
       useAuthStore.getState().reset();
@@ -112,7 +107,7 @@ export class AuthService extends BaseApiService {
         priority: 'low'
       });
 
-      return { data: null, error: null };
+      return null;
     }, { showErrorToast: true, ...options });
   }
 
@@ -140,14 +135,13 @@ export class AuthService extends BaseApiService {
       filters: { user_id: userId },
       orderBy: { 
         column: 'role',
-        ascending: true // This will prioritize higher roles due to enum ordering
+        ascending: true
       }
     });
 
     if (response.success && response.data && Array.isArray(response.data) && response.data.length > 0) {
-      // Get the highest priority role (first in the ordered list)
       return {
-        data: response.data[0].role,
+        data: (response.data as any)[0].role,
         error: null,
         success: true
       };
@@ -162,6 +156,16 @@ export class AuthService extends BaseApiService {
 
   private static handleMockUserSignIn(mockUser: typeof MOCK_USERS[number]): ApiResponse<any> {
     try {
+      // Create mock token
+      const mockToken = btoa(JSON.stringify({
+        userId: mockUser.userId,
+        email: mockUser.email,
+        exp: Math.floor(Date.now() / 1000) + 86400
+      }));
+
+      // Store token
+      localStorage.setItem('auth_token', mockToken);
+
       // Create mock session data
       const mockSession = {
         user: {
@@ -180,7 +184,7 @@ export class AuthService extends BaseApiService {
         hire_date: null,
         avatar_url: null,
         is_active: true,
-        agency_id: '11111111-1111-1111-1111-111111111111' // Default agency for mock users
+        agency_id: '550e8400-e29b-41d4-a716-446655440000'
       };
 
       // Update auth store
@@ -214,12 +218,37 @@ export class AuthService extends BaseApiService {
 
   static async getCurrentSession(): Promise<ApiResponse<any>> {
     return this.execute(async () => {
-      const { data, error } = await supabase.auth.getSession();
-      return { data: data.session, error };
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        return null;
+      }
+
+      try {
+        const decoded = JSON.parse(atob(token.split('.')[1]));
+        if (decoded.exp * 1000 > Date.now()) {
+          return { user: { id: decoded.userId, email: decoded.email } };
+        }
+        localStorage.removeItem('auth_token');
+        return null;
+      } catch (error) {
+        localStorage.removeItem('auth_token');
+        return null;
+      }
     });
   }
 
   static setupAuthStateListener(callback: (event: string, session: any) => void) {
-    return supabase.auth.onAuthStateChange(callback);
+    // Check for token on storage change
+    const handleStorageChange = () => {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        callback('SIGNED_IN', { user: { id: token } });
+      } else {
+        callback('SIGNED_OUT', null);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return { unsubscribe: () => window.removeEventListener('storage', handleStorageChange) };
   }
 }

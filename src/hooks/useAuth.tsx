@@ -1,9 +1,24 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { AppRole } from '@/utils/roleUtils';
-import { hexToUuid, uuidToHex } from '@/lib/utils';
+import { selectRecords, selectOne } from '@/services/api/postgresql-service';
+import { loginUser, registerUser } from '@/services/api/auth-postgresql';
+
+interface User {
+  id: string;
+  email: string;
+  email_confirmed: boolean;
+  is_active: boolean;
+}
+
+interface Session {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  expires_at: number;
+  refresh_token: string;
+  user: User;
+}
 
 interface Profile {
   id: string;
@@ -43,63 +58,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Defer profile and role fetching
-        if (session?.user) {
-          setTimeout(() => {
-            fetchUserProfile(session.user.id);
-            fetchUserRole(session.user.id);
-          }, 0);
+    // Check for existing session on mount
+    const token = localStorage.getItem('auth_token');
+    if (token) {
+      try {
+        // Verify token is still valid
+        const decoded = JSON.parse(atob(token.split('.')[1]));
+        if (decoded.exp * 1000 > Date.now()) {
+          // Token is still valid
+          const mockUser: User = {
+            id: decoded.userId,
+            email: decoded.email,
+            email_confirmed: true,
+            is_active: true
+          };
+          setUser(mockUser);
+          
+          // Fetch profile and role
+          fetchUserProfile(decoded.userId);
+          fetchUserRole(decoded.userId);
         } else {
-          setProfile(null);
-          setUserRole(null);
+          // Token expired
+          localStorage.removeItem('auth_token');
         }
-        setLoading(false);
+      } catch (error) {
+        console.error('Error validating token:', error);
+        localStorage.removeItem('auth_token');
       }
-    );
-
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserProfile(session.user.id);
-        fetchUserRole(session.user.id);
-      }
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    }
+    setLoading(false);
   }, []);
 
   const fetchUserProfile = async (userId: string) => {
     try {
-      // Convert hex ID to UUID format for database query
-      const dbUserId = hexToUuid(userId);
-      
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', dbUserId)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Error fetching profile:', error);
-        return;
-      }
-
-      // Convert response back to hex format if needed
+      const data = await selectOne('profiles', { user_id: userId });
       if (data) {
-        setProfile({
-          ...data,
-          user_id: uuidToHex(data.user_id),
-          agency_id: uuidToHex(data.agency_id)
-        });
+        setProfile(data as Profile);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -110,47 +104,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // Check if this is a mock user and handle them differently
       const mockUsers = [
-        { userId: '00000000000000000000000000000000', role: 'super_admin' as AppRole },
-        { userId: '11111111111111111111111111111111', role: 'admin' as AppRole },
-        { userId: '22222222222222222222222222222222', role: 'hr' as AppRole },
-        { userId: '33333333333333333333333333333333', role: 'finance_manager' as AppRole },
-        { userId: '44444444444444444444444444444444', role: 'employee' as AppRole },
-        { userId: '55555555555555555555555555555555', role: 'ceo' as AppRole },
-        { userId: '66666666666666666666666666666666', role: 'cto' as AppRole },
-        { userId: '77777777777777777777777777777777', role: 'cfo' as AppRole },
-        { userId: '88888888888888888888888888888888', role: 'project_manager' as AppRole },
-        { userId: '99999999999999999999999999999999', role: 'sales_manager' as AppRole },
-        { userId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', role: 'marketing_manager' as AppRole },
-        { userId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', role: 'operations_manager' as AppRole },
-        { userId: 'cccccccccccccccccccccccccccccccc', role: 'team_lead' as AppRole },
-        { userId: 'dddddddddddddddddddddddddddddddd', role: 'it_support' as AppRole },
-        { userId: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', role: 'contractor' as AppRole },
-        { userId: 'ffffffffffffffffffffffffffffffff', role: 'intern' as AppRole }
+        { userId: '550e8400-e29b-41d4-a716-446655440010', role: 'super_admin' as AppRole },
+        { userId: '550e8400-e29b-41d4-a716-446655440011', role: 'admin' as AppRole },
+        { userId: '550e8400-e29b-41d4-a716-446655440012', role: 'hr' as AppRole },
+        { userId: '550e8400-e29b-41d4-a716-446655440013', role: 'finance_manager' as AppRole },
+        { userId: '550e8400-e29b-41d4-a716-446655440014', role: 'employee' as AppRole },
       ];
 
       const mockUser = mockUsers.find(u => u.userId === userId);
       
       if (mockUser) {
-        // For mock users, set role directly without database query
         console.log('Setting mock user role:', mockUser.role);
         setUserRole(mockUser.role);
         return;
       }
 
-      // For real users, query the database and get ALL roles
-      const dbUserId = hexToUuid(userId);
-      
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', dbUserId);
+      // For real users, query the database
+      const data = await selectRecords('user_roles', {
+        where: { user_id: userId }
+      });
 
-      if (error) {
-        console.error('Error fetching user role:', error);
-        return;
-      }
-
-      // If no roles found, default to employee
       if (!data || data.length === 0) {
         setUserRole('employee');
         return;
@@ -183,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
 
       // Find the highest priority role
-      const userRoles = data.map(r => r.role as AppRole);
+      const userRoles = (data as any[]).map(r => r.role as AppRole);
       const highestRole = userRoles.reduce((highest, current) => {
         const currentPriority = roleHierarchy[current] || 99;
         const highestPriority = roleHierarchy[highest] || 99;
@@ -198,37 +171,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName
-        }
-      }
-    });
+    try {
+      const result = await registerUser({
+        email,
+        password,
+        fullName,
+        agencyId: '550e8400-e29b-41d4-a716-446655440000' // Default agency
+      });
 
-    if (error) {
+      // Store token
+      localStorage.setItem('auth_token', result.token);
+      
+      // Set user state
+      setUser(result.user as any);
+      
+      toast({
+        title: "Sign up successful",
+        description: "Welcome to BuildFlow!"
+      });
+
+      return { error: null };
+    } catch (error: any) {
       toast({
         title: "Sign up failed",
         description: error.message,
         variant: "destructive"
       });
-    } else {
-      toast({
-        title: "Check your email",
-        description: "Please check your email for verification link"
-      });
+      return { error };
     }
-
-    return { error };
   };
 
   const signIn = async (email: string, password: string) => {
-    // Check for mock credentials first with predefined user IDs
+    // Check for mock credentials first
     const mockUsers: Array<{
       email: string;
       password: string;
@@ -236,32 +210,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       role: AppRole;
       userId: string;
     }> = [
-      { email: 'super@buildflow.com', password: 'super123', fullName: 'Super Administrator', role: 'super_admin', userId: '00000000000000000000000000000000' },
-      { email: 'admin@buildflow.com', password: 'admin123', fullName: 'System Administrator', role: 'admin', userId: '11111111111111111111111111111111' },
-      { email: 'hr@buildflow.com', password: 'hr123', fullName: 'HR Manager', role: 'hr', userId: '22222222222222222222222222222222' },
-      { email: 'finance@buildflow.com', password: 'finance123', fullName: 'Finance Manager', role: 'finance_manager', userId: '33333333333333333333333333333333' },
-      { email: 'employee@buildflow.com', password: 'employee123', fullName: 'John Employee', role: 'employee', userId: '44444444444444444444444444444444' },
-      { email: 'ceo@buildflow.com', password: 'ceo123', fullName: 'Sarah Wilson', role: 'ceo', userId: '55555555555555555555555555555555' },
-      { email: 'cto@buildflow.com', password: 'cto123', fullName: 'Michael Chen', role: 'cto', userId: '66666666666666666666666666666666' },
-      { email: 'cfo@buildflow.com', password: 'cfo123', fullName: 'Jennifer Davis', role: 'cfo', userId: '77777777777777777777777777777777' },
-      { email: 'pm@buildflow.com', password: 'pm123', fullName: 'David Rodriguez', role: 'project_manager', userId: '88888888888888888888888888888888' },
-      { email: 'sales@buildflow.com', password: 'sales123', fullName: 'Lisa Johnson', role: 'sales_manager', userId: '99999999999999999999999999999999' },
-      { email: 'marketing@buildflow.com', password: 'marketing123', fullName: 'Alex Thompson', role: 'marketing_manager', userId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
-      { email: 'ops@buildflow.com', password: 'ops123', fullName: 'Maria Garcia', role: 'operations_manager', userId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
-      { email: 'lead@buildflow.com', password: 'lead123', fullName: 'Robert Kim', role: 'team_lead', userId: 'cccccccccccccccccccccccccccccccc' },
-      { email: 'it@buildflow.com', password: 'it123', fullName: 'Emily Brown', role: 'it_support', userId: 'dddddddddddddddddddddddddddddddd' },
-      { email: 'contractor@buildflow.com', password: 'contractor123', fullName: 'James Miller', role: 'contractor', userId: 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' },
-      { email: 'intern@buildflow.com', password: 'intern123', fullName: 'Sophie Anderson', role: 'intern', userId: 'ffffffffffffffffffffffffffffffff' }
+      { email: 'super@buildflow.local', password: 'super123', fullName: 'Super Administrator', role: 'super_admin', userId: '550e8400-e29b-41d4-a716-446655440010' },
+      { email: 'admin@buildflow.local', password: 'admin123', fullName: 'System Administrator', role: 'admin', userId: '550e8400-e29b-41d4-a716-446655440011' },
+      { email: 'hr@buildflow.local', password: 'hr123', fullName: 'HR Manager', role: 'hr', userId: '550e8400-e29b-41d4-a716-446655440012' },
+      { email: 'finance@buildflow.local', password: 'finance123', fullName: 'Finance Manager', role: 'finance_manager', userId: '550e8400-e29b-41d4-a716-446655440013' },
+      { email: 'employee@buildflow.local', password: 'employee123', fullName: 'John Employee', role: 'employee', userId: '550e8400-e29b-41d4-a716-446655440014' },
     ];
 
     const mockUser = mockUsers.find(u => u.email === email && u.password === password);
     
     if (mockUser) {
-      // Simulate successful login with mock data using existing database records
       try {
-        // Create mock session with the predefined user ID
-        const mockSession = {
-          access_token: 'mock-token',
+        // Create mock session
+        const mockToken = btoa(JSON.stringify({
+          userId: mockUser.userId,
+          email: mockUser.email,
+          exp: Math.floor(Date.now() / 1000) + 86400 // 24 hours
+        }));
+
+        const mockSession: Session = {
+          access_token: mockToken,
           token_type: 'bearer',
           expires_in: 3600,
           expires_at: Date.now() + 3600000,
@@ -269,20 +237,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           user: {
             id: mockUser.userId,
             email: mockUser.email,
-            email_confirmed_at: new Date().toISOString(),
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            app_metadata: {},
-            user_metadata: { full_name: mockUser.fullName }
+            email_confirmed: true,
+            is_active: true
           }
         };
 
-        // Set auth state manually for mock user
-        setUser(mockSession.user as any);
-        setSession(mockSession as any);
+        // Store token
+        localStorage.setItem('auth_token', mockToken);
         
-        // Create mock profile data instead of fetching from database
-        const mockProfile = {
+        // Set auth state
+        setUser(mockSession.user);
+        setSession(mockSession);
+        
+        // Create mock profile
+        const mockProfile: Profile = {
           id: `profile${mockUser.userId}`,
           user_id: mockUser.userId,
           full_name: mockUser.fullName,
@@ -292,51 +260,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           hire_date: null,
           avatar_url: null,
           is_active: true,
-          agency_id: '00000000000000000000000000000001' // Mock agency ID in hex format
+          agency_id: '550e8400-e29b-41d4-a716-446655440000'
         };
         
         setProfile(mockProfile);
         setUserRole(mockUser.role);
 
         toast({
-          title: "Mock login successful",
-          description: `Logged in as ${mockUser.fullName} (${mockUser.role})`
+          title: "Login successful",
+          description: `Logged in as ${mockUser.fullName}`
         });
 
         return { error: null };
       } catch (error) {
         console.error('Mock login error:', error);
         toast({
-          title: "Mock login failed",
-          description: "Error setting up mock session",
+          title: "Login failed",
+          description: "Error setting up session",
           variant: "destructive"
         });
         return { error };
       }
     }
 
-    // Fall back to regular Supabase auth for real users
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    // Try real database login
+    try {
+      const result = await loginUser({ email, password });
+      
+      // Store token
+      localStorage.setItem('auth_token', result.token);
+      
+      // Set user state
+      setUser(result.user as any);
+      
+      // Fetch profile and role
+      fetchUserProfile(result.user.id);
+      fetchUserRole(result.user.id);
 
-    if (error) {
       toast({
-        title: "Sign in failed",
+        title: "Login successful",
+        description: "Welcome back!"
+      });
+
+      return { error: null };
+    } catch (error: any) {
+      toast({
+        title: "Login failed",
         description: error.message,
         variant: "destructive"
       });
+      return { error };
     }
-
-    return { error };
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
+    try {
+      localStorage.removeItem('auth_token');
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      setUserRole(null);
+      
       toast({
-        title: "Sign out failed",
+        title: "Logged out",
+        description: "You have been logged out successfully"
+      });
+    } catch (error: any) {
+      toast({
+        title: "Logout failed",
         description: error.message,
         variant: "destructive"
       });

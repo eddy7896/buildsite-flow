@@ -1,7 +1,23 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User, Session } from '@supabase/supabase-js';
 import type { AppRole } from '@/utils/roleUtils';
+
+// Local type definitions (replacing Supabase types)
+interface User {
+  id: string;
+  email: string;
+  email_confirmed?: boolean;
+  is_active?: boolean;
+}
+
+interface Session {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+  expires_at: number;
+  refresh_token: string;
+  user: User;
+}
 
 interface Profile {
   user_id: string;

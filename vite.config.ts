@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => ({
           ui: ['@radix-ui/react-dialog', '@radix-ui/react-popover', '@radix-ui/react-select'],
           charts: ['recharts'],
           forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
-          supabase: ['@supabase/supabase-js', '@tanstack/react-query'],
+          query: ['@tanstack/react-query'],
         },
         // Generate content-hashed filenames for better caching
         entryFileNames: 'assets/[name]-[hash].js',
