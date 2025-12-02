@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { CheckCircle, Circle, ArrowRight, ArrowLeft, Sparkles, Users, Building2, FileText, BarChart3, Settings } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useAuth } from '@/hooks/useAuth';
 
 interface OnboardingStep {
@@ -84,7 +84,7 @@ const OnboardingWizard = ({ onComplete, onSkip }: OnboardingWizardProps) => {
     setLoading(true);
     try {
       // Get user's agency ID
-      const { data: profile } = await supabase
+      const { data: profile } = await db
         .from('profiles')
         .select('agency_id')
         .eq('user_id', user.id)
@@ -94,7 +94,7 @@ const OnboardingWizard = ({ onComplete, onSkip }: OnboardingWizardProps) => {
         throw new Error('Agency not found');
       }
 
-      const { data, error } = await supabase.functions.invoke('generate-demo-data', {
+      const { data, error } = await db.functions.invoke('generate-demo-data', {
         body: { agencyId: profile.agency_id }
       });
 

@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { format, isSameDay, startOfMonth, endOfMonth } from 'date-fns';
 import { CalendarEventDialog } from './CalendarEventDialog';
 import { cn } from '@/lib/utils';
@@ -46,7 +46,7 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
       const allEvents: CalendarEvent[] = [];
 
       // Fetch company events
-      const { data: companyEvents } = await supabase
+      const { data: companyEvents } = await db
         .from('company_events')
         .select('*')
         .gte('start_date', startDate.toISOString())
@@ -65,7 +65,7 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
       }
 
       // Fetch holidays
-      const { data: holidays } = await supabase
+      const { data: holidays } = await db
         .from('holidays')
         .select('*')
         .gte('date', format(startDate, 'yyyy-MM-dd'))
@@ -73,18 +73,22 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
         .order('date');
 
       if (holidays) {
-        allEvents.push(...holidays.map(holiday => ({
-          id: holiday.id,
-          title: holiday.name,
-          date: new Date(holiday.date),
-          type: 'holiday' as const,
-          description: holiday.description,
-          color: '#ef4444'
-        })));
+        allEvents.push(...holidays.map(holiday => {
+          // Map database fields to expected format
+          const holidayType = holiday.is_national_holiday ? 'public' : holiday.is_company_holiday ? 'company' : 'optional';
+          return {
+            id: holiday.id,
+            title: holiday.name,
+            date: new Date(holiday.date),
+            type: 'holiday' as const,
+            description: holiday.description,
+            color: holidayType === 'public' ? '#ef4444' : holidayType === 'company' ? '#3b82f6' : '#22c55e'
+          };
+        }));
       }
 
       // Fetch approved leave requests
-      const { data: leaveRequests } = await supabase
+      const { data: leaveRequests } = await db
         .from('leave_requests')
         .select(`
           *,
@@ -119,7 +123,7 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
       }
 
       // Fetch birthdays
-      const { data: employees } = await supabase
+      const { data: employees } = await db
         .from('employee_details')
         .select(`
           *,

@@ -1,10 +1,17 @@
 // PostgreSQL API Service
 import { queryOne, queryMany, execute, transaction } from '@/integrations/postgresql/client';
-import type { QueryResult } from 'pg';
+
+export interface FilterCondition {
+  column: string;
+  operator: string;
+  value: any;
+  negated?: boolean;
+}
 
 export interface ApiOptions {
   select?: string;
   where?: Record<string, any>;
+  filters?: FilterCondition[];
   orderBy?: string;
   limit?: number;
   offset?: number;
@@ -18,11 +25,13 @@ export interface ApiResponse<T = any> {
 
 /**
  * Build WHERE clause from conditions
+ * @param where - The conditions object
+ * @param startIndex - Starting parameter index (default 1)
  */
-function buildWhereClause(where: Record<string, any>): { clause: string; params: any[] } {
+function buildWhereClause(where: Record<string, any>, startIndex: number = 1): { clause: string; params: any[] } {
   const conditions: string[] = [];
   const params: any[] = [];
-  let paramIndex = 1;
+  let paramIndex = startIndex;
 
   for (const [key, value] of Object.entries(where)) {
     if (value === null) {
@@ -48,18 +57,160 @@ function buildWhereClause(where: Record<string, any>): { clause: string; params:
 }
 
 /**
+ * Parse Supabase-style OR filter string
+ */
+function parseOrFilter(filterString: string): { column: string; operator: string; value: string }[] {
+  // Parse strings like "col1.eq.val1,col2.ilike.%val2%"
+  const parts = filterString.split(',');
+  return parts.map(part => {
+    const match = part.match(/^(\w+)\.(eq|neq|gt|gte|lt|lte|like|ilike|is)\.(.+)$/);
+    if (match) {
+      return { column: match[1], operator: match[2], value: match[3] };
+    }
+    return null;
+  }).filter(Boolean) as { column: string; operator: string; value: string }[];
+}
+
+/**
+ * Build WHERE clause from advanced filters
+ */
+function buildFiltersClause(filters: FilterCondition[]): { clause: string; params: any[] } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
+
+  for (const filter of filters) {
+    const { column, operator, value, negated } = filter;
+    let condition = '';
+
+    // Handle OR conditions
+    if (column === '__or__') {
+      const orFilters = parseOrFilter(value);
+      const orConditions: string[] = [];
+      for (const orFilter of orFilters) {
+        let orCondition = '';
+        switch (orFilter.operator) {
+          case 'eq':
+            orCondition = `${orFilter.column} = $${paramIndex++}`;
+            params.push(orFilter.value);
+            break;
+          case 'neq':
+            orCondition = `${orFilter.column} != $${paramIndex++}`;
+            params.push(orFilter.value);
+            break;
+          case 'ilike':
+            orCondition = `${orFilter.column} ILIKE $${paramIndex++}`;
+            params.push(orFilter.value);
+            break;
+          case 'like':
+            orCondition = `${orFilter.column} LIKE $${paramIndex++}`;
+            params.push(orFilter.value);
+            break;
+          default:
+            continue;
+        }
+        if (orCondition) orConditions.push(orCondition);
+      }
+      if (orConditions.length > 0) {
+        conditions.push(`(${orConditions.join(' OR ')})`);
+      }
+      continue;
+    }
+
+    switch (operator) {
+      case 'eq':
+        if (value === null) {
+          condition = `${column} IS NULL`;
+        } else {
+          condition = `${column} = $${paramIndex++}`;
+          params.push(value);
+        }
+        break;
+      case 'neq':
+        if (value === null) {
+          condition = `${column} IS NOT NULL`;
+        } else {
+          condition = `${column} != $${paramIndex++}`;
+          params.push(value);
+        }
+        break;
+      case 'gt':
+        condition = `${column} > $${paramIndex++}`;
+        params.push(value);
+        break;
+      case 'gte':
+        condition = `${column} >= $${paramIndex++}`;
+        params.push(value);
+        break;
+      case 'lt':
+        condition = `${column} < $${paramIndex++}`;
+        params.push(value);
+        break;
+      case 'lte':
+        condition = `${column} <= $${paramIndex++}`;
+        params.push(value);
+        break;
+      case 'like':
+        condition = `${column} LIKE $${paramIndex++}`;
+        params.push(value);
+        break;
+      case 'ilike':
+        condition = `${column} ILIKE $${paramIndex++}`;
+        params.push(value);
+        break;
+      case 'in':
+        if (Array.isArray(value) && value.length > 0) {
+          const placeholders = value.map(() => `$${paramIndex++}`).join(',');
+          condition = `${column} IN (${placeholders})`;
+          params.push(...value);
+        } else {
+          continue;
+        }
+        break;
+      case 'is':
+        if (value === null) {
+          condition = `${column} IS NULL`;
+        } else {
+          condition = `${column} IS ${value}`;
+        }
+        break;
+      default:
+        continue;
+    }
+
+    if (negated && condition) {
+      condition = `NOT (${condition})`;
+    }
+
+    if (condition) {
+      conditions.push(condition);
+    }
+  }
+
+  return {
+    clause: conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '',
+    params,
+  };
+}
+
+/**
  * Select records from table
  */
 export async function selectRecords<T = any>(
   table: string,
   options: ApiOptions = {}
 ): Promise<T[]> {
-  const { select = '*', where = {}, orderBy = '', limit, offset } = options;
+  const { select = '*', where = {}, filters = [], orderBy = '', limit, offset } = options;
 
   let query = `SELECT ${select} FROM public.${table}`;
   let params: any[] = [];
 
-  if (Object.keys(where).length > 0) {
+  // Use filters if provided, otherwise use where clause
+  if (filters.length > 0) {
+    const { clause, params: filterParams } = buildFiltersClause(filters);
+    query += ` ${clause}`;
+    params = filterParams;
+  } else if (Object.keys(where).length > 0) {
     const { clause, params: whereParams } = buildWhereClause(where);
     query += ` ${clause}`;
     params = whereParams;
@@ -94,22 +245,28 @@ export async function selectOne<T = any>(
 
 /**
  * Insert record
+ * @param table - Table name
+ * @param data - Record data
+ * @param userId - Optional user ID to set context for audit logs
  */
 export async function insertRecord<T = any>(
   table: string,
-  data: Record<string, any>
+  data: Record<string, any>,
+  userId?: string
 ): Promise<T> {
   const keys = Object.keys(data);
   const values = Object.values(data);
   const placeholders = keys.map((_, i) => `$${i + 1}`).join(',');
 
+  // Build the insert query
   const query = `
     INSERT INTO public.${table} (${keys.join(',')})
     VALUES (${placeholders})
     RETURNING *
   `;
 
-  const result = await queryOne<T>(query, values);
+  // Pass userId to queryOne so backend can set context in transaction
+  const result = await queryOne<T>(query, values, userId);
   if (!result) {
     throw new Error(`Failed to insert record into ${table}`);
   }
@@ -119,17 +276,24 @@ export async function insertRecord<T = any>(
 
 /**
  * Update record
+ * @param table - Table name
+ * @param data - Record data to update
+ * @param where - Where conditions
+ * @param userId - Optional user ID to set context for audit logs
  */
 export async function updateRecord<T = any>(
   table: string,
   data: Record<string, any>,
-  where: Record<string, any>
+  where: Record<string, any>,
+  userId?: string
 ): Promise<T> {
   const updateKeys = Object.keys(data);
   const updateValues = Object.values(data);
   const setClause = updateKeys.map((key, i) => `${key} = $${i + 1}`).join(',');
 
-  const { clause: whereClause, params: whereParams } = buildWhereClause(where);
+  // WHERE clause parameters start after SET clause parameters
+  const whereStartIndex = updateKeys.length + 1;
+  const { clause: whereClause, params: whereParams } = buildWhereClause(where, whereStartIndex);
   const allParams = [...updateValues, ...whereParams];
 
   const query = `
@@ -139,11 +303,21 @@ export async function updateRecord<T = any>(
     RETURNING *
   `;
 
-  const result = await queryOne<T>(query, allParams);
+  console.log('[PostgreSQL Service] Update query:', { 
+    table, 
+    setClause: setClause.substring(0, 100),
+    whereClause,
+    paramsCount: allParams.length,
+    whereKeys: Object.keys(where)
+  });
+
+  const result = await queryOne<T>(query, allParams, userId);
   if (!result) {
+    console.error('[PostgreSQL Service] Update returned no result for:', { table, where });
     throw new Error(`Failed to update record in ${table}`);
   }
 
+  console.log('[PostgreSQL Service] Update successful:', { table, resultId: (result as any)?.id });
   return result;
 }
 

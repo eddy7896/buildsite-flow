@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { hexToUuid } from '@/lib/utils';
@@ -122,7 +122,7 @@ export const useGST = () => {
       // Convert hex agency_id to UUID format for database query
       const dbAgencyId = hexToUuid(profile.agency_id);
       
-      const { data, error } = await supabase.rpc('calculate_gst_liability', {
+      const { data, error } = await db.rpc('calculate_gst_liability', {
         p_agency_id: dbAgencyId,
         p_start_date: startDate,
         p_end_date: endDate

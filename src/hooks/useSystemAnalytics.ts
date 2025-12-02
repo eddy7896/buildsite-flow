@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 
 export interface SystemMetrics {
@@ -95,10 +95,10 @@ export const useSystemAnalytics = ({ userId, userRole }: UseSystemAnalyticsProps
 
       // Fetch usage statistics
       const [projectsResult, invoicesResult, clientsResult, attendanceResult] = await Promise.all([
-        supabase.from('projects').select('*', { count: 'exact', head: true }),
-        supabase.from('invoices').select('*', { count: 'exact', head: true }),
-        supabase.from('clients').select('*', { count: 'exact', head: true }),
-        supabase.from('attendance').select('*', { count: 'exact', head: true })
+        db.from('projects').select('*', { count: 'exact', head: true }),
+        db.from('invoices').select('*', { count: 'exact', head: true }),
+        db.from('clients').select('*', { count: 'exact', head: true }),
+        db.from('attendance').select('*', { count: 'exact', head: true })
       ]);
 
       // Process subscription plans

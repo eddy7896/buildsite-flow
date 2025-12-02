@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Users, CheckCircle, AlertCircle, Sparkles } from 'lucide-react';
 
@@ -16,7 +16,7 @@ export const CreateDemoUsers = () => {
     setResults([]);
 
     try {
-      const { data, error } = await supabase.functions.invoke('create-demo-users');
+      const { data, error } = await db.functions.invoke('create-demo-users');
 
       if (error) throw error;
 

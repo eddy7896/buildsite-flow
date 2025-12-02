@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { Activity, Users, Clock, TrendingUp } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 

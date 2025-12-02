@@ -21,7 +21,7 @@ import {
   Lightbulb,
   BarChart3
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { PredictiveAnalytics } from "@/components/ai/PredictiveAnalytics";
@@ -188,7 +188,7 @@ export default function AIFeatures() {
   const generatePrediction = async (type: string) => {
     try {
       // Call AI service to generate prediction
-      const { data, error } = await supabase.functions.invoke('ai-predictions', {
+      const { data, error } = await db.functions.invoke('ai-predictions', {
         body: { type, timeframe: selectedTimeframe }
       });
 
@@ -214,7 +214,7 @@ export default function AIFeatures() {
       const formData = new FormData();
       formData.append('document', file);
 
-      const { data, error } = await supabase.functions.invoke('ai-document-processor', {
+      const { data, error } = await db.functions.invoke('ai-document-processor', {
         body: formData
       });
 

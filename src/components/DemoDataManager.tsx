@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useAuth } from '@/hooks/useAuth';
 import { Trash2, Sparkles, AlertTriangle, CheckCircle } from 'lucide-react';
 
@@ -23,7 +23,7 @@ const DemoDataManager = ({ onDataChange }: DemoDataManagerProps) => {
     setLoading(true);
     try {
       // Get user's agency ID
-      const { data: profile } = await supabase
+      const { data: profile } = await db
         .from('profiles')
         .select('agency_id')
         .eq('user_id', user.id)
@@ -33,7 +33,7 @@ const DemoDataManager = ({ onDataChange }: DemoDataManagerProps) => {
         throw new Error('Agency not found');
       }
 
-      const { data, error } = await supabase.functions.invoke('generate-demo-data', {
+      const { data, error } = await db.functions.invoke('generate-demo-data', {
         body: { agencyId: profile.agency_id }
       });
 
@@ -63,7 +63,7 @@ const DemoDataManager = ({ onDataChange }: DemoDataManagerProps) => {
     setCleanupLoading(true);
     try {
       // Get user's agency ID
-      const { data: profile } = await supabase
+      const { data: profile } = await db
         .from('profiles')
         .select('agency_id')
         .eq('user_id', user.id)
@@ -84,7 +84,7 @@ const DemoDataManager = ({ onDataChange }: DemoDataManagerProps) => {
         .eq('agency_id', agencyId);
 
       if (quotationsToDelete?.length) {
-        await supabase
+        await db
           .from('quotation_line_items')
           .delete()
           .in('quotation_id', quotationsToDelete.map(q => q.id));
@@ -97,38 +97,38 @@ const DemoDataManager = ({ onDataChange }: DemoDataManagerProps) => {
         .eq('agency_id', agencyId);
 
       if (jobsToDelete?.length) {
-        await supabase
+        await db
           .from('job_cost_items')
           .delete()
           .in('job_id', jobsToDelete.map(j => j.id));
       }
 
       // 3. Delete CRM activities
-      await supabase
+      await db
         .from('crm_activities')
         .delete()
         .eq('agency_id', agencyId);
 
       // 4. Delete quotations
-      await supabase
+      await db
         .from('quotations')
         .delete()
         .eq('agency_id', agencyId);
 
       // 5. Delete leads
-      await supabase
+      await db
         .from('leads')
         .delete()
         .eq('agency_id', agencyId);
 
       // 6. Delete jobs
-      await supabase
+      await db
         .from('jobs')
         .delete()
         .eq('agency_id', agencyId);
 
       // 7. Delete clients
-      await supabase
+      await db
         .from('clients')
         .delete()
         .eq('agency_id', agencyId);
@@ -136,19 +136,19 @@ const DemoDataManager = ({ onDataChange }: DemoDataManagerProps) => {
       // 8. Delete global demo data (expense categories, lead sources, job categories)
       // Note: These might be shared across agencies, so we only delete if they're demo data
       const demoCategories = ['Office Supplies', 'Travel & Transportation', 'Software & Licenses', 'Marketing & Advertising', 'Training & Education'];
-      await supabase
+      await db
         .from('expense_categories')
         .delete()
         .in('name', demoCategories);
 
       const demoSources = ['Website Contact Form', 'Referral', 'Social Media', 'Trade Shows', 'Cold Outreach'];
-      await supabase
+      await db
         .from('lead_sources')
         .delete()
         .in('name', demoSources);
 
       const demoJobCategories = ['Web Development', 'Mobile Development', 'System Integration', 'Consulting', 'Maintenance & Support'];
-      await supabase
+      await db
         .from('job_categories')
         .delete()
         .in('name', demoJobCategories);

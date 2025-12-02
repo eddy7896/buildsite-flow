@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ReimbursementFormDialog } from "@/components/ReimbursementFormDialog";
 import { ReimbursementReviewDialog } from "@/components/ReimbursementReviewDialog";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { useAuth } from "@/hooks/useAuth";
 import { Plus, Search, DollarSign, Clock, CheckCircle, XCircle, Eye } from "lucide-react";
 import { format } from "date-fns";

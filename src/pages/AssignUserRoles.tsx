@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/components/ui/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { ArrowLeft, User, Shield, Key, Mail, Phone, Building } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -165,7 +165,7 @@ const AssignUserRoles = () => {
           const password = generateCredentials();
 
           // Call edge function to create user
-          const { data: createUserData, error: createUserError } = await supabase.functions.invoke('create-user-account', {
+          const { data: createUserData, error: createUserError } = await db.functions.invoke('create-user-account', {
             body: {
               email,
               password,

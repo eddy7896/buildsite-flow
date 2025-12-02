@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { useAuth } from "@/hooks/useAuth";
 import { CheckCircle, XCircle, Download, Eye, DollarSign } from "lucide-react";
 import { format } from "date-fns";
@@ -103,7 +103,7 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
       });
 
       // Send email notification
-      await supabase.functions.invoke('send-reimbursement-notification', {
+      await db.functions.invoke('send-reimbursement-notification', {
         body: {
           reimbursementId: request.id,
           notificationType: 'approved'
@@ -154,7 +154,7 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
       });
 
       // Send email notification
-      await supabase.functions.invoke('send-reimbursement-notification', {
+      await db.functions.invoke('send-reimbursement-notification', {
         body: {
           reimbursementId: request.id,
           notificationType: 'rejected'
@@ -178,7 +178,7 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
 
   const downloadFile = async (attachment: Attachment) => {
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await db.storage
         .from('receipts')
         .download(attachment.file_path);
 
@@ -204,7 +204,7 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
 
   const viewFile = async (attachment: Attachment) => {
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await db.storage
         .from('receipts')
         .createSignedUrl(attachment.file_path, 3600); // 1 hour
 

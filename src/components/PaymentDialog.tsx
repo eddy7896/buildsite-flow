@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { DollarSign, CreditCard, Banknote } from "lucide-react";
 import { format } from "date-fns";
 
@@ -50,7 +50,7 @@ export const PaymentDialog: React.FC<PaymentDialogProps> = ({
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('process-reimbursement-payment', {
+      const { data, error } = await db.functions.invoke('process-reimbursement-payment', {
         body: {
           reimbursementId: request.id,
           paymentMethod,
@@ -70,7 +70,7 @@ export const PaymentDialog: React.FC<PaymentDialogProps> = ({
       });
 
       // Send email notification
-      await supabase.functions.invoke('send-reimbursement-notification', {
+      await db.functions.invoke('send-reimbursement-notification', {
         body: {
           reimbursementId: request.id,
           notificationType: 'paid'

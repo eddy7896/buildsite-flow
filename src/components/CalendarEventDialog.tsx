@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -49,7 +49,7 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated }: Cale
     event_type: 'meeting',
     start_date: new Date(),
     end_date: new Date(),
-    all_day: false,
+    is_all_day: false,
     location: '',
     color: '#3b82f6'
   });
@@ -61,18 +61,20 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated }: Cale
     try {
       setLoading(true);
 
-      const { error } = await supabase
+      const { error } = await db
         .from('company_events')
         .insert({
+          id: crypto.randomUUID(),
           title: formData.title,
           description: formData.description,
           event_type: formData.event_type,
           start_date: formData.start_date.toISOString(),
           end_date: formData.end_date.toISOString(),
-          all_day: formData.all_day,
+          all_day: formData.is_all_day,
           location: formData.location,
           color: formData.color,
-          created_by: user.id
+          created_by: user.id,
+          agency_id: '550e8400-e29b-41d4-a716-446655440000' // Default agency
         });
 
       if (error) throw error;
@@ -92,7 +94,7 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated }: Cale
         event_type: 'meeting',
         start_date: new Date(),
         end_date: new Date(),
-        all_day: false,
+        is_all_day: false,
         location: '',
         color: '#3b82f6'
       });

@@ -137,6 +137,19 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
+-- SECTION 6.5: CREATE TEAM MEMBERS
+-- ============================================================================
+
+INSERT INTO public.team_members (id, team_assignment_id, user_id, team_role, assigned_by, assigned_at, agency_id)
+VALUES 
+  ('550e8400-e29b-41d4-a716-446655440055'::uuid, '550e8400-e29b-41d4-a716-446655440050'::uuid, '550e8400-e29b-41d4-a716-446655440010'::uuid, 'lead', '550e8400-e29b-41d4-a716-446655440010'::uuid, NOW(), '550e8400-e29b-41d4-a716-446655440000'::uuid),
+  ('550e8400-e29b-41d4-a716-446655440056'::uuid, '550e8400-e29b-41d4-a716-446655440051'::uuid, '550e8400-e29b-41d4-a716-446655440011'::uuid, 'lead', '550e8400-e29b-41d4-a716-446655440010'::uuid, NOW(), '550e8400-e29b-41d4-a716-446655440000'::uuid),
+  ('550e8400-e29b-41d4-a716-446655440057'::uuid, '550e8400-e29b-41d4-a716-446655440052'::uuid, '550e8400-e29b-41d4-a716-446655440012'::uuid, 'lead', '550e8400-e29b-41d4-a716-446655440010'::uuid, NOW(), '550e8400-e29b-41d4-a716-446655440000'::uuid),
+  ('550e8400-e29b-41d4-a716-446655440058'::uuid, '550e8400-e29b-41d4-a716-446655440053'::uuid, '550e8400-e29b-41d4-a716-446655440013'::uuid, 'lead', '550e8400-e29b-41d4-a716-446655440010'::uuid, NOW(), '550e8400-e29b-41d4-a716-446655440000'::uuid),
+  ('550e8400-e29b-41d4-a716-446655440059'::uuid, '550e8400-e29b-41d4-a716-446655440054'::uuid, '550e8400-e29b-41d4-a716-446655440014'::uuid, 'member', '550e8400-e29b-41d4-a716-446655440012'::uuid, NOW(), '550e8400-e29b-41d4-a716-446655440000'::uuid)
+ON CONFLICT DO NOTHING;
+
+-- ============================================================================
 -- SECTION 7: CREATE LEAVE TYPES
 -- ============================================================================
 
@@ -185,10 +198,10 @@ ON CONFLICT DO NOTHING;
 -- SECTION 11: CREATE INVOICES
 -- ============================================================================
 
-INSERT INTO public.invoices (id, invoice_number, client_id, title, status, issue_date, due_date, subtotal, tax_rate, total_amount, created_by, agency_id)
+INSERT INTO public.invoices (id, invoice_number, client_id, title, status, issue_date, due_date, subtotal, tax_rate, created_by, agency_id)
 VALUES 
-  ('550e8400-e29b-41d4-a716-446655440100'::uuid, 'INV-2024-00001', '550e8400-e29b-41d4-a716-446655440070'::uuid, 'Website Redesign - Phase 1', 'sent', '2024-02-01', '2024-03-01', 25000.00, 10.0, 27500.00, '550e8400-e29b-41d4-a716-446655440013'::uuid, '550e8400-e29b-41d4-a716-446655440000'::uuid),
-  ('550e8400-e29b-41d4-a716-446655440101'::uuid, 'INV-2024-00002', '550e8400-e29b-41d4-a716-446655440071'::uuid, 'Consultation Services', 'draft', '2024-02-10', '2024-03-10', 5000.00, 10.0, 5500.00, '550e8400-e29b-41d4-a716-446655440013'::uuid, '550e8400-e29b-41d4-a716-446655440000'::uuid)
+  ('550e8400-e29b-41d4-a716-446655440100'::uuid, 'INV-2024-00001', '550e8400-e29b-41d4-a716-446655440070'::uuid, 'Website Redesign - Phase 1', 'sent', '2024-02-01', '2024-03-01', 25000.00, 10.0, '550e8400-e29b-41d4-a716-446655440013'::uuid, '550e8400-e29b-41d4-a716-446655440000'::uuid),
+  ('550e8400-e29b-41d4-a716-446655440101'::uuid, 'INV-2024-00002', '550e8400-e29b-41d4-a716-446655440071'::uuid, 'Consultation Services', 'draft', '2024-02-10', '2024-03-10', 5000.00, 10.0, '550e8400-e29b-41d4-a716-446655440013'::uuid, '550e8400-e29b-41d4-a716-446655440000'::uuid)
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
@@ -348,6 +361,8 @@ SELECT COUNT(*) as agencies_count FROM public.agencies;
 SELECT COUNT(*) as users_count FROM public.users;
 SELECT COUNT(*) as profiles_count FROM public.profiles;
 SELECT COUNT(*) as departments_count FROM public.departments;
+SELECT COUNT(*) as team_assignments_count FROM public.team_assignments;
+SELECT COUNT(*) as team_members_count FROM public.team_members;
 SELECT COUNT(*) as clients_count FROM public.clients;
 SELECT COUNT(*) as projects_count FROM public.projects;
 SELECT COUNT(*) as tasks_count FROM public.tasks;

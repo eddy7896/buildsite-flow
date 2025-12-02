@@ -21,7 +21,7 @@ import {
   Download,
   Settings
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { GanttChart } from "@/components/project-management/GanttChart";

@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 
 interface Project {
   id?: string;
@@ -54,7 +54,7 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
       };
 
       if (project?.id) {
-        const { error } = await supabase
+        const { error } = await db
           .from('projects')
           .update(cleanedData)
           .eq('id', project.id);
@@ -66,7 +66,7 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
           description: 'Project updated successfully',
         });
       } else {
-        const { error } = await supabase
+        const { error } = await db
           .from('projects')
           .insert([cleanedData]);
 

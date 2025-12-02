@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 
 interface CurrencyInfo {
   code: string;
@@ -30,12 +30,14 @@ export const useCurrency = () => {
         // First, try to get admin-configured currency from agency settings
         const { data: agencyData } = await supabase
           .from('agency_settings')
-          .select('default_currency')
+          .select('default_currency, currency')
           .limit(1)
           .single();
 
-        if (agencyData?.default_currency && currencies[agencyData.default_currency]) {
-          setCurrency(currencies[agencyData.default_currency]);
+        // Support both default_currency (new) and currency (legacy) fields
+        const currencyCode = agencyData?.default_currency || agencyData?.currency;
+        if (currencyCode && currencies[currencyCode]) {
+          setCurrency(currencies[currencyCode]);
           setLoading(false);
           return;
         }

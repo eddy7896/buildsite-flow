@@ -20,6 +20,7 @@ const Auth = React.lazy(() => import("./pages/Auth"));
 const SignupSuccess = React.lazy(() => import("./pages/SignupSuccess"));
 const AgencyDashboard = React.lazy(() => import("./pages/AgencyDashboard"));
 const SignUp = React.lazy(() => import("./pages/SignUp"));
+const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 const Users = React.lazy(() => import("./pages/Users"));
 const Projects = React.lazy(() => import("./pages/Projects"));
@@ -111,6 +112,7 @@ const App = () => (
               <Route path="/auth" element={<SuspenseRoute><Auth /></SuspenseRoute>} />
               <Route path="/signup" element={<SuspenseRoute><SignUp /></SuspenseRoute>} />
               <Route path="/signup-success" element={<SuspenseRoute><SignupSuccess /></SuspenseRoute>} />
+              <Route path="/forgot-password" element={<SuspenseRoute><ForgotPassword /></SuspenseRoute>} />
               
               <Route 
                 path="/dashboard" 

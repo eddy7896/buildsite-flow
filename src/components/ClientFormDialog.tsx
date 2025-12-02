@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 
 interface Client {
   id?: string;
@@ -169,17 +169,17 @@ const ClientFormDialog: React.FC<ClientFormDialogProps> = ({
         });
       } else {
         // Create new client - generate client number
-        const { data: clientNumberData, error: numberError } = await supabase
+        const { data: clientNumberData } = await supabase
           .rpc('generate_client_number');
-
-        if (numberError) throw numberError;
 
         const { id, client_number, ...insertData } = dataToSubmit;
         const { error } = await supabase
           .from('clients')
           .insert({
+            id: crypto.randomUUID(),
             ...insertData,
-            client_number: clientNumberData,
+            client_number: clientNumberData || `CLT-${Date.now().toString(36).toUpperCase()}`,
+            agency_id: '550e8400-e29b-41d4-a716-446655440000' // Default agency
           });
 
         if (error) throw error;

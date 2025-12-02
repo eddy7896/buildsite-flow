@@ -4,10 +4,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import bcrypt from 'bcryptjs';
 
 interface User {
   id: string;
@@ -32,6 +33,16 @@ interface CreatedUserCredentials {
   temporaryPassword: string;
   userRole: string;
 }
+
+// Generate a secure temporary password
+const generatePassword = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+  let password = '';
+  for (let i = 0; i < 12; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+};
 
 const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogProps) => {
   const { toast } = useToast();
@@ -101,7 +112,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
 
     try {
       if (user) {
-        // Update existing user
+        // Update user profile
         const { error: profileError } = await supabase
           .from('profiles')
           .update({
@@ -117,13 +128,38 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           throw profileError;
         }
 
-        const { error: roleError } = await supabase
+        // Update user role - get the first role for this user and update it
+        // If multiple roles exist, we update the first one
+        const { data: existingRoles } = await supabase
           .from('user_roles')
-          .update({ role: formData.role as any })
-          .eq('user_id', user.id);
+          .select('id')
+          .eq('user_id', user.id)
+          .limit(1);
 
-        if (roleError) {
-          throw roleError;
+        if (existingRoles && existingRoles.length > 0) {
+          // Update existing role
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .update({ role: formData.role as any })
+            .eq('id', existingRoles[0].id);
+
+          if (roleError) {
+            throw roleError;
+          }
+        } else {
+          // Insert new role if it doesn't exist
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert({
+              id: crypto.randomUUID(),
+              user_id: user.id,
+              role: formData.role as any,
+              agency_id: '550e8400-e29b-41d4-a716-446655440000'
+            });
+
+          if (roleError) {
+            throw roleError;
+          }
         }
 
         toast({
@@ -134,27 +170,62 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
         onUserSaved();
         onClose();
       } else {
-        // Create new user using the edge function
-        const { data, error } = await supabase.functions.invoke('create-agency-user', {
-          body: {
-            fullName: formData.name,
-            email: formData.email,
-            role: formData.role,
-            position: formData.position || null,
-            department: formData.department || null,
-            phone: formData.phone || null
-          }
+        // Create new user
+        const newUserId = crypto.randomUUID();
+        const temporaryPassword = generatePassword();
+        
+        // Hash the password using bcrypt
+        const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+        
+        // Create user record
+        const { insertRecord, updateRecord, selectOne } = await import('@/services/api/postgresql-service');
+        
+        await insertRecord('users', {
+          id: newUserId,
+          email: formData.email,
+          password_hash: passwordHash,
+          is_active: true,
+          email_confirmed: true
         });
 
-        if (error) {
-          throw error;
+        // Profile is automatically created by database trigger, so update it instead of inserting
+        const existingProfile = await selectOne('profiles', { user_id: newUserId });
+        
+        const profileData = {
+          full_name: formData.name,
+          phone: formData.phone || null,
+          department: formData.department || null,
+          position: formData.position || null,
+          hire_date: formData.hire_date || null,
+          is_active: true,
+          agency_id: '550e8400-e29b-41d4-a716-446655440000' // Default agency
+        };
+
+        if (existingProfile) {
+          // Update existing profile created by trigger
+          await updateRecord('profiles', profileData, { user_id: newUserId });
+        } else {
+          // Fallback: if trigger didn't create profile, insert it manually
+          await insertRecord('profiles', {
+            id: crypto.randomUUID(),
+            user_id: newUserId,
+            ...profileData,
+          });
         }
+
+        // Assign role
+        await insertRecord('user_roles', {
+          id: crypto.randomUUID(),
+          user_id: newUserId,
+          role: formData.role || 'employee',
+          agency_id: '550e8400-e29b-41d4-a716-446655440000'
+        });
 
         // Store the created user credentials to display
         setCreatedUser({
-          email: data.email,
-          temporaryPassword: data.temporaryPassword,
-          userRole: data.userRole
+          email: formData.email,
+          temporaryPassword: temporaryPassword,
+          userRole: formData.role || 'employee'
         });
 
         setShowCredentials(true);
@@ -192,7 +263,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           <DialogDescription>
             {user 
               ? 'Update user information and role assignment.'
-              : 'Create a new user account. Login credentials will be auto-generated and emailed to the user.'
+              : 'Create a new user account. Login credentials will be auto-generated.'
             }
           </DialogDescription>
         </DialogHeader>
@@ -254,8 +325,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
                 </div>
 
                 <p className="text-sm text-green-700">
-                  ⚠️ <strong>Important:</strong> Save these credentials now - they won't be shown again! 
-                  A welcome email has been sent to the user with these login details.
+                  ⚠️ <strong>Important:</strong> Save these credentials now - they won't be shown again!
                 </p>
               </div>
             </AlertDescription>
@@ -265,7 +335,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name">Full Name *</Label>
               <Input
                 id="name"
                 value={formData.name}
@@ -275,7 +345,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 type="email"
@@ -289,46 +359,26 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="role">Role</Label>
+              <Label htmlFor="role">Role *</Label>
               <Select
                 value={formData.role}
                 onValueChange={(value) => setFormData({ ...formData, role: value })}
                 disabled={loading}
+                required
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  <optgroup label="Executive Level">
-                    <SelectItem value="super_admin">Super Admin</SelectItem>
-                    <SelectItem value="ceo">Chief Executive Officer</SelectItem>
-                    <SelectItem value="cto">Chief Technology Officer</SelectItem>
-                    <SelectItem value="cfo">Chief Financial Officer</SelectItem>
-                    <SelectItem value="coo">Chief Operations Officer</SelectItem>
-                  </optgroup>
-                  <optgroup label="Management Level">
-                    <SelectItem value="admin">Administrator</SelectItem>
-                    <SelectItem value="operations_manager">Operations Manager</SelectItem>
-                    <SelectItem value="department_head">Department Head</SelectItem>
-                    <SelectItem value="team_lead">Team Lead</SelectItem>
-                    <SelectItem value="project_manager">Project Manager</SelectItem>
-                  </optgroup>
-                  <optgroup label="Specialized Roles">
-                    <SelectItem value="hr">Human Resources</SelectItem>
-                    <SelectItem value="finance_manager">Finance Manager</SelectItem>
-                    <SelectItem value="sales_manager">Sales Manager</SelectItem>
-                    <SelectItem value="marketing_manager">Marketing Manager</SelectItem>
-                    <SelectItem value="quality_assurance">Quality Assurance</SelectItem>
-                    <SelectItem value="it_support">IT Support</SelectItem>
-                    <SelectItem value="legal_counsel">Legal Counsel</SelectItem>
-                    <SelectItem value="business_analyst">Business Analyst</SelectItem>
-                    <SelectItem value="customer_success">Customer Success</SelectItem>
-                  </optgroup>
-                  <optgroup label="General Staff">
-                    <SelectItem value="employee">Employee</SelectItem>
-                    <SelectItem value="contractor">Contractor</SelectItem>
-                    <SelectItem value="intern">Intern</SelectItem>
-                  </optgroup>
+                  <SelectItem value="super_admin">Super Admin</SelectItem>
+                  <SelectItem value="admin">Administrator</SelectItem>
+                  <SelectItem value="hr">Human Resources</SelectItem>
+                  <SelectItem value="finance_manager">Finance Manager</SelectItem>
+                  <SelectItem value="project_manager">Project Manager</SelectItem>
+                  <SelectItem value="team_lead">Team Lead</SelectItem>
+                  <SelectItem value="employee">Employee</SelectItem>
+                  <SelectItem value="contractor">Contractor</SelectItem>
+                  <SelectItem value="intern">Intern</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -339,6 +389,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
                 value={formData.position}
                 onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                 disabled={loading}
+                placeholder="e.g., Senior Developer"
               />
             </div>
           </div>
@@ -346,12 +397,27 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="department">Department</Label>
-              <Input
-                id="department"
+              <Select
                 value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                onValueChange={(value) => setFormData({ ...formData, department: value })}
                 disabled={loading}
-              />
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Engineering">Engineering</SelectItem>
+                  <SelectItem value="Development">Development</SelectItem>
+                  <SelectItem value="Design">Design</SelectItem>
+                  <SelectItem value="Marketing">Marketing</SelectItem>
+                  <SelectItem value="Sales">Sales</SelectItem>
+                  <SelectItem value="Finance">Finance</SelectItem>
+                  <SelectItem value="Human Resources">Human Resources</SelectItem>
+                  <SelectItem value="Operations">Operations</SelectItem>
+                  <SelectItem value="Support">Support</SelectItem>
+                  <SelectItem value="Management">Management</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="phone">Phone</Label>
@@ -360,6 +426,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 disabled={loading}
+                placeholder="+1 (555) 123-4567"
               />
             </div>
           </div>

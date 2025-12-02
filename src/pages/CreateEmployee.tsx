@@ -16,9 +16,11 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, CalendarIcon, Save, User, Mail, Phone, Building, MapPin, Upload, FileText, X, Eye } from "lucide-react";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { insertRecord, updateRecord, selectOne } from '@/services/api/postgresql-service';
+import bcrypt from 'bcryptjs';
 
 const formSchema = z.object({
   // Personal Information
@@ -103,58 +105,61 @@ const CreateEmployee = () => {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
     try {
-      // First create the user account
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: values.email,
-        password: 'TempPassword123!', // You might want to generate a temporary password
-        options: {
-          data: {
-            full_name: `${values.firstName} ${values.lastName}`
-          }
-        }
-      });
-
-      if (authError) {
-        throw authError;
+      // Get current logged-in user ID for audit logs
+      const currentUserId = user?.id;
+      if (!currentUserId) {
+        throw new Error('You must be logged in to create an employee');
       }
 
-      const userId = authData.user?.id;
-      if (!userId) {
-        throw new Error('Failed to create user account');
-      }
+      // Generate a new user ID for the employee
+      const userId = crypto.randomUUID();
+      const tempPassword = 'TempPass' + Math.random().toString(36).substring(2, 10) + '!';
+      
+      // Hash the password properly
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+      
+      // Get agency_id (use default if not available)
+      const agencyId = '550e8400-e29b-41d4-a716-446655440000';
 
-      // Get the current user's profile to find agency_id
-      const { data: currentUserProfile, error: currentUserError } = await supabase
-        .from('profiles')
-        .select('agency_id')
-        .eq('user_id', user?.id)
-        .single();
+      // Create user record with current user context for audit logs
+      await insertRecord('users', {
+          id: userId,
+          email: values.email,
+        password_hash: passwordHash,
+          is_active: true,
+          email_confirmed: true,
+      }, currentUserId);
 
-      if (currentUserError || !currentUserProfile?.agency_id) {
-        throw new Error('Unable to determine agency. Please contact support.');
-      }
-
-      // Create profile entry
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          user_id: userId,
-          agency_id: currentUserProfile.agency_id,
+      // Profile is automatically created by database trigger, so update it instead of inserting
+      // Check if profile exists (it should, due to trigger)
+      const existingProfile = await selectOne('profiles', { user_id: userId });
+      
+      const profileData = {
+          agency_id: agencyId,
           full_name: `${values.firstName} ${values.lastName}`,
           phone: values.phone,
           department: values.department,
           position: values.position,
-          hire_date: values.hireDate.toISOString().split('T')[0]
-        });
+          hire_date: values.hireDate.toISOString().split('T')[0],
+          is_active: true,
+      };
 
-      if (profileError) {
-        throw profileError;
+      if (existingProfile) {
+          // Update existing profile created by trigger
+          await updateRecord('profiles', profileData, { user_id: userId }, currentUserId);
+      } else {
+          // Fallback: if trigger didn't create profile, insert it manually
+          await insertRecord('profiles', {
+              id: crypto.randomUUID(),
+              user_id: userId,
+              ...profileData,
+          }, currentUserId);
       }
 
-      // Create employee details entry
-      const { error: employeeError } = await supabase
-        .from('employee_details')
-        .insert({
+      // Create employee details entry (this triggers audit log)
+      const employeeDetailsId = crypto.randomUUID();
+      await insertRecord('employee_details', {
+          id: employeeDetailsId,
           user_id: userId,
           employee_id: values.employeeId,
           first_name: values.firstName,
@@ -164,34 +169,39 @@ const CreateEmployee = () => {
           nationality: values.nationality,
           marital_status: values.maritalStatus,
           address: values.address,
-          salary: parseFloat(values.salary),
-          employment_type: values.employmentType,
+          employment_type: values.employmentType, // Keep as 'full-time', 'part-time', etc.
           work_location: values.workLocation,
+          supervisor_id: values.supervisor || null,
           emergency_contact_name: values.emergencyContactName,
           emergency_contact_phone: values.emergencyContactPhone,
           emergency_contact_relationship: values.emergencyContactRelationship,
-          notes: values.notes
-        });
+          notes: values.notes,
+          agency_id: agencyId,
+          is_active: true,
+      }, currentUserId);
 
-      if (employeeError) {
-        throw employeeError;
-      }
+      // Create employee salary details entry (salary is in separate table)
+      await insertRecord('employee_salary_details', {
+          id: crypto.randomUUID(),
+          employee_id: employeeDetailsId, // Reference to employee_details.id
+          salary: parseFloat(values.salary),
+          currency: 'USD',
+          salary_frequency: 'monthly',
+          effective_date: values.hireDate.toISOString().split('T')[0],
+          agency_id: agencyId,
+      }, currentUserId);
 
       // Set user role
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert({
+      await insertRecord('user_roles', {
+          id: crypto.randomUUID(),
           user_id: userId,
-          role: values.role
-        });
-
-      if (roleError) {
-        throw roleError;
-      }
+          role: values.role,
+          agency_id: agencyId,
+      }, currentUserId);
 
       toast({
         title: "Success",
-        description: "Employee created successfully!",
+        description: `Employee created successfully! Temporary password: ${tempPassword}`,
       });
 
       // Reset form

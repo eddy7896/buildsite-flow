@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, Filter, Edit, Trash2, Mail, Phone, MapPin, Building, Calendar, User, DollarSign, FileText } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import ClientFormDialog from "@/components/ClientFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
 

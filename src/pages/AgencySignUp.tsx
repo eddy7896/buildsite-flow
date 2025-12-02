@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Building2, ArrowLeft } from 'lucide-react';
 
@@ -56,7 +56,7 @@ const AgencySignUp = () => {
 
     try {
       // Call the agency registration edge function
-      const { data, error } = await supabase.functions.invoke('register-agency', {
+      const { data, error } = await db.functions.invoke('register-agency', {
         body: {
           agencyName: formData.agencyName,
           domain: formData.domain,

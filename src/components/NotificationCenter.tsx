@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { LoadingSpinner } from './LoadingSpinner';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
@@ -62,7 +62,7 @@ export const NotificationCenter: React.FC = () => {
       setNotifications((data || []) as Notification[]);
       
       // Get unread count
-      const { data: countData } = await supabase.rpc('get_unread_notification_count', {
+      const { data: countData } = await db.rpc('get_unread_notification_count', {
         p_user_id: user.id
       });
       setUnreadCount(countData || 0);
@@ -73,7 +73,7 @@ export const NotificationCenter: React.FC = () => {
 
   const handleMarkAsRead = async (notificationId: string) => {
     return markAsRead(async () => {
-      const { error } = await supabase.rpc('mark_notification_read', {
+      const { error } = await db.rpc('mark_notification_read', {
         p_notification_id: notificationId
       });
 
@@ -115,30 +115,13 @@ export const NotificationCenter: React.FC = () => {
     if (user) {
       loadNotifications();
       
-      // Set up real-time subscription
-      const subscription = supabase
-        .channel('notifications-changes')
-        .on('postgres_changes', 
-          { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'notifications',
-            filter: `user_id=eq.${user.id}`
-          },
-          (payload) => {
-            const newNotification = payload.new as Notification;
-            setNotifications(prev => [newNotification, ...prev]);
-            setUnreadCount(prev => prev + 1);
-            toast({
-              title: 'New notification',
-              description: newNotification.title
-            });
-          }
-        )
-        .subscribe();
+      // Set up polling for notifications (realtime not available in browser-only mode)
+      const pollInterval = setInterval(() => {
+        loadNotifications();
+      }, 30000); // Poll every 30 seconds
 
       return () => {
-        subscription.unsubscribe();
+        clearInterval(pollInterval);
       };
     }
   }, [user]);

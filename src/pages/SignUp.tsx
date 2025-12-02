@@ -1,41 +1,26 @@
 import { useState, useEffect } from 'react';
-import { Navigate, Link, useSearchParams } from 'react-router-dom';
+import { Navigate, Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/hooks/useAuth';
 import { useCurrency } from '@/hooks/useCurrency';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import { 
-  Loader2, 
-  Building, 
-  Check, 
-  ArrowLeft, 
-  ArrowRight,
-  Zap,
-  Building2,
-  Crown,
-  Users,
-  Globe,
-  ChevronDown,
-  AlertCircle,
-  CheckCircle2,
-  Eye,
-  EyeOff
+  Loader2, Building, Check, ArrowLeft, ArrowRight, Zap, Building2, Crown,
+  Users, Globe, ChevronDown, AlertCircle, Eye, EyeOff, Mail, User, Phone,
+  Shield, CheckCircle2
 } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
 const SignUp = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, signUp } = useAuth();
+  const navigate = useNavigate();
   const { currency, formatPrice, changeCurrency, availableCurrencies } = useCurrency();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
@@ -45,6 +30,7 @@ const SignUp = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   
   // Form states
   const [accountData, setAccountData] = useState({
@@ -52,22 +38,11 @@ const SignUp = () => {
     password: '',
     confirmPassword: '',
     agencyName: '',
-    agencyDomain: '',
     fullName: '',
     phone: '',
-    countryCode: '+1 US'
   });
   
-  const [selectedTld, setSelectedTld] = useState('.com');
-  const [customTld, setCustomTld] = useState('');
-  const [isCustomTld, setIsCustomTld] = useState(false);
-  
-  const [selectedPlan, setSelectedPlan] = useState('');
-
-  // Common TLD options
-  const commonTlds = [
-    '.com', '.org', '.net', '.io', '.co', '.app', '.dev', '.tech', '.agency', '.business'
-  ];
+  const [selectedPlan, setSelectedPlan] = useState('professional');
 
   const plans = [
     {
@@ -75,16 +50,16 @@ const SignUp = () => {
       name: "Starter",
       price: 29,
       period: "month",
-      description: "Perfect for small agencies getting started",
+      description: "For small teams getting started",
       icon: Zap,
       popular: false,
-      teamSize: "Up to 5 team members",
-      projects: "10 active projects",
+      teamSize: "Up to 5 users",
+      projects: "10 projects",
       features: [
         "Basic project management",
+        "Team collaboration",
         "Email support",
         "5GB storage",
-        "Mobile app access"
       ]
     },
     {
@@ -92,17 +67,17 @@ const SignUp = () => {
       name: "Professional",
       price: 79,
       period: "month", 
-      description: "Ideal for growing agencies with advanced needs",
+      description: "For growing agencies",
       icon: Building2,
       popular: true,
-      teamSize: "Up to 25 team members",
+      teamSize: "Up to 25 users",
       projects: "Unlimited projects",
       features: [
         "Advanced project management",
         "Priority support",
         "100GB storage",
         "API access",
-        "Client portal"
+        "Client portal",
       ]
     },
     {
@@ -110,17 +85,17 @@ const SignUp = () => {
       name: "Enterprise",
       price: 199,
       period: "month",
-      description: "For large agencies requiring maximum control",
+      description: "For large organizations",
       icon: Crown,
       popular: false,
-      teamSize: "Unlimited team members", 
+      teamSize: "Unlimited users", 
       projects: "Unlimited projects",
       features: [
-        "Enterprise features",
+        "Everything in Professional",
         "24/7 dedicated support",
         "Unlimited storage",
-        "White-label solution",
-        "SSO integration"
+        "White-label option",
+        "SSO & advanced security",
       ]
     }
   ];
@@ -136,21 +111,9 @@ const SignUp = () => {
       
       if (planId) {
         setSelectedPlan(planId);
-        // If user came from pricing with a plan, show plan selection step
-        if (currentStep === 1 && accountData.agencyName && accountData.email) {
-          // If they have some account data already, go to plan step
-          setCurrentStep(2);
-        }
-      } else {
-        // Invalid plan parameter, show a warning
-        toast({
-          title: "Invalid plan selection",
-          description: "The plan you selected is not available. Please choose from our available plans.",
-          variant: "destructive",
-        });
       }
     }
-  }, [searchParams, accountData.agencyName, accountData.email, currentStep, toast]);
+  }, [searchParams]);
 
   // Redirect if already authenticated
   if (user) {
@@ -159,8 +122,8 @@ const SignUp = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -178,10 +141,10 @@ const SignUp = () => {
   const getPasswordStrengthText = (strength: number) => {
     switch (strength) {
       case 0:
-      case 1: return 'Very Weak';
-      case 2: return 'Weak';
-      case 3: return 'Fair';
-      case 4: return 'Good';
+      case 1: return 'Weak';
+      case 2: return 'Fair';
+      case 3: return 'Good';
+      case 4:
       case 5: return 'Strong';
       default: return '';
     }
@@ -193,25 +156,10 @@ const SignUp = () => {
       case 1: return 'bg-red-500';
       case 2: return 'bg-orange-500';
       case 3: return 'bg-yellow-500';
-      case 4: return 'bg-blue-500';
+      case 4:
       case 5: return 'bg-green-500';
       default: return 'bg-gray-300';
     }
-  };
-
-  const generateDomainFromAgencyName = (agencyName: string) => {
-    return agencyName
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters except spaces and hyphens
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
-      .replace(/^-|-$/g, ''); // Remove leading/trailing hyphens
-  };
-
-  const validateDomain = (domain: string) => {
-    // Basic domain validation
-    const domainRegex = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
-    return domainRegex.test(domain) && domain.length >= 3 && domain.length <= 63;
   };
 
   const validateStep1 = () => {
@@ -219,16 +167,14 @@ const SignUp = () => {
     
     if (!accountData.fullName.trim()) {
       newErrors.fullName = 'Full name is required';
+    } else if (accountData.fullName.trim().length < 2) {
+      newErrors.fullName = 'Please enter your full name';
     }
     
     if (!accountData.agencyName.trim()) {
       newErrors.agencyName = 'Agency name is required';
-    }
-
-    if (!accountData.agencyDomain.trim()) {
-      newErrors.agencyDomain = 'Agency domain is required';
-    } else if (!validateDomain(accountData.agencyDomain)) {
-      newErrors.agencyDomain = 'Domain must be 3-63 characters, contain only letters, numbers, and hyphens, and not start/end with hyphens';
+    } else if (accountData.agencyName.trim().length < 2) {
+      newErrors.agencyName = 'Agency name must be at least 2 characters';
     }
     
     if (!accountData.email.trim()) {
@@ -239,16 +185,20 @@ const SignUp = () => {
     
     if (!accountData.password) {
       newErrors.password = 'Password is required';
-    } else if (accountData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
+    } else if (accountData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters';
     } else if (passwordStrength < 3) {
-      newErrors.password = 'Password is too weak. Include uppercase, lowercase, numbers, and symbols.';
+      newErrors.password = 'Please choose a stronger password';
     }
     
     if (!accountData.confirmPassword) {
       newErrors.confirmPassword = 'Please confirm your password';
     } else if (accountData.password !== accountData.confirmPassword) {
       newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    if (!agreedToTerms) {
+      newErrors.terms = 'You must agree to the terms and conditions';
     }
     
     setErrors(newErrors);
@@ -257,21 +207,16 @@ const SignUp = () => {
 
   const handleAccountSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (validateStep1()) {
       setCurrentStep(2);
     }
-  };
-
-  const handlePlanSelection = (planId: string) => {
-    setSelectedPlan(planId);
   };
 
   const handleSignUp = async () => {
     if (!selectedPlan) {
       toast({
         title: "Please select a plan",
-        description: "You need to choose a plan to continue with registration.",
+        description: "Choose a plan to complete your registration.",
         variant: "destructive",
       });
       return;
@@ -280,43 +225,26 @@ const SignUp = () => {
     setIsLoading(true);
     
     try {
-      // Call the register-agency edge function with proper headers
-      const { data, error } = await supabase.functions.invoke('register-agency', {
-        body: {
-          // Agency details
-          agencyName: accountData.agencyName,
-          domain: accountData.agencyDomain,
-          
-          // Admin user details
-          email: accountData.email,
-          password: accountData.password,
-          fullName: accountData.fullName,
-          phone: accountData.phone,
-          
-          // Plan selection
-          selectedPlan,
-          planDetails: plans.find(p => p.id === selectedPlan)
-        }
-      });
-
+      // Register the user
+      const { error } = await signUp(accountData.email, accountData.password, accountData.fullName);
+      
       if (error) {
         throw error;
       }
 
       toast({
-        title: "Agency registered successfully!",
-        description: "Please check your email to verify your account before signing in.",
+        title: "Account created successfully!",
+        description: "Please check your email to verify your account.",
       });
 
-      // Redirect to success page with agency info
-      const successUrl = `/signup-success?agencyName=${encodeURIComponent(accountData.agencyName)}&agencyDomain=${encodeURIComponent(accountData.agencyDomain)}&email=${encodeURIComponent(accountData.email)}&plan=${encodeURIComponent(selectedPlan)}`;
-      window.location.href = successUrl;
+      // Redirect to success page
+      navigate(`/signup-success?agencyName=${encodeURIComponent(accountData.agencyName)}&email=${encodeURIComponent(accountData.email)}&plan=${encodeURIComponent(selectedPlan)}`);
       
     } catch (error: any) {
       console.error('Registration error:', error);
       toast({
         title: "Registration failed",
-        description: error.message || 'Please try again or contact support.',
+        description: error.message || 'An error occurred. Please try again.',
         variant: "destructive",
       });
     }
@@ -327,27 +255,31 @@ const SignUp = () => {
   const selectedPlanDetails = plans.find(p => p.id === selectedPlan);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       {/* Header */}
-      <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <Link to="/" className="flex items-center gap-2">
-              <Building className="h-8 w-8 text-primary" />
-              <span className="text-xl font-bold">BuildFlow</span>
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
+                <Building className="h-5 w-5 text-white" />
+              </div>
+              <span className="text-xl font-bold text-slate-900">BuildFlow</span>
             </Link>
             
             <div className="flex items-center gap-4">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="gap-2">
+                  <Button variant="ghost" size="sm" className="gap-2 text-slate-600">
                     <Globe className="h-4 w-4" />
                     {currency.code}
-                    <ChevronDown className="h-4 w-4" />
+                    <ChevronDown className="h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {Object.entries(availableCurrencies).map(([countryCode, currencyInfo]) => (
+                  {Object.entries(availableCurrencies)
+                    .filter(([key]) => key !== 'default')
+                    .map(([countryCode, currencyInfo]) => (
                     <DropdownMenuItem 
                       key={countryCode}
                       onClick={() => changeCurrency(countryCode)}
@@ -359,369 +291,262 @@ const SignUp = () => {
                 </DropdownMenuContent>
               </DropdownMenu>
               <Link to="/auth">
-                <Button variant="ghost">Already have an account?</Button>
+                <Button variant="ghost" className="text-slate-600">Sign In</Button>
               </Link>
             </div>
           </div>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Progress Indicator */}
-        <div className="mb-8">
-          <div className="flex items-center justify-center space-x-4">
-            <div className={`flex items-center ${currentStep >= 1 ? 'text-primary' : 'text-muted-foreground'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep >= 1 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                1
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
+        {/* Progress Steps */}
+        <div className="mb-10">
+          <div className="flex items-center justify-center">
+            <div className={`flex items-center ${currentStep >= 1 ? 'text-emerald-600' : 'text-slate-400'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
+                currentStep >= 1 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'
+              }`}>
+                {currentStep > 1 ? <Check className="h-5 w-5" /> : '1'}
               </div>
-              <span className="ml-2 hidden sm:inline">Agency Setup</span>
+              <span className="ml-3 font-medium hidden sm:inline">Create Account</span>
             </div>
-            <div className={`w-12 h-0.5 ${currentStep >= 2 ? 'bg-primary' : 'bg-muted'}`}></div>
-            <div className={`flex items-center ${currentStep >= 2 ? 'text-primary' : 'text-muted-foreground'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep >= 2 ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+            
+            <div className={`w-16 sm:w-24 h-1 mx-4 rounded-full transition-all ${
+              currentStep >= 2 ? 'bg-emerald-600' : 'bg-slate-200'
+            }`} />
+            
+            <div className={`flex items-center ${currentStep >= 2 ? 'text-emerald-600' : 'text-slate-400'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
+                currentStep >= 2 ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-500'
+              }`}>
                 2
               </div>
-              <span className="ml-2 hidden sm:inline">Choose Plan</span>
+              <span className="ml-3 font-medium hidden sm:inline">Choose Plan</span>
             </div>
           </div>
         </div>
 
-        {/* Step 1: Agency Account Setup */}
+        {/* Step 1: Account Setup */}
         {currentStep === 1 && (
-          <Card className="max-w-2xl mx-auto">
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl font-bold">Create Your Agency Account</CardTitle>
-              <CardDescription>
-                Set up your agency with a custom domain and admin account
+          <Card className="max-w-xl mx-auto shadow-xl border-slate-200/50">
+            <CardHeader className="text-center pb-2">
+              <CardTitle className="text-2xl font-bold text-slate-900">Create Your Account</CardTitle>
+              <CardDescription className="text-slate-500">
+                Get started with BuildFlow in just a few minutes
               </CardDescription>
-              <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> This creates an admin account with full system access. Employee accounts can be created later from the dashboard.
-                </p>
-              </div>
             </CardHeader>
-            <CardContent>
-              <form onSubmit={handleAccountSubmit} className="space-y-6">
-                <div className="grid sm:grid-cols-2 gap-4">
+            <CardContent className="pt-6">
+              <form onSubmit={handleAccountSubmit} className="space-y-5">
+                {/* Full Name */}
                 <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input
-                    id="fullName"
-                    type="text"
-                    placeholder="John Doe"
-                    value={accountData.fullName}
-                    onChange={(e) => {
-                      setAccountData(prev => ({ ...prev, fullName: e.target.value }));
-                      if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' }));
-                    }}
-                    className={errors.fullName ? 'border-destructive' : ''}
-                    required
-                  />
-                  {errors.fullName && (
-                    <p className="text-sm text-destructive flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {errors.fullName}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="agencyName">Agency Name</Label>
-                  <Input
-                    id="agencyName"
-                    type="text"
-                    placeholder="ABC Construction"
-                    value={accountData.agencyName}
-                    onChange={(e) => {
-                      const newAgencyName = e.target.value;
-                      setAccountData(prev => ({ 
-                        ...prev, 
-                        agencyName: newAgencyName,
-                        // Auto-generate domain if it's empty or matches the previous auto-generated one
-                        agencyDomain: !prev.agencyDomain || prev.agencyDomain === generateDomainFromAgencyName(prev.agencyName) 
-                          ? generateDomainFromAgencyName(newAgencyName)
-                          : prev.agencyDomain
-                      }));
-                      if (errors.agencyName) setErrors(prev => ({ ...prev, agencyName: '' }));
-                      if (errors.agencyDomain) setErrors(prev => ({ ...prev, agencyDomain: '' }));
-                    }}
-                    className={errors.agencyName ? 'border-destructive' : ''}
-                    required
-                  />
-                  {errors.agencyName && (
-                    <p className="text-sm text-destructive flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {errors.agencyName}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="agencyDomain">Agency Domain</Label>
-                <div className="flex items-center gap-0">
-                  <Input
-                    id="agencyDomain"
-                    type="text"
-                    placeholder="abc-construction"
-                    value={accountData.agencyDomain}
-                    onChange={(e) => {
-                      const domain = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
-                      setAccountData(prev => ({ ...prev, agencyDomain: domain }));
-                      if (errors.agencyDomain) setErrors(prev => ({ ...prev, agencyDomain: '' }));
-                    }}
-                    className={`rounded-r-none border-r-0 ${errors.agencyDomain ? 'border-destructive' : ''}`}
-                    required
-                  />
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="outline" 
-                        className="rounded-l-none px-3 bg-muted hover:bg-muted/80"
-                      >
-                        {isCustomTld ? customTld : selectedTld}
-                        <ChevronDown className="ml-1 h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-48">
-                      {commonTlds.map((tld) => (
-                        <DropdownMenuItem
-                          key={tld}
-                          onClick={() => {
-                            setSelectedTld(tld);
-                            setIsCustomTld(false);
-                            setCustomTld('');
-                          }}
-                        >
-                          {tld}
-                        </DropdownMenuItem>
-                      ))}
-                      <DropdownMenuItem
-                        onClick={() => {
-                          setIsCustomTld(true);
-                          setCustomTld('.custom');
-                        }}
-                      >
-                        + Custom TLD
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                
-                {isCustomTld && (
-                  <div className="space-y-2">
-                    <Label htmlFor="customTld" className="text-sm">Custom TLD</Label>
+                  <Label htmlFor="fullName" className="text-slate-700">Full Name</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
-                      id="customTld"
+                      id="fullName"
                       type="text"
-                      placeholder=".agency"
-                      value={customTld}
+                      placeholder="John Smith"
+                      value={accountData.fullName}
                       onChange={(e) => {
-                        let value = e.target.value;
-                        if (!value.startsWith('.')) {
-                          value = '.' + value;
-                        }
-                        value = value.toLowerCase().replace(/[^a-z0-9.-]/g, '');
-                        setCustomTld(value);
+                        setAccountData(prev => ({ ...prev, fullName: e.target.value }));
+                        if (errors.fullName) setErrors(prev => ({ ...prev, fullName: '' }));
                       }}
-                      className="max-w-xs"
+                      className={`pl-10 h-11 ${errors.fullName ? 'border-red-500 focus:ring-red-500' : ''}`}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Enter your custom top-level domain (e.g., .agency, .construction)
-                    </p>
                   </div>
-                )}
-                
-                <p className="text-xs text-muted-foreground">
-                  Your agency domain: <strong>{accountData.agencyDomain || 'your-domain'}{isCustomTld ? customTld : selectedTld}</strong>
-                </p>
-                {errors.agencyDomain && (
-                  <p className="text-sm text-destructive flex items-center gap-1">
-                    <AlertCircle className="h-4 w-4" />
-                    {errors.agencyDomain}
-                  </p>
-                )}
-              </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email">Business Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="john@abcconstruction.com"
-                    value={accountData.email}
-                    onChange={(e) => {
-                      setAccountData(prev => ({ ...prev, email: e.target.value }));
-                      if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
-                    }}
-                    className={errors.email ? 'border-destructive' : ''}
-                    required
-                  />
-                  {errors.email && (
-                    <p className="text-sm text-destructive flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {errors.email}
+                  {errors.fullName && (
+                    <p className="text-sm text-red-500 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" /> {errors.fullName}
                     </p>
                   )}
                 </div>
 
+                {/* Agency Name */}
                 <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <div className="flex gap-2">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="w-[120px] justify-between">
-                          {accountData.countryCode || '+1 US'}
-                          <ChevronDown className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="w-[200px]">
-                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+1 US' }))}>
-                          🇺🇸 +1 United States
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+91 IN' }))}>
-                          🇮🇳 +91 India
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+44 UK' }))}>
-                          🇬🇧 +44 United Kingdom
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+61 AU' }))}>
-                          🇦🇺 +61 Australia
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+49 DE' }))}>
-                          🇩🇪 +49 Germany
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+33 FR' }))}>
-                          🇫🇷 +33 France
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setAccountData(prev => ({ ...prev, countryCode: '+81 JP' }))}>
-                          🇯🇵 +81 Japan
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                  <Label htmlFor="agencyName" className="text-slate-700">Agency / Company Name</Label>
+                  <div className="relative">
+                    <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      id="agencyName"
+                      type="text"
+                      placeholder="Acme Construction Ltd"
+                      value={accountData.agencyName}
+                      onChange={(e) => {
+                        setAccountData(prev => ({ ...prev, agencyName: e.target.value }));
+                        if (errors.agencyName) setErrors(prev => ({ ...prev, agencyName: '' }));
+                      }}
+                      className={`pl-10 h-11 ${errors.agencyName ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    />
+                  </div>
+                  {errors.agencyName && (
+                    <p className="text-sm text-red-500 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" /> {errors.agencyName}
+                    </p>
+                  )}
+                </div>
+
+                {/* Email */}
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-slate-700">Business Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="john@company.com"
+                      value={accountData.email}
+                      onChange={(e) => {
+                        setAccountData(prev => ({ ...prev, email: e.target.value }));
+                        if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
+                      }}
+                      className={`pl-10 h-11 ${errors.email ? 'border-red-500 focus:ring-red-500' : ''}`}
+                    />
+                  </div>
+                  {errors.email && (
+                    <p className="text-sm text-red-500 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" /> {errors.email}
+                    </p>
+                  )}
+                </div>
+
+                {/* Phone (Optional) */}
+                <div className="space-y-2">
+                  <Label htmlFor="phone" className="text-slate-700">
+                    Phone Number <span className="text-slate-400 text-xs">(Optional)</span>
+                  </Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="555 123-4567"
+                      placeholder="+1 (555) 123-4567"
                       value={accountData.phone}
                       onChange={(e) => setAccountData(prev => ({ ...prev, phone: e.target.value }))}
-                      className="flex-1"
+                      className="pl-10 h-11"
                     />
                   </div>
                 </div>
 
+                {/* Password */}
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
+                    <Label htmlFor="password" className="text-slate-700">Password</Label>
                     <div className="relative">
                       <Input
                         id="password"
                         type={showPassword ? "text" : "password"}
-                        placeholder="Create a strong password"
+                        placeholder="Min. 8 characters"
                         value={accountData.password}
                         onChange={(e) => {
                           setAccountData(prev => ({ ...prev, password: e.target.value }));
                           setPasswordStrength(calculatePasswordStrength(e.target.value));
                           if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
                         }}
-                        className={errors.password ? 'border-destructive pr-10' : 'pr-10'}
-                        required
+                        className={`pr-10 h-11 ${errors.password ? 'border-red-500 focus:ring-red-500' : ''}`}
                       />
-                      <Button
+                      <button
                         type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                         onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                       >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </Button>
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
-                    {/* Password Strength Indicator */}
                     {accountData.password && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs">
-                          <span>Password Strength:</span>
-                          <span className={`font-medium ${passwordStrength >= 4 ? 'text-green-600' : passwordStrength >= 3 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-500">Strength:</span>
+                          <span className={`font-medium ${passwordStrength >= 3 ? 'text-green-600' : 'text-orange-500'}`}>
                             {getPasswordStrengthText(passwordStrength)}
                           </span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="w-full bg-slate-200 rounded-full h-1.5">
                           <div 
-                            className={`h-2 rounded-full transition-all duration-300 ${getPasswordStrengthColor(passwordStrength)}`}
+                            className={`h-1.5 rounded-full transition-all ${getPasswordStrengthColor(passwordStrength)}`}
                             style={{ width: `${(passwordStrength / 5) * 100}%` }}
                           />
                         </div>
                       </div>
                     )}
                     {errors.password && (
-                      <p className="text-sm text-destructive flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.password}
+                      <p className="text-sm text-red-500 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" /> {errors.password}
                       </p>
                     )}
                   </div>
+                  
                   <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirm Password</Label>
+                    <Label htmlFor="confirmPassword" className="text-slate-700">Confirm Password</Label>
                     <div className="relative">
                       <Input
                         id="confirmPassword"
                         type={showConfirmPassword ? "text" : "password"}
-                        placeholder="Confirm your password"
+                        placeholder="Confirm password"
                         value={accountData.confirmPassword}
                         onChange={(e) => {
                           setAccountData(prev => ({ ...prev, confirmPassword: e.target.value }));
                           if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: '' }));
                         }}
-                        className={errors.confirmPassword ? 'border-destructive pr-10' : 'pr-10'}
-                        required
+                        className={`pr-10 h-11 ${errors.confirmPassword ? 'border-red-500 focus:ring-red-500' : ''}`}
                       />
-                      <Button
+                      <button
                         type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                       >
-                        {showConfirmPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </Button>
+                        {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
                     </div>
+                    {accountData.confirmPassword && accountData.password === accountData.confirmPassword && (
+                      <p className="text-sm text-green-600 flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Passwords match
+                      </p>
+                    )}
                     {errors.confirmPassword && (
-                      <p className="text-sm text-destructive flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.confirmPassword}
+                      <p className="text-sm text-red-500 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" /> {errors.confirmPassword}
                       </p>
                     )}
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Creating Account...
-                    </>
-                  ) : (
-                    <>
-                      Continue to Plan Selection
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </>
+                {/* Terms & Conditions */}
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Checkbox 
+                      id="terms" 
+                      checked={agreedToTerms}
+                      onCheckedChange={(checked) => {
+                        setAgreedToTerms(checked as boolean);
+                        if (errors.terms) setErrors(prev => ({ ...prev, terms: '' }));
+                      }}
+                      className="mt-0.5"
+                    />
+                    <Label htmlFor="terms" className="text-sm text-slate-600 cursor-pointer leading-tight">
+                      I agree to the{' '}
+                      <Link to="/terms" className="text-emerald-600 hover:underline">Terms of Service</Link>
+                      {' '}and{' '}
+                      <Link to="/privacy" className="text-emerald-600 hover:underline">Privacy Policy</Link>
+                    </Label>
+                  </div>
+                  {errors.terms && (
+                    <p className="text-sm text-red-500 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" /> {errors.terms}
+                    </p>
                   )}
+                </div>
+
+                <Button type="submit" className="w-full h-11 bg-emerald-600 hover:bg-emerald-700">
+                  Continue to Plan Selection
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </form>
 
               <div className="mt-6 text-center">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-slate-500">
                   Already have an account?{' '}
-                  <Link to="/auth" className="text-primary hover:underline">
-                    Sign in here
+                  <Link to="/auth" className="text-emerald-600 hover:underline font-medium">
+                    Sign in
                   </Link>
                 </p>
               </div>
@@ -732,146 +557,123 @@ const SignUp = () => {
         {/* Step 2: Plan Selection */}
         {currentStep === 2 && (
           <div>
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold mb-2">Choose Your Plan</h2>
-              <p className="text-muted-foreground mb-4">
-                Select the perfect plan for {accountData.agencyName}
+            <div className="text-center mb-10">
+              <h2 className="text-3xl font-bold text-slate-900 mb-3">Choose Your Plan</h2>
+              <p className="text-slate-500 mb-4">
+                Start with a 14-day free trial. No credit card required.
               </p>
-              <div className="flex flex-wrap justify-center gap-2">
-                <Badge variant="secondary">
-                  14-day free trial • No credit card required
-                </Badge>
-                {selectedPlan && (
-                  <Badge variant="default">
-                    <CheckCircle2 className="w-4 h-4 mr-1" />
-                    Plan Selected
-                  </Badge>
-                )}
-                {searchParams.get('plan') && (
-                  <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">
-                    Recommended from pricing
-                  </Badge>
-                )}
-              </div>
+              <Badge variant="secondary" className="px-4 py-1.5 bg-emerald-50 text-emerald-700 border-emerald-200">
+                <Shield className="w-3.5 h-3.5 mr-1.5" />
+                Cancel anytime during trial
+              </Badge>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
+            <div className="grid md:grid-cols-3 gap-6 mb-10">
               {plans.map((plan) => {
-                const isPreSelected = searchParams.get('plan')?.toLowerCase() === plan.name.toLowerCase();
                 const isSelected = selectedPlan === plan.id;
                 
                 return (
-                <Card 
-                  key={plan.id} 
-                  className={`relative cursor-pointer transition-all hover:shadow-lg ${
-                    isSelected ? 'border-primary shadow-lg scale-105' : 'border-border'
-                  } ${plan.popular || isPreSelected ? 'border-primary' : ''} ${
-                    isPreSelected ? 'ring-2 ring-primary ring-opacity-20' : ''
-                  }`}
-                  onClick={() => handlePlanSelection(plan.id)}
-                >
-                  {(plan.popular || isPreSelected) && (
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                      <Badge className={`${isPreSelected ? 'bg-blue-500 text-white' : 'bg-primary text-primary-foreground'}`}>
-                        {isPreSelected ? 'Recommended' : 'Most Popular'}
-                      </Badge>
-                    </div>
-                  )}
-                  
-                  <CardHeader className="text-center pb-4">
-                    <div className="mb-4">
-                      <plan.icon className="h-12 w-12 text-primary mx-auto" />
-                    </div>
-                    <CardTitle className="text-xl">{plan.name}</CardTitle>
-                    <div className="mt-2">
-                      <span className="text-3xl font-bold">{formatPrice(plan.price)}</span>
-                      <span className="text-muted-foreground">/{plan.period}</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{plan.description}</p>
-                  </CardHeader>
-                  
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Users className="h-4 w-4 text-primary" />
-                        <span>{plan.teamSize}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Building2 className="h-4 w-4 text-primary" />
-                        <span>{plan.projects}</span>
-                      </div>
-                    </div>
-                    
-                    <div className="border-t pt-4">
-                      <ul className="space-y-2">
-                        {plan.features.slice(0, 4).map((feature, index) => (
-                          <li key={index} className="flex items-center gap-2 text-sm">
-                            <Check className="h-3 w-3 text-primary flex-shrink-0" />
-                            <span>{feature}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    
-                    {selectedPlan === plan.id && (
-                      <div className="pt-2">
-                        <Badge variant="default" className="w-full justify-center">
-                          Selected Plan
+                  <Card 
+                    key={plan.id} 
+                    className={`relative cursor-pointer transition-all duration-200 hover:shadow-lg ${
+                      isSelected 
+                        ? 'border-emerald-500 shadow-lg ring-2 ring-emerald-500/20' 
+                        : 'border-slate-200 hover:border-slate-300'
+                    } ${plan.popular ? 'md:-mt-4 md:mb-4' : ''}`}
+                    onClick={() => setSelectedPlan(plan.id)}
+                  >
+                    {plan.popular && (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                        <Badge className="bg-emerald-600 text-white px-3">
+                          Most Popular
                         </Badge>
                       </div>
                     )}
-                  </CardContent>
-                </Card>
+                    
+                    <CardHeader className="text-center pt-8 pb-4">
+                      <div className={`w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4 ${
+                        isSelected ? 'bg-emerald-100' : 'bg-slate-100'
+                      }`}>
+                        <plan.icon className={`h-7 w-7 ${isSelected ? 'text-emerald-600' : 'text-slate-600'}`} />
+                      </div>
+                      <CardTitle className="text-xl text-slate-900">{plan.name}</CardTitle>
+                      <div className="mt-3">
+                        <span className="text-4xl font-bold text-slate-900">{formatPrice(plan.price)}</span>
+                        <span className="text-slate-500">/{plan.period}</span>
+                      </div>
+                      <p className="text-sm text-slate-500 mt-2">{plan.description}</p>
+                    </CardHeader>
+                    
+                    <CardContent className="pt-0">
+                      <div className="space-y-3 mb-6">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Users className={`h-4 w-4 ${isSelected ? 'text-emerald-600' : 'text-slate-400'}`} />
+                          <span className="text-slate-700">{plan.teamSize}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <Building2 className={`h-4 w-4 ${isSelected ? 'text-emerald-600' : 'text-slate-400'}`} />
+                          <span className="text-slate-700">{plan.projects}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="border-t border-slate-100 pt-4">
+                        <ul className="space-y-2.5">
+                          {plan.features.map((feature, index) => (
+                            <li key={index} className="flex items-start gap-2 text-sm text-slate-600">
+                              <Check className={`h-4 w-4 mt-0.5 flex-shrink-0 ${isSelected ? 'text-emerald-500' : 'text-slate-400'}`} />
+                              <span>{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      
+                      {isSelected && (
+                        <div className="mt-6">
+                          <Badge className="w-full justify-center py-2 bg-emerald-600">
+                            <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                            Selected
+                          </Badge>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 )
               })}
             </div>
 
-            {/* Plan Selection Summary */}
-            {selectedPlan && (
-              <div className="mb-8">
-                <Card className="bg-blue-50 border-blue-200">
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle2 className="h-5 w-5 text-blue-600" />
-                        <div>
-                          <p className="font-medium text-blue-900">
-                            {plans.find(p => p.id === selectedPlan)?.name} Plan Selected
-                          </p>
-                          <p className="text-sm text-blue-700">
-                            {formatPrice(plans.find(p => p.id === selectedPlan)?.price || 0)}/month • 14-day free trial
-                          </p>
-                        </div>
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setSelectedPlan('')}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        Change Plan
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+            {/* Summary & Actions */}
+            {selectedPlanDetails && (
+              <Card className="max-w-md mx-auto mb-8 bg-slate-50 border-slate-200">
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-medium text-slate-900">
+                      {selectedPlanDetails.name} Plan
+                    </span>
+                    <span className="font-bold text-slate-900">
+                      {formatPrice(selectedPlanDetails.price)}/mo
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-500">
+                    Start your 14-day free trial today. You won't be charged until your trial ends.
+                  </p>
+                </CardContent>
+              </Card>
             )}
 
-            {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button 
                 variant="outline" 
                 onClick={() => setCurrentStep(1)}
-                className="flex items-center gap-2"
+                className="gap-2"
               >
                 <ArrowLeft className="h-4 w-4" />
-                Back to Account Setup
+                Back
               </Button>
               
               <Button 
                 onClick={handleSignUp}
                 disabled={!selectedPlan || isLoading}
-                className="flex items-center gap-2 min-w-[200px]"
+                className="gap-2 min-w-[200px] bg-emerald-600 hover:bg-emerald-700"
               >
                 {isLoading ? (
                   <>
@@ -880,28 +682,12 @@ const SignUp = () => {
                   </>
                 ) : (
                   <>
-                    Create Agency Account
+                    Start Free Trial
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
               </Button>
             </div>
-
-            {/* Selected Plan Summary */}
-            {selectedPlan && selectedPlanDetails && (
-              <Card className="mt-8 max-w-md mx-auto bg-muted/30">
-                <CardContent className="p-6">
-                  <h3 className="font-semibold mb-2">Your Selection:</h3>
-                  <div className="flex items-center justify-between">
-                    <span>{selectedPlanDetails.name} Plan</span>
-                    <span className="font-bold">{formatPrice(selectedPlanDetails.price)}/month</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    14-day free trial, then {formatPrice(selectedPlanDetails.price)} per month. Cancel anytime.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
           </div>
         )}
       </div>

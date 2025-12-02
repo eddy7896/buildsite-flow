@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Users, Building2, User } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 
 interface Department {
@@ -58,11 +58,16 @@ export function TeamAssignmentPanel() {
   };
 
   const fetchDepartments = async () => {
-    const { data } = await supabase
+    const { data, error } = await db
       .from("departments")
       .select("id, name")
       .eq("is_active", true)
       .order("name");
+
+    if (error) {
+      console.error("Error fetching departments:", error);
+      return;
+    }
 
     if (data) {
       setDepartments(data);
@@ -70,11 +75,16 @@ export function TeamAssignmentPanel() {
   };
 
   const fetchProfiles = async () => {
-    const { data } = await supabase
+    const { data, error } = await db
       .from("profiles")
       .select("user_id, full_name, department")
       .eq("is_active", true)
       .order("full_name");
+
+    if (error) {
+      console.error("Error fetching profiles:", error);
+      return;
+    }
 
     if (data) {
       setProfiles(data);
@@ -82,7 +92,7 @@ export function TeamAssignmentPanel() {
   };
 
   const fetchAssignments = async () => {
-    const { data } = await supabase
+    const { data, error } = await db
       .from("team_assignments")
       .select(`
         id,
@@ -93,13 +103,18 @@ export function TeamAssignmentPanel() {
       `)
       .eq("is_active", true);
 
+    if (error) {
+      console.error("Error fetching assignments:", error);
+      return;
+    }
+
     if (data) {
       // Fetch profile and department data separately
       const assignmentsWithDetails = await Promise.all(
         data.map(async (assignment) => {
           const [profileResult, departmentResult] = await Promise.all([
-            supabase.from("profiles").select("full_name").eq("user_id", assignment.user_id).single(),
-            supabase.from("departments").select("name").eq("id", assignment.department_id).single()
+            db.from("profiles").select("full_name").eq("user_id", assignment.user_id).single(),
+            db.from("departments").select("name").eq("id", assignment.department_id).single()
           ]);
 
           return {
@@ -127,20 +142,32 @@ export function TeamAssignmentPanel() {
     setLoading(true);
     try {
       // First, deactivate any existing assignments for this user
-      await supabase
+      await db
         .from("team_assignments")
         .update({ is_active: false })
         .eq("user_id", selectedUser)
         .eq("is_active", true);
 
+      // Get agency_id from user's profile
+      const { data: profileData } = await db
+        .from("profiles")
+        .select("agency_id")
+        .eq("user_id", selectedUser)
+        .single();
+
+      const agencyId = profileData?.agency_id || null;
+
       // Create new assignment
-      const { error } = await supabase
+      const { error } = await db
         .from("team_assignments")
         .insert([{
           user_id: selectedUser,
           department_id: selectedDepartment,
           position_title: positionTitle || null,
           role_in_department: roleInDepartment,
+          start_date: new Date().toISOString().split('T')[0],
+          is_active: true,
+          agency_id: agencyId,
         }]);
 
       if (error) throw error;
@@ -169,7 +196,7 @@ export function TeamAssignmentPanel() {
 
   const handleRemoveAssignment = async (assignmentId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("team_assignments")
         .update({ is_active: false })
         .eq("id", assignmentId);

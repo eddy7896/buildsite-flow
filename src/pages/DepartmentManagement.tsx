@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Building2, Users, Plus, Edit, Trash2, Search, DollarSign } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { DepartmentFormDialog } from "@/components/DepartmentFormDialog";

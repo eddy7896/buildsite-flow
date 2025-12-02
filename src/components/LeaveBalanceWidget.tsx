@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -44,7 +44,7 @@ export const LeaveBalanceWidget: React.FC<LeaveBalanceWidgetProps> = ({
 
   const fetchBalances = async () => {
     return loadBalances(async () => {
-      const { data, error } = await supabase.rpc('get_leave_balance_summary', {
+      const { data, error } = await db.rpc('get_leave_balance_summary', {
         p_employee_id: employeeId || undefined,
         p_year: year
       });

@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -161,7 +161,7 @@ export const ReimbursementWorkflow: React.FC<ReimbursementWorkflowProps> = ({
 
       // Create notification for employee
       if (nextState === 'approved' || nextState === 'rejected') {
-        await supabase.rpc('create_notification', {
+        await db.rpc('create_notification', {
           p_user_id: request.employee_id,
           p_type: 'in_app',
           p_category: 'update',

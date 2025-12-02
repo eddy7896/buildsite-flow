@@ -63,20 +63,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       try {
         // Verify token is still valid
-        const decoded = JSON.parse(atob(token.split('.')[1]));
-        if (decoded.exp * 1000 > Date.now()) {
+        // Token can be either:
+        // 1. Simple base64-encoded JSON (our format): btoa(JSON.stringify({...}))
+        // 2. JWT format (legacy): header.payload.signature
+        let decoded: { userId?: string; email?: string; exp?: number };
+        
+        if (token.includes('.')) {
+          // JWT format - decode the payload part
+          decoded = JSON.parse(atob(token.split('.')[1]));
+        } else {
+          // Simple base64 format - decode directly
+          decoded = JSON.parse(atob(token));
+        }
+        
+        if (decoded.exp && decoded.exp * 1000 > Date.now()) {
           // Token is still valid
           const mockUser: User = {
-            id: decoded.userId,
-            email: decoded.email,
+            id: decoded.userId || '',
+            email: decoded.email || '',
             email_confirmed: true,
             is_active: true
           };
           setUser(mockUser);
           
           // Fetch profile and role
-          fetchUserProfile(decoded.userId);
-          fetchUserRole(decoded.userId);
+          if (decoded.userId) {
+            fetchUserProfile(decoded.userId);
+            fetchUserRole(decoded.userId);
+          }
         } else {
           // Token expired
           localStorage.removeItem('auth_token');

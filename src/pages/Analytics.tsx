@@ -30,7 +30,7 @@ import {
   Download,
   RefreshCw
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { DateRange } from "react-day-picker";
@@ -79,10 +79,10 @@ export default function Analytics() {
         { data: projects },
         { data: reimbursements }
       ] = await Promise.all([
-        supabase.from('invoices').select('total_amount, created_at'),
-        supabase.from('profiles').select('id, created_at'),
-        supabase.from('jobs').select('id, status, created_at'),
-        supabase.from('reimbursement_requests').select('amount, status, created_at')
+        db.from('invoices').select('total_amount, created_at'),
+        db.from('profiles').select('id, created_at'),
+        db.from('jobs').select('id, status, created_at'),
+        db.from('reimbursement_requests').select('amount, status, created_at')
       ]);
 
       // Calculate metrics
@@ -194,7 +194,7 @@ export default function Analytics() {
 
   const exportReport = async (type: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke('generate-report', {
+      const { data, error } = await db.functions.invoke('generate-report', {
         body: { 
           reportType: type, 
           dateRange,

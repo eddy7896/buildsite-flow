@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Plus, Calendar, Users, Search, Filter, Edit, Trash2, Eye, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import ProjectFormDialog from "@/components/ProjectFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";

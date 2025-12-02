@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { NotificationCenter } from "./NotificationCenter";
 
 interface AgencyInfo {
@@ -19,13 +19,13 @@ export const AgencyHeader = () => {
 
   const fetchAgencyInfo = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('agency_settings')
         .select('agency_name, logo_url')
         .limit(1)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
+      if (error) {
         console.error('Error fetching agency info:', error);
         return;
       }

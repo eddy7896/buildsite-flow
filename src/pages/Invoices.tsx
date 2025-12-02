@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Filter, Download, Eye, DollarSign, FileText, Calendar, TrendingUp, Edit, Trash2, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import InvoiceFormDialog from "@/components/InvoiceFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";

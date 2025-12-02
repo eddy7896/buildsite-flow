@@ -4,12 +4,25 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarDays, Plus, Search, Calendar as CalendarIcon, Trash2, Edit2 } from 'lucide-react';
+import { 
+  CalendarDays, Plus, Search, Calendar as CalendarIcon, Trash2, Edit2, 
+  CheckCircle, AlertTriangle 
+} from 'lucide-react';
 import { format } from 'date-fns';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { HolidayFormDialog } from './HolidayFormDialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface Holiday {
   id: string;
@@ -18,7 +31,11 @@ interface Holiday {
   date: string;
   is_company_holiday: boolean;
   is_national_holiday: boolean;
+  agency_id: string;
   created_at: string;
+  // Computed fields for UI
+  type: 'public' | 'company' | 'optional';
+  is_mandatory: boolean;
 }
 
 export function HolidayManagement() {
@@ -30,17 +47,30 @@ export function HolidayManagement() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
+  const [deletingHoliday, setDeletingHoliday] = useState<Holiday | null>(null);
 
   const fetchHolidays = async () => {
     try {
-      const { data, error } = await supabase
+      setLoading(true);
+      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
+      
+      const { data, error } = await db
         .from('holidays')
         .select('*')
-        .eq('agency_id', profile?.agency_id)
+        .eq('agency_id', agencyId)
         .order('date', { ascending: true });
 
       if (error) throw error;
-      setHolidays(data || []);
+      
+      // Map database fields to interface fields
+      const mappedHolidays = (data || []).map(holiday => ({
+        ...holiday,
+        type: holiday.is_national_holiday ? 'public' : holiday.is_company_holiday ? 'company' : 'optional',
+        is_mandatory: holiday.is_company_holiday || holiday.is_national_holiday
+      }));
+      
+      setHolidays(mappedHolidays);
     } catch (error) {
       console.error('Error fetching holidays:', error);
       toast({
@@ -54,61 +84,84 @@ export function HolidayManagement() {
   };
 
   useEffect(() => {
-    if (profile?.agency_id) {
-      fetchHolidays();
-    }
+    fetchHolidays();
   }, [profile?.agency_id]);
 
   const filteredHolidays = holidays.filter(holiday => {
     const matchesSearch = holiday.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          holiday.description?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = typeFilter === 'all' || 
-                       (typeFilter === 'company' && holiday.is_company_holiday) ||
-                       (typeFilter === 'national' && holiday.is_national_holiday);
+    const matchesType = typeFilter === 'all' || holiday.type === typeFilter;
     const matchesYear = yearFilter === 'all' || new Date(holiday.date).getFullYear().toString() === yearFilter;
     
     return matchesSearch && matchesType && matchesYear;
   });
 
-  const handleDeleteHoliday = async (holidayId: string) => {
+  const handleDeleteHoliday = async () => {
+    if (!deletingHoliday) return;
+    
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('holidays')
         .delete()
-        .eq('id', holidayId);
+        .eq('id', deletingHoliday.id);
 
       if (error) throw error;
 
       toast({
-        title: "Holiday Deleted",
-        description: "Holiday has been removed."
+        title: "✅ Holiday Deleted",
+        description: `"${deletingHoliday.name}" has been removed.`
       });
 
-      setHolidays(holidays.filter(h => h.id !== holidayId));
-    } catch (error) {
+      // Refresh the list from database
+      await fetchHolidays();
+      setDeletingHoliday(null);
+    } catch (error: any) {
       console.error('Error deleting holiday:', error);
       toast({
         title: "Error",
-        description: "Failed to delete holiday",
+        description: error.message || "Failed to delete holiday",
         variant: "destructive"
       });
     }
   };
 
-  const getTypeLabel = (holiday: Holiday) => {
-    if (holiday.is_national_holiday) return 'National';
-    if (holiday.is_company_holiday) return 'Company';
-    return 'Other';
+  const getTypeLabel = (type: string) => {
+    switch (type) {
+      case 'public': return 'Public';
+      case 'company': return 'Company';
+      case 'optional': return 'Optional';
+      default: return type;
+    }
   };
 
-  const getTypeColor = (holiday: Holiday) => {
-    if (holiday.is_national_holiday) return 'bg-red-100 text-red-800';
-    if (holiday.is_company_holiday) return 'bg-blue-100 text-blue-800';
-    return 'bg-gray-100 text-gray-800';
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'public': return 'bg-red-100 text-red-800 border-red-200';
+      case 'company': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'optional': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getTypeIcon = (type: string) => {
+    switch (type) {
+      case 'public': return <CalendarDays className="h-4 w-4" />;
+      case 'company': return <CalendarIcon className="h-4 w-4" />;
+      default: return <CalendarIcon className="h-4 w-4" />;
+    }
   };
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+
+  // Calculate stats
+  const stats = {
+    total: holidays.length,
+    public: holidays.filter(h => h.type === 'public').length,
+    company: holidays.filter(h => h.type === 'company').length,
+    optional: holidays.filter(h => h.type === 'optional').length,
+    upcomingCount: holidays.filter(h => new Date(h.date) > new Date()).length
+  };
 
   if (loading) {
     return (
@@ -120,7 +173,7 @@ export function HolidayManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Holiday Management</h2>
           <p className="text-muted-foreground">
@@ -131,6 +184,34 @@ export function HolidayManagement() {
           <Plus className="mr-2 h-4 w-4" />
           Add Holiday
         </Button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-sm text-muted-foreground">Total Holidays</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-red-600">{stats.public}</div>
+            <p className="text-sm text-muted-foreground">Public Holidays</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-blue-600">{stats.company}</div>
+            <p className="text-sm text-muted-foreground">Company Holidays</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-green-600">{stats.upcomingCount}</div>
+            <p className="text-sm text-muted-foreground">Upcoming</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
@@ -153,8 +234,9 @@ export function HolidayManagement() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="national">National</SelectItem>
-                <SelectItem value="company">Company</SelectItem>
+                <SelectItem value="public">Public Holidays</SelectItem>
+                <SelectItem value="company">Company Holidays</SelectItem>
+                <SelectItem value="optional">Optional Holidays</SelectItem>
               </SelectContent>
             </Select>
 
@@ -172,7 +254,7 @@ export function HolidayManagement() {
 
             <div className="flex items-center text-sm text-muted-foreground">
               <CalendarDays className="mr-2 h-4 w-4" />
-              {filteredHolidays.length} holidays
+              {filteredHolidays.length} holidays found
             </div>
           </div>
         </CardContent>
@@ -181,7 +263,7 @@ export function HolidayManagement() {
       {/* Holidays List */}
       {filteredHolidays.length === 0 ? (
         <Card>
-          <CardContent className="py-8 text-center">
+          <CardContent className="py-12 text-center">
             <CalendarIcon className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">No holidays found</h3>
             <p className="text-muted-foreground mb-4">
@@ -198,58 +280,130 @@ export function HolidayManagement() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
-          {filteredHolidays.map((holiday) => (
-            <Card key={holiday.id}>
-              <CardContent className="pt-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h3 className="font-semibold text-lg">{holiday.name}</h3>
-                        <Badge className={getTypeColor(holiday)}>
-                          {getTypeLabel(holiday)}
-                        </Badge>
+        <div className="grid gap-3">
+          {filteredHolidays.map((holiday) => {
+            const isPast = new Date(holiday.date) < new Date();
+            
+            return (
+              <Card 
+                key={holiday.id} 
+                className={`transition-colors hover:shadow-md ${isPast ? 'opacity-70' : ''}`}
+              >
+                <CardContent className="py-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      {/* Date Display */}
+                      <div className="flex-shrink-0 w-16 h-16 bg-primary/10 rounded-lg flex flex-col items-center justify-center">
+                        <span className="text-xs font-medium text-primary uppercase">
+                          {format(new Date(holiday.date), 'MMM')}
+                        </span>
+                        <span className="text-2xl font-bold text-primary">
+                          {format(new Date(holiday.date), 'd')}
+                        </span>
                       </div>
                       
-                      <p className="text-sm text-muted-foreground mb-2">
-                        {format(new Date(holiday.date), 'EEEE, MMMM d, yyyy')}
-                      </p>
-                      
-                      {holiday.description && (
-                        <p className="text-sm">{holiday.description}</p>
-                      )}
+                      {/* Holiday Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <h3 className="font-semibold text-lg truncate">{holiday.name}</h3>
+                          <Badge variant="outline" className={getTypeColor(holiday.type)}>
+                            {getTypeLabel(holiday.type)}
+                          </Badge>
+                          {holiday.is_mandatory && (
+                            <Badge variant="secondary" className="text-xs">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Mandatory
+                            </Badge>
+                          )}
+                          {isPast && (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              Past
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(holiday.date), 'EEEE, MMMM d, yyyy')}
+                        </p>
+                        
+                        {holiday.description && (
+                          <p className="text-sm text-muted-foreground mt-1 truncate">
+                            {holiday.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setEditingHoliday(holiday)}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => setDeletingHoliday(holiday)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-                  
-                  <div className="flex space-x-2">
-                    <Button variant="outline" size="sm" disabled>
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        if (confirm(`Are you sure you want to delete "${holiday.name}"?`)) {
-                          handleDeleteHoliday(holiday.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
+      {/* Create/Edit Dialog */}
       <HolidayFormDialog
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
+        open={showCreateDialog || !!editingHoliday}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowCreateDialog(false);
+            setEditingHoliday(null);
+          }
+        }}
         onHolidayCreated={fetchHolidays}
+        editHoliday={editingHoliday ? {
+          id: editingHoliday.id,
+          name: editingHoliday.name,
+          description: editingHoliday.description,
+          date: editingHoliday.date,
+          is_company_holiday: editingHoliday.is_company_holiday,
+          is_national_holiday: editingHoliday.is_national_holiday
+        } : null}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingHoliday} onOpenChange={(open) => !open && setDeletingHoliday(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-red-500" />
+              Delete Holiday
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>"{deletingHoliday?.name}"</strong>? 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteHoliday}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Delete Holiday
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

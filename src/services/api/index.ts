@@ -4,6 +4,9 @@ export { AuthService } from './auth';
 export { NotificationService } from './notifications';
 export { EmployeeService } from './employees';
 
+// Attendance service exports
+export * from './attendance-service';
+
 // Re-export for convenience
 export * from './base';
 export * from './auth';

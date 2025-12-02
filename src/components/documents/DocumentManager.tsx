@@ -14,7 +14,7 @@ import {
   Eye, Edit, Trash2, MoreHorizontal, Search, Filter, Grid, List 
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { toast } from 'sonner';
 
 interface DocumentFolder {
@@ -165,7 +165,7 @@ export function DocumentManager() {
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `documents/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await db.storage
         .from('documents')
         .upload(filePath, file);
 
@@ -198,7 +198,7 @@ export function DocumentManager() {
 
   const handleDownload = async (document: Document) => {
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await db.storage
         .from('documents')
         .download(document.file_path);
 

@@ -389,3 +389,139 @@ export interface FileStorage {
   uploaded_by: string | null;
   created_at: string;
 }
+
+export interface LeaveType {
+  id: string;
+  name: string;
+  description: string | null;
+  max_days: number;
+  is_paid: boolean;
+  requires_approval: boolean;
+  agency_id: string;
+  created_at: string;
+}
+
+export interface LeaveBalance {
+  id: string;
+  employee_id: string;
+  leave_type_id: string;
+  year: number;
+  total_days: number;
+  used_days: number;
+  pending_days: number;
+  agency_id: string;
+  created_at: string;
+}
+
+export interface PayrollPeriod {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  status: string;
+  agency_id: string;
+  created_at: string;
+}
+
+export interface JobCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  billable_rate: number;
+  agency_id: string;
+  created_at: string;
+}
+
+export interface LeadSource {
+  id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  agency_id: string;
+  created_at: string;
+}
+
+export interface ReimbursementCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  max_amount: number;
+  requires_receipt: boolean;
+  agency_id: string;
+  created_at: string;
+}
+
+export interface Holiday {
+  id: string;
+  name: string;
+  date: string;
+  is_company_holiday: boolean;
+  is_national_holiday: boolean;
+  description?: string | null;
+  agency_id: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface CompanyEvent {
+  id: string;
+  title: string;
+  description: string | null;
+  start_date: string;
+  end_date: string;
+  location: string | null;
+  event_type: string;
+  all_day: boolean;
+  created_by: string;
+  agency_id: string;
+  created_at: string;
+  updated_at?: string;
+  color?: string;
+  is_recurring?: boolean;
+  recurrence_pattern?: any;
+  attendees?: any;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface GstSetting {
+  id: string;
+  agency_id: string;
+  gstin: string;
+  legal_name: string;
+  trade_name: string | null;
+  address: string | null;
+  state_code: string;
+  state_name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface HsnSacCode {
+  id: string;
+  code: string;
+  description: string;
+  type: 'HSN' | 'SAC';
+  gst_rate: number;
+  agency_id: string;
+  created_at: string;
+}
+
+export interface ChartOfAccount {
+  id: string;
+  account_code: string;
+  account_name: string;
+  account_type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
+  parent_id: string | null;
+  is_active: boolean;
+  agency_id: string;
+  created_at: string;
+}

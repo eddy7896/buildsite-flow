@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
@@ -64,11 +64,15 @@ export function usePermissions() {
     return rolePermission?.granted || false;
   };
 
+  const { user } = useAuth();
+  
   const checkPermission = async (permissionName: string): Promise<boolean> => {
     try {
-      const { data, error } = await supabase.rpc('has_permission', {
-        user_id: (await supabase.auth.getUser()).data.user?.id,
-        permission_name: permissionName
+      if (!user?.id) return false;
+      
+      const { data, error } = await db.rpc('has_permission', {
+        p_user_id: user.id,
+        p_permission: permissionName
       });
 
       if (error) throw error;

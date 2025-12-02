@@ -100,10 +100,15 @@ export async function registerUser(data: SignUpData): Promise<AuthResponse> {
     throw new Error('Failed to create user');
   }
 
-  // Create profile
+  // Profile is automatically created by database trigger, so update it instead of inserting
+  // Use INSERT ... ON CONFLICT to handle both cases (trigger created or not)
   const profile = await queryOne<Profile>(
     `INSERT INTO public.profiles (user_id, full_name, is_active, agency_id)
      VALUES ($1, $2, true, $3)
+     ON CONFLICT (user_id) DO UPDATE SET
+       full_name = EXCLUDED.full_name,
+       agency_id = EXCLUDED.agency_id,
+       updated_at = NOW()
      RETURNING *`,
     [user.id, fullName, agencyId || '550e8400-e29b-41d4-a716-446655440000']
   );

@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Shield, Lock, CheckCircle, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { toast } from 'sonner';
 
 interface FeatureFlag {

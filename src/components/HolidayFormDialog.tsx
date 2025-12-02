@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,23 +19,90 @@ interface HolidayFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onHolidayCreated: () => void;
+  editHoliday?: {
+    id: string;
+    name: string;
+    description?: string | null;
+    date: string;
+    is_company_holiday: boolean;
+    is_national_holiday: boolean;
+  } | null;
 }
 
-export function HolidayFormDialog({ open, onOpenChange, onHolidayCreated }: HolidayFormDialogProps) {
+const holidayTypes = [
+  { value: 'public', label: 'Public Holiday', description: 'National/Government holiday' },
+  { value: 'company', label: 'Company Holiday', description: 'Company-specific day off' },
+  { value: 'optional', label: 'Optional Holiday', description: 'Flexible day off' }
+];
+
+export function HolidayFormDialog({ 
+  open, 
+  onOpenChange, 
+  onHolidayCreated,
+  editHoliday 
+}: HolidayFormDialogProps) {
   const { profile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    date: undefined as Date | undefined,
-    is_national_holiday: false,
-    is_company_holiday: true
-  });
+  // Initialize form data based on editHoliday or defaults
+  const getInitialFormData = () => {
+    if (editHoliday) {
+      const holidayType = editHoliday.is_national_holiday ? 'public' : editHoliday.is_company_holiday ? 'company' : 'optional';
+      return {
+        name: editHoliday.name || '',
+        description: editHoliday.description || '',
+        date: editHoliday.date ? new Date(editHoliday.date) : undefined as Date | undefined,
+        type: holidayType,
+        is_mandatory: editHoliday.is_company_holiday || editHoliday.is_national_holiday
+      };
+    }
+    return {
+      name: '',
+      description: '',
+      date: undefined as Date | undefined,
+      type: 'company' as 'public' | 'company' | 'optional',
+      is_mandatory: true
+    };
+  };
+
+  const [formData, setFormData] = useState(getInitialFormData());
+
+  // Reset form when dialog opens/closes
+  React.useEffect(() => {
+    if (open) {
+      if (editHoliday) {
+        // Map database fields (is_company_holiday, is_national_holiday) to form fields
+        let holidayType = 'company';
+        if (editHoliday.is_national_holiday) {
+          holidayType = 'public';
+        } else if (editHoliday.is_company_holiday) {
+          holidayType = 'company';
+        } else {
+          holidayType = 'optional';
+        }
+        
+        setFormData({
+          name: editHoliday.name,
+          description: editHoliday.description || '',
+          date: new Date(editHoliday.date),
+          type: holidayType,
+          is_mandatory: editHoliday.is_company_holiday || editHoliday.is_national_holiday
+        });
+      } else {
+        setFormData({
+          name: '',
+          description: '',
+          date: undefined,
+          type: 'company',
+          is_mandatory: true
+        });
+      }
+    }
+  }, [open, editHoliday]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.date) {
+    if (!formData.name.trim() || !formData.date) {
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields",
@@ -45,40 +113,66 @@ export function HolidayFormDialog({ open, onOpenChange, onHolidayCreated }: Holi
 
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('holidays')
-        .insert({
-          name: formData.name,
-          description: formData.description,
-          date: formData.date.toISOString().split('T')[0],
-          is_national_holiday: formData.is_national_holiday,
-          is_company_holiday: formData.is_company_holiday,
-          agency_id: profile?.agency_id
+      // Map form fields to database schema
+      const is_company_holiday = formData.type === 'company';
+      const is_national_holiday = formData.type === 'public';
+      
+      const holidayData = {
+        name: formData.name.trim(),
+        description: formData.description.trim() || null,
+        date: format(formData.date, 'yyyy-MM-dd'),
+        is_company_holiday,
+        is_national_holiday,
+        agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000'
+      };
+
+      if (editHoliday) {
+        // Update existing holiday
+        const { error } = await db
+          .from('holidays')
+          .update(holidayData)
+          .eq('id', editHoliday.id);
+
+        if (error) throw error;
+
+        toast({
+          title: "✅ Holiday Updated",
+          description: `${formData.name} has been updated.`
         });
+      } else {
+        // Create new holiday
+        const { error } = await db
+          .from('holidays')
+          .insert({
+            id: crypto.randomUUID(),
+            ...holidayData,
+            created_at: new Date().toISOString()
+          });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: "Holiday Created",
-        description: `${formData.name} has been added to the calendar.`
-      });
+        toast({
+          title: "✅ Holiday Created",
+          description: `${formData.name} has been added to the calendar.`
+        });
+      }
 
       // Reset form
       setFormData({
         name: '',
         description: '',
         date: undefined,
-        is_national_holiday: false,
-        is_company_holiday: true
+        type: 'company',
+        is_mandatory: true
       });
 
       onHolidayCreated();
       onOpenChange(false);
-    } catch (error) {
-      console.error('Error creating holiday:', error);
+    } catch (error: any) {
+      console.error('Error saving holiday:', error);
       toast({
         title: "Error",
-        description: "Failed to create holiday. Please try again.",
+        description: error.message || "Failed to save holiday. Please try again.",
         variant: "destructive"
       });
     } finally {
@@ -90,7 +184,12 @@ export function HolidayFormDialog({ open, onOpenChange, onHolidayCreated }: Holi
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Add Holiday</DialogTitle>
+          <DialogTitle>{editHoliday ? 'Edit Holiday' : 'Add Holiday'}</DialogTitle>
+          <DialogDescription>
+            {editHoliday 
+              ? 'Update the holiday details below'
+              : 'Add a new holiday to the company calendar'}
+          </DialogDescription>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -142,36 +241,40 @@ export function HolidayFormDialog({ open, onOpenChange, onHolidayCreated }: Holi
             </Popover>
           </div>
 
-          <div className="space-y-3">
-            <Label>Holiday Type</Label>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="company"
-                checked={formData.is_company_holiday}
-                onCheckedChange={(checked) => setFormData({ 
-                  ...formData, 
-                  is_company_holiday: checked as boolean,
-                  is_national_holiday: checked ? false : formData.is_national_holiday
-                })}
-              />
-              <Label htmlFor="company" className="text-sm">
-                Company Holiday
-              </Label>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="national"
-                checked={formData.is_national_holiday}
-                onCheckedChange={(checked) => setFormData({ 
-                  ...formData, 
-                  is_national_holiday: checked as boolean,
-                  is_company_holiday: checked ? false : formData.is_company_holiday
-                })}
-              />
-              <Label htmlFor="national" className="text-sm">
-                National Holiday
-              </Label>
-            </div>
+          <div className="space-y-2">
+            <Label>Holiday Type *</Label>
+            <Select 
+              value={formData.type} 
+              onValueChange={(value) => setFormData({ ...formData, type: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select holiday type" />
+              </SelectTrigger>
+              <SelectContent>
+                {holidayTypes.map((type) => (
+                  <SelectItem key={type.value} value={type.value}>
+                    <div className="flex flex-col">
+                      <span>{type.label}</span>
+                      <span className="text-xs text-muted-foreground">{type.description}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="mandatory"
+              checked={formData.is_mandatory}
+              onCheckedChange={(checked) => setFormData({ 
+                ...formData, 
+                is_mandatory: checked as boolean
+              })}
+            />
+            <Label htmlFor="mandatory" className="text-sm">
+              Mandatory holiday (office closed)
+            </Label>
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
@@ -185,7 +288,7 @@ export function HolidayFormDialog({ open, onOpenChange, onHolidayCreated }: Holi
             </Button>
             <Button type="submit" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create Holiday
+              {editHoliday ? 'Update Holiday' : 'Create Holiday'}
             </Button>
           </div>
         </form>

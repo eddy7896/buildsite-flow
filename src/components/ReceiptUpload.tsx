@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 
@@ -150,7 +150,7 @@ export const ReceiptUpload: React.FC<ReceiptUploadProps> = ({
           const filePath = `receipts/${fileName}`;
 
           // Upload to Supabase Storage
-          const { data: uploadData, error: uploadError } = await supabase.storage
+          const { data: uploadData, error: uploadError } = await db.storage
             .from('receipts')
             .upload(filePath, fileItem.file);
 

@@ -15,7 +15,7 @@ import {
   MoreHorizontal, Phone, Video, Settings, Pin 
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { toast } from 'sonner';
 
 interface MessageThread {

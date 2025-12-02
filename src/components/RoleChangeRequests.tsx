@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { UserPlus, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { db } from '@/lib/database';
 import { toast } from 'sonner';
 import { AppRole, ROLE_DISPLAY_NAMES, getAssignableRoles } from '@/utils/roleUtils';
 
