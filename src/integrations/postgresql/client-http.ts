@@ -133,13 +133,79 @@ export async function execute(
   return result.rowCount || 0;
 }
 
-// Transaction helper (simplified for HTTP)
+// Transaction helper for HTTP
 export async function transaction<T>(
-  callback: (client: HttpDatabaseClient) => Promise<T>
+  callback: (client: { query: (sql: string, params?: any[]) => Promise<{ rows: any[]; rowCount: number }> }) => Promise<T>
 ): Promise<T> {
-  // For HTTP client, transactions are handled on the server side
-  // We just execute the callback with the client
-  return callback(httpClient);
+  // Collect all queries during the callback
+  const queries: Array<{ sql: string; params: any[] }> = [];
+  const queryResults: Array<{ rows: any[]; rowCount: number }> = [];
+  let queryIndex = 0;
+  
+  // Create a mock client that collects queries and stores results
+  const mockClient = {
+    query: async (sql: string, params: any[] = []): Promise<{ rows: any[]; rowCount: number }> => {
+      const currentIndex = queryIndex++;
+      queries.push({ sql, params });
+      
+      // Return a promise that will be resolved with actual results
+      return new Promise((resolve) => {
+        // Store resolver to call after transaction completes
+        (mockClient as any)._resolvers = (mockClient as any)._resolvers || [];
+        (mockClient as any)._resolvers.push({ index: currentIndex, resolve });
+      });
+    }
+  };
+  
+  // Start callback execution (it will collect queries)
+  const callbackPromise = callback(mockClient);
+  
+  // Wait for all queries to be collected
+  await new Promise(resolve => setTimeout(resolve, 0));
+  
+  // If no queries, just return callback result
+  if (queries.length === 0) {
+    return await callbackPromise;
+  }
+  
+  // Execute all queries in a transaction via backend
+  try {
+    const response = await fetch(`${httpClient['baseUrl']}/database/transaction`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        queries,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Transaction failed: ${response.status} ${errorText}`);
+    }
+    
+    const result = await response.json();
+    
+    // Resolve all query promises with actual results
+    if (result.results && (mockClient as any)._resolvers) {
+      result.results.forEach((queryResult: any, index: number) => {
+        const resolver = (mockClient as any)._resolvers.find((r: any) => r.index === index);
+        if (resolver) {
+          resolver.resolve({
+            rows: queryResult.rows || [],
+            rowCount: queryResult.rowCount || 0,
+          });
+        }
+      });
+    }
+    
+    // Wait for callback to complete
+    return await callbackPromise;
+  } catch (error) {
+    console.error('[HTTP Transaction] Error:', error);
+    throw error;
+  }
 }
 
 // Close pool (no-op for HTTP)

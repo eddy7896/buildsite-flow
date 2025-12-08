@@ -69,13 +69,13 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
     if (!request) return;
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("reimbursement_attachments")
         .select("*")
         .eq("reimbursement_id", request.id);
 
       if (error) throw error;
-      setAttachments(data || []);
+      setAttachments((data as any) || []);
     } catch (error) {
       console.error("Error fetching attachments:", error);
     }
@@ -86,7 +86,7 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
 
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("reimbursement_requests")
         .update({
           status: "approved",
@@ -102,21 +102,13 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
         description: "Reimbursement request approved",
       });
 
-      // Send email notification
-      await db.functions.invoke('send-reimbursement-notification', {
-        body: {
-          reimbursementId: request.id,
-          notificationType: 'approved'
-        }
-      });
-
       onSuccess?.();
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error approving request:", error);
       toast({
         title: "Error",
-        description: "Failed to approve reimbursement request",
+        description: error?.message || "Failed to approve reimbursement request",
         variant: "destructive",
       });
     } finally {
@@ -136,7 +128,7 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
 
     setLoading(true);
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("reimbursement_requests")
         .update({
           status: "rejected",
@@ -153,22 +145,14 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
         description: "Reimbursement request rejected",
       });
 
-      // Send email notification
-      await db.functions.invoke('send-reimbursement-notification', {
-        body: {
-          reimbursementId: request.id,
-          notificationType: 'rejected'
-        }
-      });
-
       setRejectionReason("");
       onSuccess?.();
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error rejecting request:", error);
       toast({
         title: "Error",
-        description: "Failed to reject reimbursement request",
+        description: error?.message || "Failed to reject reimbursement request",
         variant: "destructive",
       });
     } finally {
@@ -206,16 +190,16 @@ export const ReimbursementReviewDialog: React.FC<ReimbursementReviewDialogProps>
     try {
       const { data, error } = await db.storage
         .from('receipts')
-        .createSignedUrl(attachment.file_path, 3600); // 1 hour
+        .getPublicUrl(attachment.file_path);
 
       if (error) throw error;
 
-      window.open(data.signedUrl, '_blank');
-    } catch (error) {
+      window.open(data.publicUrl, '_blank');
+    } catch (error: any) {
       console.error("Error viewing file:", error);
       toast({
         title: "Error",
-        description: "Failed to view file",
+        description: error?.message || "Failed to view file",
         variant: "destructive",
       });
     }

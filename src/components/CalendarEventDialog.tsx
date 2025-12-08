@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -19,6 +20,17 @@ interface CalendarEventDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEventCreated: () => void;
+  editEvent?: {
+    id: string;
+    title: string;
+    description: string;
+    event_type: string;
+    start_date: Date;
+    end_date: Date;
+    all_day: boolean;
+    location: string;
+    color: string;
+  } | null;
 }
 
 const eventTypes = [
@@ -39,7 +51,7 @@ const eventColors = [
   { value: '#06b6d4', label: 'Cyan' }
 ];
 
-export function CalendarEventDialog({ open, onOpenChange, onEventCreated }: CalendarEventDialogProps) {
+export function CalendarEventDialog({ open, onOpenChange, onEventCreated, editEvent }: CalendarEventDialogProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -55,40 +67,21 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated }: Cale
     color: '#3b82f6'
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-
-    try {
-      setLoading(true);
-
-      const { error } = await db
-        .from('company_events')
-        .insert({
-          id: generateUUID(),
-          title: formData.title,
-          description: formData.description,
-          event_type: formData.event_type,
-          start_date: formData.start_date.toISOString(),
-          end_date: formData.end_date.toISOString(),
-          all_day: formData.is_all_day,
-          location: formData.location,
-          color: formData.color,
-          created_by: user.id,
-          agency_id: '550e8400-e29b-41d4-a716-446655440000' // Default agency
-        });
-
-      if (error) throw error;
-
-      toast({
-        title: 'Success',
-        description: 'Event created successfully'
+  // Update form when editEvent changes
+  React.useEffect(() => {
+    if (editEvent) {
+      setFormData({
+        title: editEvent.title,
+        description: editEvent.description || '',
+        event_type: editEvent.event_type,
+        start_date: editEvent.start_date,
+        end_date: editEvent.end_date,
+        is_all_day: editEvent.all_day,
+        location: editEvent.location || '',
+        color: editEvent.color || '#3b82f6'
       });
-
-      onEventCreated();
-      onOpenChange(false);
-      
-      // Reset form
+    } else {
+      // Reset form when creating new event
       setFormData({
         title: '',
         description: '',
@@ -99,6 +92,67 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated }: Cale
         location: '',
         color: '#3b82f6'
       });
+    }
+  }, [editEvent, open]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    try {
+      setLoading(true);
+
+      if (editEvent) {
+        // Update existing event
+        const { error } = await db
+          .from('company_events')
+          .update({
+            title: formData.title,
+            description: formData.description,
+            event_type: formData.event_type,
+            start_date: formData.start_date.toISOString(),
+            end_date: formData.end_date.toISOString(),
+            all_day: formData.is_all_day,
+            location: formData.location,
+            color: formData.color,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editEvent.id);
+
+        if (error) throw error;
+
+        toast({
+          title: 'Success',
+          description: 'Event updated successfully'
+        });
+      } else {
+        // Create new event
+        const { error } = await db
+          .from('company_events')
+          .insert({
+            id: generateUUID(),
+            title: formData.title,
+            description: formData.description,
+            event_type: formData.event_type,
+            start_date: formData.start_date.toISOString(),
+            end_date: formData.end_date.toISOString(),
+            all_day: formData.is_all_day,
+            location: formData.location,
+            color: formData.color,
+            created_by: user.id,
+            agency_id: '550e8400-e29b-41d4-a716-446655440000' // Default agency
+          });
+
+        if (error) throw error;
+
+        toast({
+          title: 'Success',
+          description: 'Event created successfully'
+        });
+      }
+
+      onEventCreated();
+      onOpenChange(false);
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -114,7 +168,7 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated }: Cale
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Create Company Event</DialogTitle>
+          <DialogTitle>{editEvent ? 'Edit Company Event' : 'Create Company Event'}</DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -217,6 +271,17 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated }: Cale
             </div>
           </div>
 
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="all_day"
+              checked={formData.is_all_day}
+              onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_all_day: checked as boolean }))}
+            />
+            <Label htmlFor="all_day" className="text-sm font-normal cursor-pointer">
+              All Day Event
+            </Label>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="location">Location</Label>
@@ -264,7 +329,7 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated }: Cale
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Event'}
+              {loading ? (editEvent ? 'Updating...' : 'Creating...') : (editEvent ? 'Update Event' : 'Create Event')}
             </Button>
           </div>
         </form>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/database';
+import { useAgencySettings } from './useAgencySettings';
 
 interface CurrencyInfo {
   code: string;
@@ -21,6 +21,7 @@ const currencies: Record<string, CurrencyInfo> = {
 };
 
 export const useCurrency = () => {
+  const { settings: agencySettings } = useAgencySettings();
   const [currency, setCurrency] = useState<CurrencyInfo>(currencies.default);
   const [loading, setLoading] = useState(true);
 
@@ -28,33 +29,33 @@ export const useCurrency = () => {
     const detectCurrency = async () => {
       try {
         // First, try to get admin-configured currency from agency settings
-        const { data: agencyData } = await supabase
-          .from('agency_settings')
-          .select('default_currency, currency')
-          .limit(1)
-          .single();
-
-        // Support both default_currency (new) and currency (legacy) fields
-        const currencyCode = agencyData?.default_currency || agencyData?.currency;
-        if (currencyCode && currencies[currencyCode]) {
-          setCurrency(currencies[currencyCode]);
-          setLoading(false);
-          return;
+        if (agencySettings?.default_currency || agencySettings?.currency) {
+          const currencyCode = agencySettings.default_currency || agencySettings.currency;
+          if (currencyCode && currencies[currencyCode]) {
+            setCurrency(currencies[currencyCode]);
+            setLoading(false);
+            return;
+          }
         }
 
         // Fallback to IP geolocation detection
-        const response = await fetch('https://ipapi.co/json/');
-        if (response.ok) {
-          const data = await response.json();
-          const countryCode = data.country_code;
-          
-          // Map some common European countries to EU
-          const europeanCountries = ['DE', 'FR', 'IT', 'ES', 'NL', 'BE', 'AT', 'PT', 'IE', 'FI', 'EE', 'LV', 'LT', 'SK', 'SI', 'MT', 'CY', 'LU'];
-          const mappedCode = europeanCountries.includes(countryCode) ? 'EU' : countryCode;
-          
-          const detectedCurrency = currencies[mappedCode] || currencies.default;
-          setCurrency(detectedCurrency);
-        } else {
+        try {
+          const response = await fetch('https://ipapi.co/json/');
+          if (response.ok) {
+            const data = await response.json();
+            const countryCode = data.country_code;
+            
+            // Map some common European countries to EU
+            const europeanCountries = ['DE', 'FR', 'IT', 'ES', 'NL', 'BE', 'AT', 'PT', 'IE', 'FI', 'EE', 'LV', 'LT', 'SK', 'SI', 'MT', 'CY', 'LU'];
+            const mappedCode = europeanCountries.includes(countryCode) ? 'EU' : countryCode;
+            
+            const detectedCurrency = currencies[mappedCode] || currencies.default;
+            setCurrency(detectedCurrency);
+          } else {
+            // Final fallback to default currency (INR)
+            setCurrency(currencies.default);
+          }
+        } catch {
           // Final fallback to default currency (INR)
           setCurrency(currencies.default);
         }
@@ -67,7 +68,7 @@ export const useCurrency = () => {
     };
 
     detectCurrency();
-  }, []);
+  }, [agencySettings?.default_currency, agencySettings?.currency]);
 
   const convertPrice = (usdPrice: number): number => {
     return Math.round(usdPrice * currency.rate);

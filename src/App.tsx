@@ -22,17 +22,15 @@ const AgencyDashboard = React.lazy(() => import("./pages/AgencyDashboard"));
 const SignUp = React.lazy(() => import("./pages/SignUp"));
 const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
-const Users = React.lazy(() => import("./pages/Users"));
+const EmployeeManagement = React.lazy(() => import("./pages/EmployeeManagement"));
 const Projects = React.lazy(() => import("./pages/Projects"));
 const Settings = React.lazy(() => import("./pages/Settings"));
-const Employees = React.lazy(() => import("./pages/Employees"));
 const Attendance = React.lazy(() => import("./pages/Attendance"));
 const LeaveRequests = React.lazy(() => import("./pages/LeaveRequests"));
 const Payroll = React.lazy(() => import("./pages/Payroll"));
 const Invoices = React.lazy(() => import("./pages/Invoices"));
 const Payments = React.lazy(() => import("./pages/Payments"));
 const Receipts = React.lazy(() => import("./pages/Receipts"));
-const MyTeam = React.lazy(() => import("./pages/MyTeam"));
 const MyProfile = React.lazy(() => import("./pages/MyProfile"));
 const MyAttendance = React.lazy(() => import("./pages/MyAttendance"));
 const MyLeave = React.lazy(() => import("./pages/MyLeave"));
@@ -48,7 +46,6 @@ const AssignUserRoles = React.lazy(() => import("./pages/AssignUserRoles"));
 const JobCosting = React.lazy(() => import("./pages/JobCosting"));
 const Quotations = React.lazy(() => import("./pages/Quotations"));
 const CRM = React.lazy(() => import("./pages/CRM"));
-const Accounting = React.lazy(() => import("./pages/Accounting"));
 const FinancialManagement = React.lazy(() => import("./pages/FinancialManagement"));
 const GstCompliance = React.lazy(() => import("./pages/GstCompliance"));
 const EmployeeProjects = React.lazy(() => import("./pages/EmployeeProjects"));
@@ -56,6 +53,7 @@ const Reimbursements = React.lazy(() => import("./pages/Reimbursements").then(m 
 const SystemDashboard = React.lazy(() => import("./pages/SystemDashboard"));
 const Calendar = React.lazy(() => import("./pages/Calendar"));
 const HolidayManagement = React.lazy(() => import('./pages/HolidayManagement'));
+const CentralizedReports = React.lazy(() => import("./pages/CentralizedReports"));
 
 // Lazy load component modules
 const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
@@ -126,14 +124,28 @@ const App = () => (
               />
               
               <Route 
-                path="/my-team" 
+                path="/employee-management" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="admin">
                     <DashboardLayout>
-                      <SuspenseRoute><MyTeam /></SuspenseRoute>
+                      <SuspenseRoute><EmployeeManagement /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 
+              />
+              
+              {/* Redirect old routes to unified employee management */}
+              <Route 
+                path="/my-team" 
+                element={<Navigate to="/employee-management" replace />} 
+              />
+              <Route 
+                path="/users" 
+                element={<Navigate to="/employee-management" replace />} 
+              />
+              <Route 
+                path="/employees" 
+                element={<Navigate to="/employee-management" replace />} 
               />
               
               <Route 
@@ -142,17 +154,6 @@ const App = () => (
                   <ProtectedRoute>
                     <DashboardLayout>
                       <SuspenseRoute><ProjectManagement /></SuspenseRoute>
-                    </DashboardLayout>
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/users" 
-                element={
-                  <ProtectedRoute requiredRole="admin">
-                    <DashboardLayout>
-                      <SuspenseRoute><Users /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 
@@ -175,17 +176,6 @@ const App = () => (
                   <ProtectedRoute>
                     <DashboardLayout>
                       <SuspenseRoute><Settings /></SuspenseRoute>
-                    </DashboardLayout>
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
-                path="/employees" 
-                element={
-                  <ProtectedRoute requiredRole="hr">
-                    <DashboardLayout>
-                      <SuspenseRoute><Employees /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 
@@ -216,7 +206,7 @@ const App = () => (
               <Route 
                 path="/payroll" 
                 element={
-                  <ProtectedRoute requiredRole="finance_manager">
+                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Payroll /></SuspenseRoute>
                     </DashboardLayout>
@@ -227,7 +217,7 @@ const App = () => (
               <Route 
                 path="/invoices" 
                 element={
-                  <ProtectedRoute requiredRole="finance_manager">
+                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Invoices /></SuspenseRoute>
                     </DashboardLayout>
@@ -238,7 +228,7 @@ const App = () => (
               <Route 
                 path="/payments" 
                 element={
-                  <ProtectedRoute requiredRole="finance_manager">
+                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Payments /></SuspenseRoute>
                     </DashboardLayout>
@@ -249,7 +239,7 @@ const App = () => (
               <Route 
                 path="/receipts" 
                 element={
-                  <ProtectedRoute requiredRole="finance_manager">
+                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Receipts /></SuspenseRoute>
                     </DashboardLayout>
@@ -293,7 +283,7 @@ const App = () => (
               <Route 
                 path="/ledger" 
                 element={
-                  <ProtectedRoute requiredRole="finance_manager">
+                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Ledger /></SuspenseRoute>
                     </DashboardLayout>
@@ -423,20 +413,9 @@ const App = () => (
               />
               
               <Route 
-                path="/accounting" 
-                element={
-                  <ProtectedRoute requiredRole="finance_manager">
-                    <DashboardLayout>
-                      <SuspenseRoute><Accounting /></SuspenseRoute>
-                    </DashboardLayout>
-                  </ProtectedRoute>
-                } 
-              />
-              
-              <Route 
                 path="/financial-management" 
                 element={
-                  <ProtectedRoute requiredRole="finance_manager">
+                  <ProtectedRoute requiredRole={["admin", "finance_manager", "ceo", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><FinancialManagement /></SuspenseRoute>
                     </DashboardLayout>
@@ -447,7 +426,7 @@ const App = () => (
               <Route 
                 path="/gst-compliance" 
                 element={
-                  <ProtectedRoute requiredRole="finance_manager">
+                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><GstCompliance /></SuspenseRoute>
                     </DashboardLayout>
@@ -483,6 +462,17 @@ const App = () => (
                   <ProtectedRoute requiredRole="hr">
                     <DashboardLayout>
                       <SuspenseRoute><HolidayManagement /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/centralized-reports" 
+                element={
+                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo", "ceo"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><CentralizedReports /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 

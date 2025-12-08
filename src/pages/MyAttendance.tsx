@@ -6,8 +6,10 @@ import { useState, useEffect } from "react";
 import { Clock, Calendar as CalendarIcon, Play, Square, TrendingUp, Award, Loader2 } from "lucide-react";
 import ClockInOut from '@/components/ClockInOut';
 import { useAuth } from '@/hooks/useAuth';
+import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
+import { formatTime, isWorkingDay } from "@/utils/dateFormat";
 
 interface AttendanceRecord {
   date: string;
@@ -34,6 +36,7 @@ interface TodayStatus {
 
 const MyAttendance = () => {
   const { user } = useAuth();
+  const { settings: agencySettings } = useAgencySettings();
   const { toast } = useToast();
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [loading, setLoading] = useState(true);
@@ -126,29 +129,48 @@ const MyAttendance = () => {
       // Transform attendance records
       const transformedRecords: AttendanceRecord[] = (attendanceData || []).map((record: any) => {
         const checkIn = record.check_in_time 
-          ? new Date(record.check_in_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          ? formatTime(record.check_in_time, agencySettings?.timezone)
           : '-';
         const checkOut = record.check_out_time 
-          ? new Date(record.check_out_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          ? formatTime(record.check_out_time, agencySettings?.timezone)
           : '-';
         const hours = record.total_hours ? record.total_hours.toFixed(1) : '0.0';
         
         let status = 'present';
         if (record.check_in_time) {
           const checkInTime = new Date(record.check_in_time);
-          const hours = checkInTime.getHours();
-          const minutes = checkInTime.getMinutes();
-          if (hours > 9 || (hours === 9 && minutes > 15)) {
+          // Get working hours from agency settings (default to 9:00 if not set)
+          const workingHoursStart = agencySettings?.working_hours_start || '09:00';
+          const [startHour, startMin] = workingHoursStart.split(':').map(Number);
+          const gracePeriodMinutes = 15;
+          
+          const checkInHours = checkInTime.getHours();
+          const checkInMinutes = checkInTime.getMinutes();
+          const startTimeMinutes = startHour * 60 + startMin + gracePeriodMinutes;
+          const checkInTimeMinutes = checkInHours * 60 + checkInMinutes;
+          
+          if (checkInTimeMinutes > startTimeMinutes) {
             status = 'late';
           }
         } else {
           status = 'absent';
         }
 
-        // Check if weekend
+        // Check if working day using agency settings
         const recordDate = new Date(record.date);
-        const dayOfWeek = recordDate.getDay();
-        if (dayOfWeek === 0 || dayOfWeek === 6) {
+        let workingDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+        if (agencySettings?.working_days) {
+          if (typeof agencySettings.working_days === 'string') {
+            try {
+              workingDays = JSON.parse(agencySettings.working_days);
+            } catch {
+              // Use default if parsing fails
+            }
+          } else {
+            workingDays = agencySettings.working_days as string[];
+          }
+        }
+        if (!isWorkingDay(recordDate, workingDays)) {
           status = 'weekend';
         }
 

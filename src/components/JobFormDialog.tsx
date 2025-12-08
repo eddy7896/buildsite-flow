@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/database';
+import { insertRecord, updateRecord, selectRecords } from '@/services/api/postgresql-service';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Job {
   id?: string;
@@ -34,7 +35,10 @@ interface JobFormDialogProps {
 
 const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJobSaved }) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [clients, setClients] = useState<any[]>([]);
+  const [jobCategories, setJobCategories] = useState<any[]>([]);
   const [formData, setFormData] = useState<Job>({
     title: job?.title || '',
     description: job?.description || '',
@@ -50,14 +54,100 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
     assigned_to: job?.assigned_to || '',
   });
 
+  useEffect(() => {
+    if (isOpen) {
+      fetchClients();
+      fetchJobCategories();
+      if (job) {
+        setFormData({
+          title: job.title || '',
+          description: job.description || '',
+          client_id: job.client_id || '',
+          category_id: job.category_id || '',
+          status: job.status || 'planning',
+          start_date: job.start_date || '',
+          end_date: job.end_date || '',
+          estimated_hours: job.estimated_hours || 0,
+          estimated_cost: job.estimated_cost || 0,
+          budget: job.budget || 0,
+          profit_margin: job.profit_margin || 0,
+          assigned_to: job.assigned_to || '',
+        });
+      } else {
+        setFormData({
+          title: '',
+          description: '',
+          client_id: '',
+          category_id: '',
+          status: 'planning',
+          start_date: '',
+          end_date: '',
+          estimated_hours: 0,
+          estimated_cost: 0,
+          budget: 0,
+          profit_margin: 0,
+          assigned_to: '',
+        });
+      }
+    }
+  }, [isOpen, job]);
+
+  const fetchClients = async () => {
+    try {
+      if (!user?.id) return;
+      // Get agency_id from profile
+      const { selectOne } = await import('@/services/api/postgresql-service');
+      const profile = await selectOne('profiles', { user_id: user.id });
+      if (!profile?.agency_id) return;
+      
+      const clientsData = await selectRecords('clients', {
+        where: { agency_id: profile.agency_id },
+        orderBy: 'company_name ASC',
+      });
+      setClients(clientsData || []);
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+    }
+  };
+
+  const fetchJobCategories = async () => {
+    try {
+      const categoriesData = await selectRecords('job_categories', {
+        orderBy: 'name ASC',
+      });
+      setJobCategories(categoriesData || []);
+    } catch (error) {
+      console.error('Error fetching job categories:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
+      // Validate required fields
+      if (!formData.title.trim()) {
+        toast({
+          title: 'Error',
+          description: 'Job title is required',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
       // Clean up empty string values for UUID fields
-      const cleanedData = {
-        ...formData,
+      const cleanedData: any = {
+        title: formData.title.trim(),
+        description: formData.description.trim() || null,
+        status: formData.status,
+        start_date: formData.start_date || null,
+        end_date: formData.end_date || null,
+        estimated_hours: formData.estimated_hours || 0,
+        estimated_cost: formData.estimated_cost || 0,
+        budget: formData.budget || 0,
+        profit_margin: formData.profit_margin || 0,
         client_id: formData.client_id || null,
         category_id: formData.category_id || null,
         assigned_to: formData.assigned_to || null,
@@ -65,25 +155,36 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
 
       if (job?.id) {
         // Update existing job
-        const { error } = await supabase
-          .from('jobs')
-          .update(cleanedData)
-          .eq('id', job.id);
-
-        if (error) throw error;
-
+        await updateRecord('jobs', cleanedData, { id: job.id }, user?.id);
         toast({
           title: 'Success',
           description: 'Job updated successfully',
         });
       } else {
-        // Create new job
-        const jobNumber = `J-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-        const { error } = await supabase
-          .from('jobs')
-          .insert([{ ...cleanedData, job_number: jobNumber }]);
+        // Get agency_id from profile
+        const { selectOne } = await import('@/services/api/postgresql-service');
+        const profile = user?.id ? await selectOne('profiles', { user_id: user.id }) : null;
+        if (!profile?.agency_id) {
+          toast({
+            title: 'Error',
+            description: 'Unable to determine agency. Please ensure you are logged in.',
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
 
-        if (error) throw error;
+        // Create new job
+        const year = new Date().getFullYear();
+        const timestamp = String(Date.now()).slice(-6);
+        const jobNumber = `J-${year}-${timestamp}`;
+        
+        await insertRecord('jobs', {
+          ...cleanedData,
+          job_number: jobNumber,
+          created_by: user?.id || null,
+          agency_id: profile.agency_id,
+        }, user?.id);
 
         toast({
           title: 'Success',
@@ -93,11 +194,11 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
 
       onJobSaved();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving job:', error);
       toast({
         title: 'Error',
-        description: 'Failed to save job',
+        description: error.message || 'Failed to save job',
         variant: 'destructive',
       });
     } finally {
@@ -150,6 +251,47 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
               onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
               rows={3}
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="client_id">Client</Label>
+              <Select 
+                value={formData.client_id || ''} 
+                onValueChange={(value) => setFormData(prev => ({ ...prev, client_id: value || '' }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select client (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {clients.map((client) => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.company_name || client.name || client.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="category_id">Category</Label>
+              <Select 
+                value={formData.category_id || ''} 
+                onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value || '' }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select category (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">None</SelectItem>
+                  {jobCategories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

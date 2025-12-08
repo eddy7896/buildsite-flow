@@ -9,7 +9,7 @@ import { ReimbursementReviewDialog } from "@/components/ReimbursementReviewDialo
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/database';
 import { useAuth } from "@/hooks/useAuth";
-import { Plus, Search, DollarSign, Clock, CheckCircle, XCircle, Eye } from "lucide-react";
+import { Plus, Search, DollarSign, Clock, CheckCircle, XCircle, Eye, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface ReimbursementRequest {
@@ -59,41 +59,83 @@ export const Reimbursements: React.FC = () => {
   const fetchReimbursements = async () => {
     try {
       setLoading(true);
-      const { data, error } = await db
+      
+      // Fetch reimbursement requests
+      let query = db
         .from("reimbursement_requests")
-        .select(`
-          *,
-          expense_categories (
-            name
-          ),
-          profiles (
-            full_name
-          )
-        `)
+        .select("*");
+      
+      // Filter by employee if not finance manager
+      if (!isFinanceManager && user) {
+        query = query.eq("employee_id", user.id);
+      }
+      
+      const { data: requestsData, error: requestsError } = await query
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      if (requestsError) throw requestsError;
 
-      setRequests((data as any) || []);
+      const requests = (requestsData as any) || [];
+      
+      // Fetch expense categories
+      const categoryIds = [...new Set(requests.map((r: any) => r.category_id).filter(Boolean))];
+      let categories: any[] = [];
+      if (categoryIds.length > 0) {
+        const { data: categoriesData, error: categoriesError } = await db
+          .from("expense_categories")
+          .select("id, name")
+          .in("id", categoryIds);
+        
+        if (!categoriesError) {
+          categories = (categoriesData as any) || [];
+        }
+      }
+
+      // Fetch profiles for employee names
+      const employeeIds = [...new Set(requests.map((r: any) => r.employee_id).filter(Boolean))];
+      let profiles: any[] = [];
+      if (employeeIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await db
+          .from("profiles")
+          .select("user_id, full_name")
+          .in("user_id", employeeIds);
+        
+        if (!profilesError) {
+          profiles = (profilesData as any) || [];
+        }
+      }
+
+      // Create maps for quick lookup
+      const categoryMap = new Map(categories.map((c: any) => [c.id, c]));
+      const profileMap = new Map(profiles.map((p: any) => [p.user_id, p]));
+
+      // Combine data
+      const enrichedRequests: ReimbursementRequest[] = requests.map((req: any) => ({
+        ...req,
+        expense_categories: categoryMap.get(req.category_id) || { name: "Unknown" },
+        profiles: profileMap.get(req.employee_id) || undefined,
+      }));
+
+      setRequests(enrichedRequests);
       
       // Calculate stats
-      const totalAmount = data?.reduce((sum, req) => sum + Number(req.amount), 0) || 0;
-      const pending = data?.filter(req => req.status === 'submitted' || req.status === 'draft').length || 0;
-      const approved = data?.filter(req => req.status === 'approved').length || 0;
-      const rejected = data?.filter(req => req.status === 'rejected').length || 0;
+      const totalAmount = enrichedRequests.reduce((sum, req) => sum + Number(req.amount), 0);
+      const pending = enrichedRequests.filter(req => req.status === 'submitted' || req.status === 'draft').length;
+      const approved = enrichedRequests.filter(req => req.status === 'approved').length;
+      const rejected = enrichedRequests.filter(req => req.status === 'rejected').length;
 
       setStats({
-        total: data?.length || 0,
+        total: enrichedRequests.length,
         pending,
         approved,
         rejected,
         totalAmount,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching reimbursements:", error);
       toast({
         title: "Error",
-        description: "Failed to load reimbursement requests",
+        description: error?.message || "Failed to load reimbursement requests",
         variant: "destructive",
       });
     } finally {
@@ -104,6 +146,51 @@ export const Reimbursements: React.FC = () => {
   const handleViewRequest = (request: ReimbursementRequest) => {
     setSelectedRequest(request);
     setShowReviewDialog(true);
+  };
+
+  const handleEditRequest = (request: ReimbursementRequest) => {
+    setSelectedRequest(request);
+    setShowForm(true);
+  };
+
+  const handleDeleteRequest = async (request: ReimbursementRequest) => {
+    if (!window.confirm(`Are you sure you want to delete this reimbursement request? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // First delete attachments if any
+      const { error: attachmentsError } = await db
+        .from("reimbursement_attachments")
+        .delete()
+        .eq("reimbursement_id", request.id);
+
+      if (attachmentsError) {
+        console.error("Error deleting attachments:", attachmentsError);
+      }
+
+      // Then delete the request
+      const { error } = await db
+        .from("reimbursement_requests")
+        .delete()
+        .eq("id", request.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Reimbursement request deleted successfully",
+      });
+
+      fetchReimbursements();
+    } catch (error: any) {
+      console.error("Error deleting reimbursement:", error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to delete reimbursement request",
+        variant: "destructive",
+      });
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -298,15 +385,39 @@ export const Reimbursements: React.FC = () => {
                           : "Not submitted"}
                       </TableCell>
                       <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleViewRequest(request)}
-                          className="flex items-center gap-1"
-                        >
-                          <Eye className="h-4 w-4" />
-                          {isFinanceManager ? "Review" : "View"}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleViewRequest(request)}
+                            className="flex items-center gap-1"
+                          >
+                            <Eye className="h-4 w-4" />
+                            {isFinanceManager ? "Review" : "View"}
+                          </Button>
+                          {(request.status === 'draft' || (!isFinanceManager && request.status === 'submitted')) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleEditRequest(request)}
+                              className="flex items-center gap-1"
+                            >
+                              <Edit className="h-4 w-4" />
+                              Edit
+                            </Button>
+                          )}
+                          {(request.status === 'draft' || (!isFinanceManager && request.status === 'submitted')) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteRequest(request)}
+                              className="flex items-center gap-1 text-destructive hover:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Delete
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -319,8 +430,14 @@ export const Reimbursements: React.FC = () => {
 
       <ReimbursementFormDialog
         open={showForm}
-        onOpenChange={setShowForm}
+        onOpenChange={(open) => {
+          setShowForm(open);
+          if (!open) {
+            setSelectedRequest(null);
+          }
+        }}
         onSuccess={fetchReimbursements}
+        request={selectedRequest}
       />
 
       <ReimbursementReviewDialog

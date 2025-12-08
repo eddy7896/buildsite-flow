@@ -3,20 +3,26 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, Filter, Download, CreditCard, DollarSign, TrendingUp, Calendar, Loader2 } from "lucide-react";
+import { Plus, Search, Filter, Download, CreditCard, DollarSign, TrendingUp, Calendar, Loader2, Edit, Trash2, Eye } from "lucide-react";
 import { useState, useEffect } from "react";
-import { db } from '@/lib/database';
+import { selectRecords, rawQuery, deleteRecord } from '@/services/api/postgresql-service';
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from '@/hooks/useAuth';
+import PaymentFormDialog from "@/components/PaymentFormDialog";
+import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
 
 interface Payment {
   id: string;
-  invoiceId: string;
-  client: string;
+  journal_entry_id: string;
+  invoice_id: string;
+  invoice_number: string;
+  client_name: string;
   amount: number;
-  paymentDate: string;
-  method: string;
-  status: string;
+  payment_date: string;
+  payment_method: string;
   reference: string;
+  status: string;
+  notes?: string;
 }
 
 interface PaymentStats {
@@ -28,6 +34,7 @@ interface PaymentStats {
 
 const Payments = () => {
   const { toast } = useToast();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTab, setSelectedTab] = useState('all');
@@ -38,109 +45,131 @@ const Payments = () => {
     avgPaymentTime: 0
   });
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentFormOpen, setPaymentFormOpen] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null);
 
   useEffect(() => {
-    fetchPayments();
-  }, []);
+    if (profile?.agency_id) {
+      fetchPayments();
+    }
+  }, [profile?.agency_id]);
 
   const fetchPayments = async () => {
     try {
       setLoading(true);
 
-      // Fetch invoices - payments are tracked through invoice status
-      const { data: invoices, error: invoicesError } = await db
-        .from('invoices')
-        .select('*')
-        .order('issue_date', { ascending: false });
-
-      if (invoicesError) throw invoicesError;
-
-      // Fetch clients for names
-      const clientIds = (invoices || []).map(i => i.client_id).filter(Boolean);
-      let clients: any[] = [];
-
-      if (clientIds.length > 0) {
-        const { data: clientsData, error: clientsError } = await db
-          .from('clients')
-          .select('id, name, company_name')
-          .in('id', clientIds);
-
-        if (clientsError) throw clientsError;
-        clients = clientsData || [];
+      if (!profile?.agency_id) {
+        setPayments([]);
+        setPaymentStats({
+          totalReceived: 0,
+          pendingPayments: 0,
+          thisMonth: 0,
+          avgPaymentTime: 0
+        });
+        return;
       }
 
-      const clientMap = new Map(clients.map((c: any) => [c.id, c.company_name || c.name]));
+      // Fetch payments from journal entries linked to invoices
+      // Payments are journal entries with cash/bank accounts debited and AR credited
+      const query = `
+        SELECT DISTINCT
+          je.id as journal_entry_id,
+          je.entry_date as payment_date,
+          je.reference,
+          je.description,
+          je.entry_number,
+          jel.debit_amount as amount,
+          inv.id as invoice_id,
+          inv.invoice_number,
+          inv.issue_date,
+          inv.due_date,
+          inv.status as invoice_status,
+          inv.total_amount as invoice_total,
+          COALESCE(c.name, c.company_name, 'Unknown Client') as client_name,
+          CASE 
+            WHEN je.reference ILIKE '%cash%' THEN 'cash'
+            WHEN je.reference ILIKE '%cheque%' OR je.reference ILIKE '%check%' THEN 'cheque'
+            WHEN je.reference ILIKE '%card%' THEN 'credit_card'
+            WHEN je.reference ILIKE '%upi%' THEN 'upi'
+            WHEN je.reference ILIKE '%online%' THEN 'online'
+            ELSE 'bank_transfer'
+          END as payment_method,
+          CASE 
+            WHEN inv.status = 'paid' THEN 'completed'
+            WHEN inv.status = 'partial' THEN 'partial'
+            WHEN inv.status = 'overdue' THEN 'pending'
+            ELSE 'pending'
+          END as status
+        FROM journal_entries je
+        JOIN journal_entry_lines jel ON je.id = jel.journal_entry_id
+        JOIN chart_of_accounts coa ON jel.account_id = coa.id
+        LEFT JOIN invoices inv ON je.reference LIKE '%' || inv.invoice_number || '%'
+        LEFT JOIN clients c ON inv.client_id = c.id
+        WHERE je.agency_id = $1
+        AND je.status = 'posted'
+        AND coa.account_type = 'Asset'
+        AND (coa.account_name ILIKE '%cash%' OR coa.account_name ILIKE '%bank%')
+        AND jel.debit_amount > 0
+        AND inv.id IS NOT NULL
+        ORDER BY je.entry_date DESC, je.created_at DESC
+      `;
 
-      // Also check journal entries for payment transactions
-      const { data: journalEntries, error: journalError } = await db
-        .from('journal_entries')
-        .select('*')
-        .order('entry_date', { ascending: false })
-        .limit(100);
+      const paymentData = await rawQuery(query, [profile.agency_id]);
 
-      if (journalError) throw journalError;
-
-      // Transform invoices to payments
-      const transformedPayments: Payment[] = (invoices || []).map((invoice: any) => {
-        const clientName = clientMap.get(invoice.client_id) || 'Unknown Client';
-        
-        // Determine payment status from invoice status
-        let paymentStatus = 'pending';
-        let paymentMethod = 'Bank Transfer';
-        
-        if (invoice.status === 'paid' || invoice.status === 'completed') {
-          paymentStatus = 'completed';
-        } else if (invoice.status === 'overdue') {
-          paymentStatus = 'pending';
-        } else if (invoice.status === 'cancelled') {
-          paymentStatus = 'failed';
-        }
-
-        // Use issue_date as payment date for paid invoices, due_date for pending
-        const paymentDate = paymentStatus === 'completed' 
-          ? invoice.issue_date 
-          : invoice.due_date || invoice.issue_date;
-
-        return {
-          id: invoice.id.substring(0, 8).toUpperCase(),
-          invoiceId: invoice.invoice_number || invoice.id.substring(0, 8).toUpperCase(),
-          client: clientName,
-          amount: Number(invoice.total_amount || invoice.subtotal || 0),
-          paymentDate: paymentDate.split('T')[0],
-          method: paymentMethod,
-          status: paymentStatus,
-          reference: invoice.invoice_number || `INV-${invoice.id.substring(0, 6)}`
-        };
-      });
+      // Transform to Payment interface
+      const transformedPayments: Payment[] = (paymentData || []).map((p: any) => ({
+        id: p.journal_entry_id,
+        journal_entry_id: p.journal_entry_id,
+        invoice_id: p.invoice_id,
+        invoice_number: p.invoice_number || 'N/A',
+        client_name: p.client_name || 'Unknown Client',
+        amount: Number(p.amount) || 0,
+        payment_date: p.payment_date,
+        payment_method: p.payment_method || 'bank_transfer',
+        reference: p.reference || p.entry_number || '',
+        status: p.status || 'completed',
+        notes: p.description || '',
+      }));
 
       setPayments(transformedPayments);
 
       // Calculate stats
       const completedPayments = transformedPayments.filter(p => p.status === 'completed');
       const totalReceived = completedPayments.reduce((sum, p) => sum + p.amount, 0);
-      const pendingPayments = transformedPayments
-        .filter(p => p.status === 'pending')
-        .reduce((sum, p) => sum + p.amount, 0);
+      
+      // Get pending invoices to calculate pending payments
+      const pendingInvoices = await selectRecords('invoices', {
+        where: {
+          agency_id: profile.agency_id,
+          status: { operator: 'IN', value: ['sent', 'overdue', 'partial'] }
+        },
+      });
+
+      const pendingPayments = pendingInvoices.reduce((sum: number, inv: any) => {
+        const total = inv.total_amount || 
+          (inv.subtotal * (1 + (inv.tax_rate || 0) / 100) - (inv.discount || 0));
+        return sum + Number(total);
+      }, 0);
 
       const now = new Date();
       const currentMonth = now.getMonth();
       const currentYear = now.getFullYear();
       const thisMonth = completedPayments.filter(p => {
-        const paymentDate = new Date(p.paymentDate);
+        const paymentDate = new Date(p.payment_date);
         return paymentDate.getMonth() === currentMonth && paymentDate.getFullYear() === currentYear;
       }).reduce((sum, p) => sum + p.amount, 0);
 
-      // Calculate average payment time (days between issue and payment for completed)
+      // Calculate average payment time (days between invoice issue and payment)
       let totalDays = 0;
       let count = 0;
       completedPayments.forEach(payment => {
-        const invoice = invoices?.find((i: any) => 
-          i.invoice_number === payment.invoiceId || 
-          i.id.substring(0, 8).toUpperCase() === payment.id
-        );
-        if (invoice) {
-          const issueDate = new Date(invoice.issue_date);
-          const payDate = new Date(payment.paymentDate);
+        const paymentDataItem = paymentData.find((p: any) => p.journal_entry_id === payment.journal_entry_id);
+        if (paymentDataItem?.issue_date) {
+          const issueDate = new Date(paymentDataItem.issue_date);
+          const payDate = new Date(payment.payment_date);
           const days = Math.ceil((payDate.getTime() - issueDate.getTime()) / (1000 * 60 * 60 * 24));
           if (days > 0) {
             totalDays += days;
@@ -161,23 +190,120 @@ const Payments = () => {
       console.error('Error fetching payments:', error);
       toast({
         title: "Error",
-        description: "Failed to load payments. Please try again.",
+        description: error?.message || "Failed to load payments. Please try again.",
         variant: "destructive",
       });
+      setPayments([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const handlePaymentSaved = () => {
+    fetchPayments();
+  };
+
+  const handleDeletePayment = async () => {
+    if (!paymentToDelete || !user?.id) {
+      return;
+    }
+
+    try {
+      // Delete journal entry (which will cascade delete lines)
+      await deleteRecord('journal_entries', paymentToDelete.journal_entry_id, user.id);
+
+      // Update invoice status back to unpaid/partial
+      const invoice = await selectRecords('invoices', {
+        where: { id: paymentToDelete.invoice_id },
+        limit: 1,
+      });
+
+      if (invoice && invoice[0]) {
+        const inv = invoice[0];
+        // Recalculate payment status
+        const paymentsQuery = `
+          SELECT COALESCE(SUM(jel.debit_amount), 0) as total_paid
+          FROM journal_entries je
+          JOIN journal_entry_lines jel ON je.id = jel.journal_entry_id
+          JOIN chart_of_accounts coa ON jel.account_id = coa.id
+          WHERE je.reference LIKE $1
+          AND coa.account_type = 'Asset'
+          AND (coa.account_name ILIKE '%cash%' OR coa.account_name ILIKE '%bank%')
+          AND je.agency_id = $2
+          AND je.id != $3
+        `;
+
+        const cashAccounts = await selectRecords('chart_of_accounts', {
+          where: {
+            agency_id: profile?.agency_id,
+            account_type: 'Asset',
+            account_name: { operator: 'ILIKE', value: '%cash%' }
+          },
+          limit: 1,
+        });
+
+        if (cashAccounts && cashAccounts.length > 0) {
+          const existingPayments = await rawQuery(paymentsQuery, [
+            `%${inv.invoice_number}%`,
+            profile?.agency_id,
+            paymentToDelete.journal_entry_id
+          ]);
+
+          const totalPaid = Number(existingPayments[0]?.total_paid || 0);
+          const invoiceTotal = inv.total_amount || 
+            (inv.subtotal * (1 + (inv.tax_rate || 0) / 100) - (inv.discount || 0));
+
+          let newStatus = inv.status;
+          if (totalPaid >= invoiceTotal) {
+            newStatus = 'paid';
+          } else if (totalPaid > 0) {
+            newStatus = 'partial';
+          } else {
+            newStatus = 'sent';
+          }
+
+          const { updateRecord } = await import('@/services/api/postgresql-service');
+          await updateRecord('invoices', inv.id, {
+            status: newStatus,
+          }, user.id);
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: "Payment deleted successfully",
+      });
+
+      fetchPayments();
+      setDeleteDialogOpen(false);
+      setPaymentToDelete(null);
+    } catch (error: any) {
+      console.error('Error deleting payment:', error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to delete payment. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const filteredPayments = payments.filter(payment =>
-    payment.client.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    payment.invoiceId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    payment.client_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    payment.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
     payment.reference.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getFilteredByStatus = (status: string) => {
     if (status === 'all') return filteredPayments;
     return filteredPayments.filter(p => p.status === status);
+  };
+
+  const handleExportReport = () => {
+    // TODO: Implement export functionality
+    toast({
+      title: "Export",
+      description: "Export functionality will be implemented soon",
+    });
   };
 
   if (loading) {
@@ -191,10 +317,20 @@ const Payments = () => {
     );
   }
 
+  if (!profile?.agency_id) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-8">
+          <p className="text-muted-foreground">Unable to load payments. Please ensure you are logged in.</p>
+        </div>
+      </div>
+    );
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'default';
+      case 'partial': return 'secondary';
       case 'pending': return 'secondary';
       case 'failed': return 'destructive';
       case 'refunded': return 'outline';
@@ -204,10 +340,24 @@ const Payments = () => {
 
   const getMethodIcon = (method: string) => {
     switch (method.toLowerCase()) {
-      case 'credit card':
+      case 'credit_card':
+      case 'debit_card':
         return <CreditCard className="h-4 w-4" />;
       default:
         return <DollarSign className="h-4 w-4" />;
+    }
+  };
+
+  const getMethodLabel = (method: string) => {
+    switch (method) {
+      case 'bank_transfer': return 'Bank Transfer';
+      case 'cash': return 'Cash';
+      case 'credit_card': return 'Credit Card';
+      case 'debit_card': return 'Debit Card';
+      case 'cheque': return 'Cheque';
+      case 'upi': return 'UPI';
+      case 'online': return 'Online';
+      default: return method.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
     }
   };
 
@@ -219,11 +369,15 @@ const Payments = () => {
           <p className="text-muted-foreground">Track and manage incoming payments</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExportReport}>
             <Download className="mr-2 h-4 w-4" />
             Export Report
           </Button>
-          <Button>
+          <Button onClick={() => {
+            setSelectedPayment(null);
+            setSelectedInvoiceId(null);
+            setPaymentFormOpen(true);
+          }}>
             <Plus className="mr-2 h-4 w-4" />
             Record Payment
           </Button>
@@ -301,7 +455,7 @@ const Payments = () => {
         <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="all">All ({payments.length})</TabsTrigger>
           <TabsTrigger value="completed">Completed ({payments.filter(p => p.status === 'completed').length})</TabsTrigger>
-          <TabsTrigger value="pending">Pending ({payments.filter(p => p.status === 'pending').length})</TabsTrigger>
+          <TabsTrigger value="pending">Pending ({payments.filter(p => p.status === 'pending' || p.status === 'partial').length})</TabsTrigger>
           <TabsTrigger value="failed">Failed ({payments.filter(p => p.status === 'failed').length})</TabsTrigger>
         </TabsList>
         
@@ -324,30 +478,64 @@ const Payments = () => {
                 ) : (
                   getFilteredByStatus(selectedTab).map((payment) => (
                   <div key={payment.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-4 flex-1">
                       <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                        {getMethodIcon(payment.method)}
+                        {getMethodIcon(payment.payment_method)}
                       </div>
-                      <div>
-                        <h3 className="font-semibold">{payment.client}</h3>
+                      <div className="flex-1">
+                        <h3 className="font-semibold">{payment.client_name}</h3>
                         <div className="flex gap-2 text-sm text-muted-foreground">
-                          <span>Invoice: {payment.invoiceId}</span>
+                          <span>Invoice: {payment.invoice_number}</span>
                           <span>•</span>
                           <span>Ref: {payment.reference}</span>
                         </div>
-                        <p className="text-xs text-muted-foreground">{payment.method}</p>
+                        <p className="text-xs text-muted-foreground">{getMethodLabel(payment.payment_method)}</p>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right mr-4">
                       <p className="font-bold text-lg">₹{payment.amount.toLocaleString()}</p>
                       <p className="text-sm text-muted-foreground">
-                        {new Date(payment.paymentDate).toLocaleDateString()}
+                        {new Date(payment.payment_date).toLocaleDateString()}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={getStatusColor(payment.status)}>
                         {payment.status}
                       </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                          // Fetch payment details with invoice
+                          try {
+                            const invoice = await selectRecords('invoices', {
+                              where: { id: payment.invoice_id },
+                              limit: 1,
+                            });
+                            if (invoice && invoice[0]) {
+                              setSelectedInvoiceId(invoice[0].id);
+                            }
+                            setSelectedPayment(payment);
+                            setPaymentFormOpen(true);
+                          } catch (error) {
+                            console.error('Error fetching payment details:', error);
+                            setSelectedPayment(payment);
+                            setPaymentFormOpen(true);
+                          }
+                        }}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setPaymentToDelete(payment);
+                          setDeleteDialogOpen(true);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </div>
                   </div>
                   ))
@@ -357,6 +545,29 @@ const Payments = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <PaymentFormDialog
+        isOpen={paymentFormOpen}
+        onClose={() => {
+          setPaymentFormOpen(false);
+          setSelectedPayment(null);
+          setSelectedInvoiceId(null);
+        }}
+        payment={selectedPayment}
+        invoiceId={selectedInvoiceId}
+        onPaymentSaved={handlePaymentSaved}
+      />
+
+      <DeleteConfirmDialog
+        isOpen={deleteDialogOpen}
+        onClose={() => {
+          setDeleteDialogOpen(false);
+          setPaymentToDelete(null);
+        }}
+        onConfirm={handleDeletePayment}
+        title="Delete Payment"
+        description={`Are you sure you want to delete this payment of ₹${paymentToDelete?.amount.toLocaleString()}? This action cannot be undone and will update the invoice status.`}
+      />
     </div>
   );
 };

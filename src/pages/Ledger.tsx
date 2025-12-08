@@ -53,10 +53,13 @@ const Ledger = () => {
         .order('entry_date', { ascending: false })
         .limit(100);
 
-      if (entriesError) throw entriesError;
+      if (entriesError) {
+        console.error('Error fetching journal entries:', entriesError);
+        throw entriesError;
+      }
 
       // Fetch journal entry lines to get account details
-      const entryIds = entries?.map(e => e.id) || [];
+      const entryIds = entries?.map((e: any) => e.id) || [];
       let lines: any[] = [];
       
       if (entryIds.length > 0) {
@@ -65,7 +68,10 @@ const Ledger = () => {
           .select('*')
           .in('journal_entry_id', entryIds);
 
-        if (linesError) throw linesError;
+        if (linesError) {
+          console.error('Error fetching journal entry lines:', linesError);
+          throw linesError;
+        }
         lines = linesData || [];
       }
 
@@ -74,7 +80,10 @@ const Ledger = () => {
         .from('chart_of_accounts')
         .select('id, account_name, account_type');
 
-      if (accountsError) throw accountsError;
+      if (accountsError) {
+        console.error('Error fetching chart of accounts:', accountsError);
+        throw accountsError;
+      }
 
       const accountMap = new Map((accounts || []).map((acc: any) => [acc.id, acc]));
 
@@ -83,10 +92,14 @@ const Ledger = () => {
       let runningBalance = 0;
 
       (entries || []).forEach((entry: any) => {
-        const entryLines = lines.filter((l: any) => l.journal_entry_id === entry.id);
+        if (!entry || !entry.id) return;
+        
+        const entryLines = lines.filter((l: any) => l && l.journal_entry_id === entry.id);
         
         entryLines.forEach((line: any) => {
-          const account = accountMap.get(line.account_id);
+          if (!line || !line.id) return;
+          
+          const account = line.account_id ? accountMap.get(line.account_id) : null;
           const isCredit = (line.credit_amount || 0) > 0;
           const amount = isCredit ? (line.credit_amount || 0) : (line.debit_amount || 0);
           
@@ -96,7 +109,7 @@ const Ledger = () => {
             // Determine category from account type
             let category = 'Other';
             if (account?.account_type) {
-              const accountType = account.account_type.toLowerCase();
+              const accountType = String(account.account_type).toLowerCase();
               if (accountType.includes('revenue') || accountType.includes('income')) {
                 category = 'Revenue';
               } else if (accountType.includes('expense')) {
@@ -106,24 +119,34 @@ const Ledger = () => {
               }
             }
 
+            const entryDate = entry.entry_date || entry.created_at || new Date().toISOString();
+            const description = line.description || entry.description || 'Transaction';
+            const reference = entry.reference || entry.entry_number || `JE-${String(entry.id).substring(0, 8)}`;
+
             transformedTransactions.push({
-              id: line.id,
-              date: entry.entry_date || entry.created_at,
-              description: line.description || entry.description || 'Transaction',
+              id: String(line.id),
+              date: entryDate,
+              description: description,
               category,
               type: isCredit ? 'credit' : 'debit',
               amount,
               balance: runningBalance,
-              reference: entry.reference || entry.entry_number || `JE-${entry.id.substring(0, 8)}`
+              reference: reference
             });
           }
         });
       });
 
       // Sort by date descending
-      transformedTransactions.sort((a, b) => 
-        new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
+      transformedTransactions.sort((a, b) => {
+        try {
+          const dateA = new Date(a.date).getTime();
+          const dateB = new Date(b.date).getTime();
+          return dateB - dateA;
+        } catch {
+          return 0;
+        }
+      });
 
       setTransactions(transformedTransactions);
 
@@ -133,23 +156,27 @@ const Ledger = () => {
       const currentYear = now.getFullYear();
 
       const monthlyTransactions = transformedTransactions.filter(t => {
-        const tDate = new Date(t.date);
-        return tDate.getMonth() === currentMonth && tDate.getFullYear() === currentYear;
+        try {
+          const tDate = new Date(t.date);
+          return tDate.getMonth() === currentMonth && tDate.getFullYear() === currentYear;
+        } catch {
+          return false;
+        }
       });
 
       const monthlyIncome = monthlyTransactions
         .filter(t => t.type === 'credit')
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
       
       const monthlyExpenses = monthlyTransactions
         .filter(t => t.type === 'debit')
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       setLedgerSummary({
-        totalBalance: runningBalance,
-        monthlyIncome,
-        monthlyExpenses,
-        netProfit: monthlyIncome - monthlyExpenses
+        totalBalance: runningBalance || 0,
+        monthlyIncome: monthlyIncome || 0,
+        monthlyExpenses: monthlyExpenses || 0,
+        netProfit: (monthlyIncome || 0) - (monthlyExpenses || 0)
       });
 
     } catch (error: any) {
@@ -164,11 +191,15 @@ const Ledger = () => {
     }
   };
 
-  const filteredTransactions = transactions.filter(transaction =>
-    transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    transaction.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    transaction.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredTransactions = transactions.filter(transaction => {
+    if (!transaction) return false;
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      (transaction.description || '').toLowerCase().includes(searchLower) ||
+      (transaction.reference || '').toLowerCase().includes(searchLower) ||
+      (transaction.category || '').toLowerCase().includes(searchLower)
+    );
+  });
 
   if (loading) {
     return (
@@ -312,37 +343,46 @@ const Ledger = () => {
                     </p>
                   </div>
                 ) : (
-                  filteredTransactions.map((transaction) => (
-                  <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                        {getTransactionIcon(transaction.type)}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">{transaction.description}</h3>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span>{transaction.id}</span>
-                          <span>•</span>
-                          <span>Ref: {transaction.reference}</span>
+                  filteredTransactions
+                    .filter(transaction => transaction != null)
+                    .map((transaction) => (
+                      <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                            {getTransactionIcon(transaction.type)}
+                          </div>
+                          <div>
+                            <h3 className="font-semibold">{transaction.description}</h3>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <span>{transaction.id}</span>
+                              <span>•</span>
+                              <span>Ref: {transaction.reference}</span>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
+                              {transaction.category}
+                            </span>
+                          </div>
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
-                          {transaction.category}
-                        </span>
+                        <div className="text-right">
+                          <p className={`font-bold text-lg ${getTransactionColor(transaction.type)}`}>
+                            {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Balance: ₹{transaction.balance.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {(() => {
+                              try {
+                                return new Date(transaction.date).toLocaleDateString();
+                              } catch {
+                                return 'Invalid Date';
+                              }
+                            })()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <p className={`font-bold text-lg ${getTransactionColor(transaction.type)}`}>
-                        {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Balance: ₹{transaction.balance.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(transaction.date).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                    ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -361,37 +401,45 @@ const Ledger = () => {
                     <p className="text-muted-foreground">No credit transactions found.</p>
                   </div>
                 ) : (
-                  filteredTransactions.filter(t => t.type === 'credit').map((transaction) => (
-                  <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                        {getTransactionIcon(transaction.type)}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">{transaction.description}</h3>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span>{transaction.id}</span>
-                          <span>•</span>
-                          <span>Ref: {transaction.reference}</span>
+                  filteredTransactions
+                    .filter(t => t != null && t.type === 'credit')
+                    .map((transaction) => (
+                      <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                            {getTransactionIcon(transaction.type)}
+                          </div>
+                          <div>
+                            <h3 className="font-semibold">{transaction.description}</h3>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <span>{transaction.id}</span>
+                              <span>•</span>
+                              <span>Ref: {transaction.reference}</span>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
+                              {transaction.category}
+                            </span>
+                          </div>
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
-                          {transaction.category}
-                        </span>
+                        <div className="text-right">
+                          <p className="font-bold text-lg text-green-600">
+                            +₹{transaction.amount.toLocaleString()}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Balance: ₹{transaction.balance.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {(() => {
+                              try {
+                                return new Date(transaction.date).toLocaleDateString();
+                              } catch {
+                                return 'Invalid Date';
+                              }
+                            })()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-lg text-green-600">
-                        +₹{transaction.amount.toLocaleString()}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Balance: ₹{transaction.balance.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(transaction.date).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  ))
+                    ))
                 )}
               </div>
             </CardContent>
@@ -411,37 +459,45 @@ const Ledger = () => {
                     <p className="text-muted-foreground">No debit transactions found.</p>
                   </div>
                 ) : (
-                  filteredTransactions.filter(t => t.type === 'debit').map((transaction) => (
-                  <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                        {getTransactionIcon(transaction.type)}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold">{transaction.description}</h3>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <span>{transaction.id}</span>
-                          <span>•</span>
-                          <span>Ref: {transaction.reference}</span>
+                  filteredTransactions
+                    .filter(t => t != null && t.type === 'debit')
+                    .map((transaction) => (
+                      <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                            {getTransactionIcon(transaction.type)}
+                          </div>
+                          <div>
+                            <h3 className="font-semibold">{transaction.description}</h3>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <span>{transaction.id}</span>
+                              <span>•</span>
+                              <span>Ref: {transaction.reference}</span>
+                            </div>
+                            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
+                              {transaction.category}
+                            </span>
+                          </div>
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
-                          {transaction.category}
-                        </span>
+                        <div className="text-right">
+                          <p className="font-bold text-lg text-red-600">
+                            -₹{transaction.amount.toLocaleString()}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Balance: ₹{transaction.balance.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {(() => {
+                              try {
+                                return new Date(transaction.date).toLocaleDateString();
+                              } catch {
+                                return 'Invalid Date';
+                              }
+                            })()}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-lg text-red-600">
-                        -₹{transaction.amount.toLocaleString()}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Balance: ₹{transaction.balance.toLocaleString()}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(transaction.date).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  ))
+                    ))
                 )}
               </div>
             </CardContent>

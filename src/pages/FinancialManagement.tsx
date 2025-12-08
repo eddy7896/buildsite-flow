@@ -6,39 +6,53 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/database';
+import { selectRecords, selectOne, rawQuery } from '@/services/api/postgresql-service';
+import { useAuth } from '@/hooks/useAuth';
 import JobFormDialog from '@/components/JobFormDialog';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
+import ChartOfAccountFormDialog from '@/components/ChartOfAccountFormDialog';
+import JournalEntryFormDialog from '@/components/JournalEntryFormDialog';
 
 const FinancialManagement = () => {
   const { toast } = useToast();
+  const { user, profile } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [jobs, setJobs] = useState<any[]>([]);
+  const [chartOfAccounts, setChartOfAccounts] = useState<any[]>([]);
+  const [journalEntries, setJournalEntries] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [jobFormOpen, setJobFormOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<any>(null);
+  const [accountFormOpen, setAccountFormOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<any>(null);
+  const [entryFormOpen, setEntryFormOpen] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [jobToDelete, setJobToDelete] = useState<any>(null);
+  const [accountToDelete, setAccountToDelete] = useState<any>(null);
+  const [entryToDelete, setEntryToDelete] = useState<any>(null);
 
   useEffect(() => {
-    fetchJobs();
-  }, []);
+    if (profile?.agency_id) {
+      fetchAllData();
+    }
+  }, [profile?.agency_id]);
 
-  const fetchJobs = async () => {
+  const fetchAllData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const { data, error } = await db
-        .from('jobs')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setJobs(data || []);
+      await Promise.all([
+        fetchJobs(),
+        fetchChartOfAccounts(),
+        fetchJournalEntries(),
+        fetchTransactions(),
+      ]);
     } catch (error) {
-      console.error('Error fetching jobs:', error);
+      console.error('Error fetching financial data:', error);
       toast({
         title: 'Error',
-        description: 'Failed to fetch jobs',
+        description: 'Failed to load financial data',
         variant: 'destructive',
       });
     } finally {
@@ -46,116 +60,222 @@ const FinancialManagement = () => {
     }
   };
 
-  // Mock data for accounting and ledger
-  const accountingStats = {
-    totalAssets: 5500000,
-    totalLiabilities: 2100000,
-    totalEquity: 3400000,
-    monthlyRevenue: 850000,
+  const fetchJobs = async () => {
+    try {
+      if (!profile?.agency_id) {
+        setJobs([]);
+        return;
+      }
+      const jobsData = await selectRecords('jobs', {
+        where: { agency_id: profile.agency_id },
+        orderBy: 'created_at DESC',
+      });
+      setJobs(jobsData || []);
+    } catch (error) {
+      console.error('Error fetching jobs:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch jobs',
+        variant: 'destructive',
+      });
+      setJobs([]);
+    }
   };
 
-  const ledgerSummary = {
-    totalBalance: 125000,
-    monthlyIncome: 45000,
-    monthlyExpenses: 28000,
-    netProfit: 17000
+  const fetchChartOfAccounts = async () => {
+    try {
+      if (!profile?.agency_id) {
+        setChartOfAccounts([]);
+        return;
+      }
+      const accounts = await selectRecords('chart_of_accounts', {
+        where: { agency_id: profile.agency_id },
+        orderBy: 'account_code ASC',
+      });
+      setChartOfAccounts(accounts || []);
+    } catch (error) {
+      console.error('Error fetching chart of accounts:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch chart of accounts',
+        variant: 'destructive',
+      });
+      setChartOfAccounts([]);
+    }
   };
+
+  const fetchJournalEntries = async () => {
+    try {
+      if (!profile?.agency_id) {
+        setJournalEntries([]);
+        return;
+      }
+      const entries = await selectRecords('journal_entries', {
+        where: { agency_id: profile.agency_id },
+        orderBy: 'entry_date DESC, created_at DESC',
+      });
+      setJournalEntries(entries || []);
+    } catch (error) {
+      console.error('Error fetching journal entries:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch journal entries',
+        variant: 'destructive',
+      });
+      setJournalEntries([]);
+    }
+  };
+
+  const fetchTransactions = async () => {
+    try {
+      if (!profile?.agency_id) {
+        setTransactions([]);
+        setLoading(false);
+        return;
+      }
+      // Fetch transactions from journal entries with lines - using parameterized query
+      const query = `
+        SELECT 
+          jel.id,
+          je.entry_date as date,
+          COALESCE(jel.description, je.description) as description,
+          COALESCE(coa.account_type, 'Other') as category,
+          CASE WHEN jel.debit_amount > 0 THEN 'debit' ELSE 'credit' END as type,
+          COALESCE(jel.debit_amount, jel.credit_amount, 0) as amount,
+          je.reference,
+          je.entry_number,
+          coa.account_name,
+          coa.account_code
+        FROM journal_entry_lines jel
+        JOIN journal_entries je ON jel.journal_entry_id = je.id
+        LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
+        WHERE je.status = 'posted' AND je.agency_id = $1
+        ORDER BY je.entry_date DESC, jel.line_number ASC
+        LIMIT 100
+      `;
+      const txnData = await rawQuery(query, [profile.agency_id]);
+      setTransactions(txnData || []);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      setTransactions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate account balances from journal entries
+  const [accountBalances, setAccountBalances] = React.useState<Record<string, number>>({});
+
+  // Fetch and calculate account balances
+  React.useEffect(() => {
+    const calculateAccountBalances = async () => {
+      try {
+        if (!profile?.agency_id || chartOfAccounts.length === 0) {
+          setAccountBalances({});
+          return;
+        }
+        // Use parameterized query with agency_id filter
+        const query = `
+          SELECT 
+            coa.id as account_id,
+            coa.account_type,
+            COALESCE(SUM(jel.debit_amount), 0) as total_debits,
+            COALESCE(SUM(jel.credit_amount), 0) as total_credits
+          FROM chart_of_accounts coa
+          LEFT JOIN journal_entry_lines jel ON coa.id = jel.account_id
+          LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id 
+            AND je.status = 'posted' 
+            AND je.agency_id = $1
+          WHERE coa.agency_id = $1
+          GROUP BY coa.id, coa.account_type
+        `;
+        const balancesData = await rawQuery(query, [profile.agency_id]);
+        
+        const balances: Record<string, number> = {};
+        balancesData.forEach((row: any) => {
+          const { account_id, account_type, total_debits, total_credits } = row;
+          // For asset and expense: balance = debits - credits
+          // For liability, equity, revenue: balance = credits - debits
+          if (account_type === 'asset' || account_type === 'expense') {
+            balances[account_id] = parseFloat(total_debits || 0) - parseFloat(total_credits || 0);
+          } else {
+            balances[account_id] = parseFloat(total_credits || 0) - parseFloat(total_debits || 0);
+          }
+        });
+        
+        setAccountBalances(balances);
+      } catch (error) {
+        console.error('Error calculating account balances:', error);
+        setAccountBalances({});
+      }
+    };
+
+    if (chartOfAccounts.length > 0 && profile?.agency_id) {
+      calculateAccountBalances();
+    }
+  }, [chartOfAccounts, journalEntries, profile?.agency_id]);
+
+  // Calculate ledger summary first (needed by accountingStats)
+  const ledgerSummary = React.useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    const monthlyTxns = transactions.filter(t => {
+      const tDate = new Date(t.date);
+      return tDate.getMonth() === currentMonth && tDate.getFullYear() === currentYear;
+    });
+
+    const monthlyIncome = monthlyTxns
+      .filter(t => t.type === 'credit')
+      .reduce((sum, t) => sum + (parseFloat(t.amount || 0)), 0);
+    
+    const monthlyExpenses = monthlyTxns
+      .filter(t => t.type === 'debit')
+      .reduce((sum, t) => sum + (parseFloat(t.amount || 0)), 0);
+
+    const totalBalance = transactions.reduce((sum, t) => {
+      return sum + (t.type === 'credit' ? parseFloat(t.amount || 0) : -parseFloat(t.amount || 0));
+    }, 0);
+
+    return {
+      totalBalance,
+      monthlyIncome,
+      monthlyExpenses,
+      netProfit: monthlyIncome - monthlyExpenses
+    };
+  }, [transactions]);
+
+  // Calculate stats from real data (after ledgerSummary is defined)
+  const accountingStats = React.useMemo(() => {
+    const assets = chartOfAccounts
+      .filter(acc => acc.account_type === 'asset')
+      .reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
+    
+    const liabilities = chartOfAccounts
+      .filter(acc => acc.account_type === 'liability')
+      .reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
+    
+    const equity = chartOfAccounts
+      .filter(acc => acc.account_type === 'equity')
+      .reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
+    
+    const revenue = ledgerSummary.monthlyIncome;
+
+    return {
+      totalAssets: assets,
+      totalLiabilities: liabilities,
+      totalEquity: equity,
+      monthlyRevenue: revenue,
+    };
+  }, [chartOfAccounts, accountBalances, ledgerSummary]);
 
   const jobStats = {
     totalJobs: jobs.length,
     activeJobs: jobs.filter(job => job.status === 'in_progress').length,
-    totalBudget: jobs.reduce((sum, job) => sum + (job.budget || 0), 0),
-    actualCosts: jobs.reduce((sum, job) => sum + (job.actual_cost || 0), 0),
+    totalBudget: jobs.reduce((sum, job) => sum + (parseFloat(job.budget || 0)), 0),
+    actualCosts: jobs.reduce((sum, job) => sum + (parseFloat(job.actual_cost || 0)), 0),
   };
-
-  const chartOfAccounts = [
-    {
-      id: '1',
-      accountCode: '1000',
-      accountName: 'Cash',
-      accountType: 'asset',
-      balance: 250000,
-      isActive: true,
-    },
-    {
-      id: '2',
-      accountCode: '1100',
-      accountName: 'Accounts Receivable',
-      accountType: 'asset',
-      balance: 320000,
-      isActive: true,
-    },
-    {
-      id: '3',
-      accountCode: '1200',
-      accountName: 'Inventory',
-      accountType: 'asset',
-      balance: 180000,
-      isActive: true,
-    },
-    {
-      id: '4',
-      accountCode: '2000',
-      accountName: 'Accounts Payable',
-      accountType: 'liability',
-      balance: 150000,
-      isActive: true,
-    },
-    {
-      id: '5',
-      accountCode: '4000',
-      accountName: 'Revenue',
-      accountType: 'revenue',
-      balance: 850000,
-      isActive: true,
-    },
-  ];
-
-  const journalEntries = [
-    {
-      id: '1',
-      entryNumber: 'JE-2024-001',
-      entryDate: '2024-01-22',
-      description: 'Sales Revenue - January',
-      reference: 'INV-001-005',
-      totalDebit: 85000,
-      totalCredit: 85000,
-      status: 'posted',
-    },
-    {
-      id: '2',
-      entryNumber: 'JE-2024-002',
-      entryDate: '2024-01-23',
-      description: 'Equipment Purchase',
-      reference: 'PO-2024-012',
-      totalDebit: 45000,
-      totalCredit: 45000,
-      status: 'posted',
-    },
-  ];
-
-  const transactions = [
-    {
-      id: "TXN-001",
-      date: "2024-01-25",
-      description: "Invoice Payment - ABC Corporation",
-      category: "Revenue",
-      type: "credit",
-      amount: 15000,
-      balance: 125000,
-      reference: "INV-001"
-    },
-    {
-      id: "TXN-002",
-      date: "2024-01-24",
-      description: "Office Rent Payment",
-      category: "Operating Expenses",
-      type: "debit",
-      amount: 3500,
-      balance: 110000,
-      reference: "RENT-JAN"
-    },
-  ];
 
   const handleNewJob = () => {
     setSelectedJob(null);
@@ -176,8 +296,292 @@ const FinancialManagement = () => {
     fetchJobs();
   };
 
-  const handleJobDeleted = () => {
-    fetchJobs();
+  const handleJobDeleted = async () => {
+    if (jobToDelete) {
+      try {
+        const { deleteRecord } = await import('@/services/api/postgresql-service');
+        await deleteRecord('jobs', { id: jobToDelete.id });
+        toast({
+          title: 'Success',
+          description: 'Job deleted successfully',
+        });
+        fetchJobs();
+      } catch (error: any) {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to delete job',
+          variant: 'destructive',
+        });
+      }
+    }
+    setJobToDelete(null);
+    setDeleteDialogOpen(false);
+  };
+
+  const handleExportReport = () => {
+    toast({
+      title: 'Export Report',
+      description: 'Report export functionality will be implemented soon',
+    });
+  };
+
+  const handleGenerateReport = async (reportType: string) => {
+    try {
+      let reportData: any = {};
+      let reportTitle = '';
+
+      switch (reportType) {
+        case 'balance-sheet':
+          reportTitle = 'Balance Sheet';
+          // Calculate assets, liabilities, equity
+          const assets = chartOfAccounts
+            .filter(acc => acc.account_type === 'asset')
+            .map(acc => ({
+              account: `${acc.account_code} - ${acc.account_name}`,
+              balance: accountBalances[acc.id] || 0
+            }));
+          const liabilities = chartOfAccounts
+            .filter(acc => acc.account_type === 'liability')
+            .map(acc => ({
+              account: `${acc.account_code} - ${acc.account_name}`,
+              balance: accountBalances[acc.id] || 0
+            }));
+          const equity = chartOfAccounts
+            .filter(acc => acc.account_type === 'equity')
+            .map(acc => ({
+              account: `${acc.account_code} - ${acc.account_name}`,
+              balance: accountBalances[acc.id] || 0
+            }));
+          
+          reportData = {
+            assets,
+            liabilities,
+            equity,
+            totalAssets: accountingStats.totalAssets,
+            totalLiabilities: accountingStats.totalLiabilities,
+            totalEquity: accountingStats.totalEquity,
+          };
+          break;
+
+        case 'profit-loss':
+          reportTitle = 'Profit & Loss Statement';
+          const revenue = chartOfAccounts
+            .filter(acc => acc.account_type === 'revenue')
+            .map(acc => ({
+              account: `${acc.account_code} - ${acc.account_name}`,
+              balance: accountBalances[acc.id] || 0
+            }));
+          const expenses = chartOfAccounts
+            .filter(acc => acc.account_type === 'expense')
+            .map(acc => ({
+              account: `${acc.account_code} - ${acc.account_name}`,
+              balance: accountBalances[acc.id] || 0
+            }));
+          
+          reportData = {
+            revenue,
+            expenses,
+            totalRevenue: revenue.reduce((sum, r) => sum + r.balance, 0),
+            totalExpenses: expenses.reduce((sum, e) => sum + e.balance, 0),
+            netIncome: revenue.reduce((sum, r) => sum + r.balance, 0) - expenses.reduce((sum, e) => sum + e.balance, 0),
+          };
+          break;
+
+        case 'trial-balance':
+          reportTitle = 'Trial Balance';
+          reportData = chartOfAccounts.map(acc => ({
+            account_code: acc.account_code,
+            account_name: acc.account_name,
+            account_type: acc.account_type,
+            balance: accountBalances[acc.id] || 0,
+          }));
+          break;
+
+        case 'job-profitability':
+          reportTitle = 'Job Profitability Report';
+          reportData = jobs.map(job => ({
+            job_number: job.job_number,
+            title: job.title,
+            budget: parseFloat(job.budget || 0),
+            actual_cost: parseFloat(job.actual_cost || 0),
+            profit: parseFloat(job.budget || 0) - parseFloat(job.actual_cost || 0),
+            profit_margin: job.profit_margin || 0,
+            status: job.status,
+          }));
+          break;
+
+        case 'cash-flow':
+          reportTitle = 'Cash Flow Statement';
+          const cashAccounts = chartOfAccounts.filter(acc => 
+            acc.account_type === 'asset' && 
+            (acc.account_name.toLowerCase().includes('cash') || acc.account_name.toLowerCase().includes('bank'))
+          );
+          reportData = {
+            cashAccounts: cashAccounts.map(acc => ({
+              account: `${acc.account_code} - ${acc.account_name}`,
+              balance: accountBalances[acc.id] || 0
+            })),
+            totalCash: cashAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0),
+          };
+          break;
+
+        case 'monthly-summary':
+          reportTitle = 'Monthly Summary';
+          reportData = {
+            monthlyIncome: ledgerSummary.monthlyIncome,
+            monthlyExpenses: ledgerSummary.monthlyExpenses,
+            netProfit: ledgerSummary.netProfit,
+            totalBalance: ledgerSummary.totalBalance,
+          };
+          break;
+
+        default:
+          return;
+      }
+
+      // Display report in a dialog or new window
+      const reportWindow = window.open('', '_blank');
+      if (reportWindow) {
+        reportWindow.document.write(`
+          <html>
+            <head>
+              <title>${reportTitle}</title>
+              <style>
+                body { font-family: Arial, sans-serif; padding: 20px; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                .total { font-weight: bold; }
+              </style>
+            </head>
+            <body>
+              <h1>${reportTitle}</h1>
+              <p>Generated on: ${new Date().toLocaleString()}</p>
+              <pre>${JSON.stringify(reportData, null, 2)}</pre>
+            </body>
+          </html>
+        `);
+        reportWindow.document.close();
+      }
+
+      toast({
+        title: 'Report Generated',
+        description: `${reportTitle} has been generated`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to generate report',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleNewAccount = () => {
+    setSelectedAccount(null);
+    setAccountFormOpen(true);
+  };
+
+  const handleEditAccount = (account: any) => {
+    setSelectedAccount(account);
+    setAccountFormOpen(true);
+  };
+
+  const handleDeleteAccount = (account: any) => {
+    setAccountToDelete(account);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleAccountSaved = () => {
+    fetchChartOfAccounts();
+  };
+
+  const handleAccountDeleted = async () => {
+    if (accountToDelete) {
+      try {
+        const { deleteRecord } = await import('@/services/api/postgresql-service');
+        await deleteRecord('chart_of_accounts', { id: accountToDelete.id });
+        toast({
+          title: 'Success',
+          description: 'Account deleted successfully',
+        });
+        fetchChartOfAccounts();
+      } catch (error: any) {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to delete account',
+          variant: 'destructive',
+        });
+      }
+    }
+    setAccountToDelete(null);
+    setDeleteDialogOpen(false);
+  };
+
+  const handleNewEntry = async () => {
+    setSelectedEntry(null);
+    setEntryFormOpen(true);
+  };
+
+  const handleEditEntry = async (entry: any) => {
+    try {
+      // Fetch entry with lines
+      const { selectRecords } = await import('@/services/api/postgresql-service');
+      const lines = await selectRecords('journal_entry_lines', {
+        where: { journal_entry_id: entry.id },
+        orderBy: 'line_number ASC',
+      });
+      setSelectedEntry({ ...entry, lines: lines || [] });
+      setEntryFormOpen(true);
+    } catch (error) {
+      console.error('Error fetching entry lines:', error);
+      setSelectedEntry(entry);
+      setEntryFormOpen(true);
+    }
+  };
+
+  const handleDeleteEntry = (entry: any) => {
+    setEntryToDelete(entry);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleEntrySaved = () => {
+    fetchJournalEntries();
+    fetchTransactions();
+  };
+
+  const handleEntryDeleted = async () => {
+    if (entryToDelete) {
+      try {
+        const { executeTransaction } = await import('@/services/api/postgresql-service');
+        await executeTransaction(async (client) => {
+          // Delete lines first
+          await client.query(
+            'DELETE FROM public.journal_entry_lines WHERE journal_entry_id = $1',
+            [entryToDelete.id]
+          );
+          // Delete entry
+          await client.query(
+            'DELETE FROM public.journal_entries WHERE id = $1',
+            [entryToDelete.id]
+          );
+        });
+        toast({
+          title: 'Success',
+          description: 'Journal entry deleted successfully',
+        });
+        fetchJournalEntries();
+        fetchTransactions();
+      } catch (error: any) {
+        toast({
+          title: 'Error',
+          description: error.message || 'Failed to delete journal entry',
+          variant: 'destructive',
+        });
+      }
+    }
+    setEntryToDelete(null);
+    setDeleteDialogOpen(false);
   };
 
   const getAccountTypeColor = (type: string) => {
@@ -226,13 +630,13 @@ const FinancialManagement = () => {
   };
 
   const filteredAccounts = chartOfAccounts.filter(account => 
-    account.accountName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    account.accountCode.toLowerCase().includes(searchTerm.toLowerCase())
+    (account.account_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (account.account_code || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const filteredEntries = journalEntries.filter(entry => 
-    entry.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    entry.entryNumber.toLowerCase().includes(searchTerm.toLowerCase())
+    (entry.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (entry.entry_number || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const filteredJobs = jobs.filter(job => 
@@ -242,9 +646,23 @@ const FinancialManagement = () => {
   );
 
   const filteredTransactions = transactions.filter(transaction => 
-    transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    transaction.id.toLowerCase().includes(searchTerm.toLowerCase())
+    (transaction.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (transaction.reference || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (transaction.entry_number || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Show loading or error state if no agency
+  if (!profile?.agency_id && !loading) {
+    return (
+      <div className="container mx-auto p-6">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <p className="text-muted-foreground">Please ensure you are logged in and have an agency assigned.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -254,11 +672,11 @@ const FinancialManagement = () => {
           <p className="text-muted-foreground">Complete financial oversight: accounting, job costing, and general ledger</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExportReport}>
             <Download className="h-4 w-4 mr-2" />
             Export Report
           </Button>
-          <Button>
+          <Button onClick={handleNewEntry}>
             <Plus className="h-4 w-4 mr-2" />
             New Entry
           </Button>
@@ -350,84 +768,138 @@ const FinancialManagement = () => {
             <TabsContent value="chart-of-accounts" className="space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Chart of Accounts</h3>
-                <Button variant="outline">
+                <Button variant="outline" onClick={handleNewAccount}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Account
                 </Button>
               </div>
               
-              <div className="grid gap-4">
-                {filteredAccounts.map((account) => (
-                  <Card key={account.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <div className="flex items-center gap-3">
-                            <h4 className="font-semibold">{account.accountCode} - {account.accountName}</h4>
-                            <Badge className={getAccountTypeColor(account.accountType)}>
-                              {account.accountType}
-                            </Badge>
+              {loading ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  <p className="mt-2 text-muted-foreground">Loading accounts...</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredAccounts.length === 0 ? (
+                    <Card>
+                      <CardContent className="p-8 text-center text-muted-foreground">
+                        <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-lg font-medium mb-2">No accounts found</p>
+                        <p>Create your first account to get started with financial management.</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    filteredAccounts.map((account) => (
+                      <Card key={account.id} className="hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex justify-between items-center">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3">
+                                <h4 className="font-semibold">{account.account_code} - {account.account_name}</h4>
+                                <Badge className={getAccountTypeColor(account.account_type)}>
+                                  {account.account_type}
+                                </Badge>
+                              </div>
+                              {account.description && (
+                                <p className="text-sm text-muted-foreground mt-1">{account.description}</p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="text-right mr-4">
+                                <p className="text-sm text-muted-foreground">
+                                  {account.is_active ? 'Active' : 'Inactive'}
+                                </p>
+                              </div>
+                              <Button variant="outline" size="sm" onClick={() => handleEditAccount(account)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => handleDeleteAccount(account)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-semibold">₹{account.balance.toLocaleString()}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {account.isActive ? 'Active' : 'Inactive'}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              )}
             </TabsContent>
             
             <TabsContent value="journal-entries" className="space-y-4">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Journal Entries</h3>
-                <Button variant="outline">
+                <Button variant="outline" onClick={handleNewEntry}>
                   <Plus className="h-4 w-4 mr-2" />
                   New Entry
                 </Button>
               </div>
               
-              <div className="grid gap-4">
-                {filteredEntries.map((entry) => (
-                  <Card key={entry.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-3">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <CardTitle className="text-lg">{entry.entryNumber}</CardTitle>
-                          <p className="text-sm text-muted-foreground">{entry.description}</p>
-                        </div>
-                        <Badge className={getStatusColor(entry.status)}>
-                          {entry.status}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Entry Date</p>
-                          <p className="font-medium">{new Date(entry.entryDate).toLocaleDateString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Reference</p>
-                          <p className="font-medium">{entry.reference}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Total Debit</p>
-                          <p className="font-semibold">₹{entry.totalDebit.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Total Credit</p>
-                          <p className="font-semibold">₹{entry.totalCredit.toLocaleString()}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+              {loading ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  <p className="mt-2 text-muted-foreground">Loading journal entries...</p>
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {filteredEntries.length === 0 ? (
+                    <Card>
+                      <CardContent className="p-8 text-center text-muted-foreground">
+                        <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p className="text-lg font-medium mb-2">No journal entries found</p>
+                        <p>Create your first journal entry to record financial transactions.</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    filteredEntries.map((entry) => (
+                      <Card key={entry.id} className="hover:shadow-md transition-shadow">
+                        <CardHeader className="pb-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <CardTitle className="text-lg">{entry.entry_number}</CardTitle>
+                              <p className="text-sm text-muted-foreground">{entry.description}</p>
+                            </div>
+                            <Badge className={getStatusColor(entry.status)}>
+                              {entry.status}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Entry Date</p>
+                              <p className="font-medium">{new Date(entry.entry_date).toLocaleDateString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Reference</p>
+                              <p className="font-medium">{entry.reference || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Total Debit</p>
+                              <p className="font-semibold">₹{parseFloat(entry.total_debit || 0).toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Total Credit</p>
+                              <p className="font-semibold">₹{parseFloat(entry.total_credit || 0).toLocaleString()}</p>
+                            </div>
+                          </div>
+                          <div className="mt-4 flex justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => handleEditEntry(entry)}>
+                              <Edit className="h-4 w-4 mr-1" />
+                              Edit
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => handleDeleteEntry(entry)}>
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Delete
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </TabsContent>
@@ -443,13 +915,20 @@ const FinancialManagement = () => {
           </div>
           
           {loading ? (
-            <div className="text-center py-8">Loading jobs...</div>
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <p className="mt-2 text-muted-foreground">Loading jobs...</p>
+            </div>
           ) : (
             <div className="grid gap-4">
               {filteredJobs.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No jobs found. Create your first job to get started.
-                </div>
+                <Card>
+                  <CardContent className="p-8 text-center text-muted-foreground">
+                    <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg font-medium mb-2">No jobs found</p>
+                    <p>Create your first job to start tracking project costs and profitability.</p>
+                  </CardContent>
+                </Card>
               ) : (
                 filteredJobs.map((job) => (
                   <Card key={job.id} className="hover:shadow-md transition-shadow">
@@ -522,7 +1001,16 @@ const FinancialManagement = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {filteredTransactions.map((transaction) => (
+                    {filteredTransactions.length === 0 ? (
+                      <Card>
+                        <CardContent className="p-8 text-center text-muted-foreground">
+                          <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p className="text-lg font-medium mb-2">No transactions found</p>
+                          <p>Transactions will appear here once journal entries are posted.</p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      filteredTransactions.map((transaction) => (
                       <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex items-center space-x-4">
                           <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
@@ -531,28 +1019,30 @@ const FinancialManagement = () => {
                           <div>
                             <h3 className="font-semibold">{transaction.description}</h3>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>{transaction.id}</span>
-                              <span>•</span>
-                              <span>Ref: {transaction.reference}</span>
+                              <span>{transaction.entry_number || transaction.id}</span>
+                              {transaction.reference && (
+                                <>
+                                  <span>•</span>
+                                  <span>Ref: {transaction.reference}</span>
+                                </>
+                              )}
                             </div>
-                            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
-                              {transaction.category}
+                            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category || 'Other')}`}>
+                              {transaction.category || 'Other'}
                             </span>
                           </div>
                         </div>
                         <div className="text-right">
                           <p className={`font-bold text-lg ${getTransactionColor(transaction.type)}`}>
-                            {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Balance: ₹{transaction.balance.toLocaleString()}
+                            {transaction.type === 'credit' ? '+' : '-'}₹{parseFloat(transaction.amount || 0).toLocaleString()}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {new Date(transaction.date).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -566,34 +1056,48 @@ const FinancialManagement = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {filteredTransactions.filter(t => t.type === 'credit').map((transaction) => (
-                      <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                            {getTransactionIcon(transaction.type)}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{transaction.description}</h3>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>{transaction.id}</span>
-                              <span>•</span>
-                              <span>Ref: {transaction.reference}</span>
+                    {filteredTransactions.filter(t => t.type === 'credit').length === 0 ? (
+                      <Card>
+                        <CardContent className="p-8 text-center text-muted-foreground">
+                          <ArrowUpRight className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p className="text-lg font-medium mb-2">No credit transactions found</p>
+                          <p>Credit transactions will appear here once journal entries are posted.</p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      filteredTransactions.filter(t => t.type === 'credit').map((transaction) => (
+                        <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                              {getTransactionIcon(transaction.type)}
                             </div>
-                            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
-                              {transaction.category}
-                            </span>
+                            <div>
+                              <h3 className="font-semibold">{transaction.description || 'No description'}</h3>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <span>{transaction.entry_number || transaction.id}</span>
+                                {transaction.reference && (
+                                  <>
+                                    <span>•</span>
+                                    <span>Ref: {transaction.reference}</span>
+                                  </>
+                                )}
+                              </div>
+                              <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category || 'Other')}`}>
+                                {transaction.category || 'Other'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-lg text-green-600">
+                              +₹{parseFloat(transaction.amount || 0).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(transaction.date).toLocaleDateString()}
+                            </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-lg text-green-600">
-                            +₹{transaction.amount.toLocaleString()}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Balance: ₹{transaction.balance.toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -607,34 +1111,48 @@ const FinancialManagement = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {filteredTransactions.filter(t => t.type === 'debit').map((transaction) => (
-                      <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                            {getTransactionIcon(transaction.type)}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{transaction.description}</h3>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>{transaction.id}</span>
-                              <span>•</span>
-                              <span>Ref: {transaction.reference}</span>
+                    {filteredTransactions.filter(t => t.type === 'debit').length === 0 ? (
+                      <Card>
+                        <CardContent className="p-8 text-center text-muted-foreground">
+                          <ArrowDownRight className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                          <p className="text-lg font-medium mb-2">No debit transactions found</p>
+                          <p>Debit transactions will appear here once journal entries are posted.</p>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      filteredTransactions.filter(t => t.type === 'debit').map((transaction) => (
+                        <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                              {getTransactionIcon(transaction.type)}
                             </div>
-                            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
-                              {transaction.category}
-                            </span>
+                            <div>
+                              <h3 className="font-semibold">{transaction.description || 'No description'}</h3>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <span>{transaction.entry_number || transaction.id}</span>
+                                {transaction.reference && (
+                                  <>
+                                    <span>•</span>
+                                    <span>Ref: {transaction.reference}</span>
+                                  </>
+                                )}
+                              </div>
+                              <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category || 'Other')}`}>
+                                {transaction.category || 'Other'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-lg text-red-600">
+                              -₹{parseFloat(transaction.amount || 0).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(transaction.date).toLocaleDateString()}
+                            </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-lg text-red-600">
-                            -₹{transaction.amount.toLocaleString()}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Balance: ₹{transaction.balance.toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -679,7 +1197,10 @@ const FinancialManagement = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                <Card 
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleGenerateReport('balance-sheet')}
+                >
                   <CardContent className="p-6 text-center">
                     <BookOpen className="h-12 w-12 text-blue-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Balance Sheet</h3>
@@ -687,7 +1208,10 @@ const FinancialManagement = () => {
                   </CardContent>
                 </Card>
                 
-                <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                <Card 
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleGenerateReport('profit-loss')}
+                >
                   <CardContent className="p-6 text-center">
                     <TrendingUp className="h-12 w-12 text-green-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Profit & Loss</h3>
@@ -695,7 +1219,10 @@ const FinancialManagement = () => {
                   </CardContent>
                 </Card>
                 
-                <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                <Card 
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleGenerateReport('trial-balance')}
+                >
                   <CardContent className="p-6 text-center">
                     <FileText className="h-12 w-12 text-purple-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Trial Balance</h3>
@@ -703,7 +1230,10 @@ const FinancialManagement = () => {
                   </CardContent>
                 </Card>
                 
-                <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                <Card 
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleGenerateReport('job-profitability')}
+                >
                   <CardContent className="p-6 text-center">
                     <Calculator className="h-12 w-12 text-orange-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Job Profitability</h3>
@@ -711,7 +1241,10 @@ const FinancialManagement = () => {
                   </CardContent>
                 </Card>
                 
-                <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                <Card 
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleGenerateReport('cash-flow')}
+                >
                   <CardContent className="p-6 text-center">
                     <DollarSign className="h-12 w-12 text-indigo-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Cash Flow</h3>
@@ -719,7 +1252,10 @@ const FinancialManagement = () => {
                   </CardContent>
                 </Card>
                 
-                <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                <Card 
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => handleGenerateReport('monthly-summary')}
+                >
                   <CardContent className="p-6 text-center">
                     <Calendar className="h-12 w-12 text-pink-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Monthly Summary</h3>
@@ -739,14 +1275,41 @@ const FinancialManagement = () => {
         onJobSaved={handleJobSaved}
       />
 
+      <ChartOfAccountFormDialog
+        isOpen={accountFormOpen}
+        onClose={() => setAccountFormOpen(false)}
+        account={selectedAccount}
+        onAccountSaved={handleAccountSaved}
+      />
+
+      <JournalEntryFormDialog
+        isOpen={entryFormOpen}
+        onClose={() => setEntryFormOpen(false)}
+        entry={selectedEntry}
+        onEntrySaved={handleEntrySaved}
+      />
+
       <DeleteConfirmDialog
         isOpen={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
-        onDeleted={handleJobDeleted}
-        itemType="Job"
-        itemName={jobToDelete?.title || ''}
-        itemId={jobToDelete?.id || ''}
-        tableName="jobs"
+        onClose={() => {
+          setDeleteDialogOpen(false);
+          setJobToDelete(null);
+          setAccountToDelete(null);
+          setEntryToDelete(null);
+        }}
+        onDeleted={async () => {
+          if (jobToDelete) {
+            await handleJobDeleted();
+          } else if (accountToDelete) {
+            await handleAccountDeleted();
+          } else if (entryToDelete) {
+            await handleEntryDeleted();
+          }
+        }}
+        itemType={jobToDelete ? "Job" : accountToDelete ? "Account" : "Journal Entry"}
+        itemName={jobToDelete?.title || accountToDelete?.account_name || entryToDelete?.entry_number || ''}
+        itemId={jobToDelete?.id || accountToDelete?.id || entryToDelete?.id || ''}
+        tableName={jobToDelete ? "jobs" : accountToDelete ? "chart_of_accounts" : "journal_entries"}
       />
     </div>
   );

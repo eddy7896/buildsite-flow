@@ -2,7 +2,7 @@
 import { insertRecord, selectMany, deleteRecord } from './api/postgresql-service';
 import type { FileStorage } from '@/integrations/postgresql/types';
 
-const STORAGE_BASE_PATH = process.env.VITE_FILE_STORAGE_PATH || '/var/lib/buildflow/storage';
+const STORAGE_BASE_PATH = import.meta.env.VITE_FILE_STORAGE_PATH || '/var/lib/buildflow/storage';
 
 /**
  * Upload file to storage
@@ -10,7 +10,7 @@ const STORAGE_BASE_PATH = process.env.VITE_FILE_STORAGE_PATH || '/var/lib/buildf
 export async function uploadFile(
   bucket: string,
   filePath: string,
-  fileContent: Buffer,
+  fileContent: Buffer | ArrayBuffer | Uint8Array | { length: number },
   userId: string,
   mimeType: string = 'application/octet-stream'
 ): Promise<FileStorage> {
@@ -18,11 +18,23 @@ export async function uploadFile(
   // 1. Save file to disk/S3
   // 2. Record metadata in database
   
+  // Get file size from various input types
+  let fileSize: number;
+  if (fileContent instanceof ArrayBuffer) {
+    fileSize = fileContent.byteLength;
+  } else if (fileContent instanceof Uint8Array) {
+    fileSize = fileContent.length;
+  } else if (fileContent && typeof fileContent === 'object' && 'length' in fileContent) {
+    fileSize = fileContent.length;
+  } else {
+    fileSize = 0;
+  }
+  
   const fileStorage = await insertRecord<FileStorage>('file_storage', {
     bucket_name: bucket,
     file_path: filePath,
     file_name: filePath.split('/').pop(),
-    file_size: fileContent.length,
+    file_size: fileSize,
     mime_type: mimeType,
     uploaded_by: userId,
   });

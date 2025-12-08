@@ -10,10 +10,23 @@ import { db } from '@/lib/database';
 import { useAuth } from "@/hooks/useAuth";
 import { Upload, X } from "lucide-react";
 
+interface ReimbursementRequest {
+  id: string;
+  employee_id: string;
+  category_id: string;
+  amount: number;
+  currency: string;
+  expense_date: string;
+  description: string;
+  business_purpose: string;
+  status: string;
+}
+
 interface ReimbursementFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  request?: ReimbursementRequest | null;
 }
 
 interface ExpenseCategory {
@@ -26,6 +39,7 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
   open,
   onOpenChange,
   onSuccess,
+  request,
 }) => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -36,25 +50,50 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
   const [formData, setFormData] = useState({
     category_id: "",
     amount: "",
+    currency: "USD",
     expense_date: "",
     description: "",
     business_purpose: "",
   });
 
+  const isEditMode = !!request;
+
   React.useEffect(() => {
     if (open) {
       fetchCategories();
+      if (request) {
+        // Populate form with existing data
+        setFormData({
+          category_id: request.category_id || "",
+          amount: request.amount?.toString() || "",
+          currency: request.currency || "USD",
+          expense_date: request.expense_date || "",
+          description: request.description || "",
+          business_purpose: request.business_purpose || "",
+        });
+      } else {
+        // Reset form for new request
+        setFormData({
+          category_id: "",
+          amount: "",
+          currency: "USD",
+          expense_date: "",
+          description: "",
+          business_purpose: "",
+        });
+      }
+      setSelectedFiles(null);
     }
-  }, [open]);
+  }, [open, request]);
 
   const fetchCategories = async () => {
     try {
       console.log("Fetching expense categories...");
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("expense_categories")
         .select("id, name, description")
         .eq("is_active", true)
-        .order("name");
+        .order("name", { ascending: true });
 
       if (error) {
         console.error("Error fetching categories:", error);
@@ -62,7 +101,7 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
       }
       
       console.log("Categories fetched:", data);
-      setCategories(data || []);
+      setCategories((data as any) || []);
     } catch (error) {
       console.error("Error fetching categories:", error);
       toast({
@@ -90,8 +129,8 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
 
       if (uploadError) throw uploadError;
 
-      // Save file info to database
-      const { error: dbError } = await supabase
+      // Save file info to database - use reimbursement_id
+      const { error: dbError } = await db
         .from('reimbursement_attachments')
         .insert({
           reimbursement_id: reimbursementId,
@@ -99,6 +138,7 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
           file_path: fileName,
           file_type: file.type,
           file_size: file.size,
+          uploaded_at: new Date().toISOString(),
         });
 
       if (dbError) throw dbError;
@@ -113,38 +153,69 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
 
     setLoading(true);
     try {
-      // Create reimbursement request
-      const { data: reimbursement, error: reimbursementError } = await supabase
-        .from("reimbursement_requests")
-        .insert({
-          employee_id: user.id,
-          category_id: formData.category_id,
-          amount: parseFloat(formData.amount),
-          expense_date: formData.expense_date,
-          description: formData.description,
-          business_purpose: formData.business_purpose || null,
-          status: "submitted",
-          submitted_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+      if (isEditMode && request) {
+        // Update existing reimbursement request
+        const { data: reimbursement, error: reimbursementError } = await db
+          .from("reimbursement_requests")
+          .update({
+            category_id: formData.category_id,
+            amount: parseFloat(formData.amount),
+            currency: formData.currency,
+            expense_date: formData.expense_date,
+            description: formData.description,
+            business_purpose: formData.business_purpose || null,
+          })
+          .eq("id", request.id)
+          .select()
+          .single();
 
-      if (reimbursementError) throw reimbursementError;
+        if (reimbursementError) throw reimbursementError;
 
-      // Upload files if any
-      if (selectedFiles && selectedFiles.length > 0) {
-        await uploadFiles(reimbursement.id);
+        // Upload new files if any
+        if (selectedFiles && selectedFiles.length > 0 && reimbursement) {
+          await uploadFiles((reimbursement as any).id);
+        }
+
+        toast({
+          title: "Success",
+          description: "Reimbursement request updated successfully",
+        });
+      } else {
+        // Create new reimbursement request
+        const { data: reimbursement, error: reimbursementError } = await db
+          .from("reimbursement_requests")
+          .insert({
+            employee_id: user.id,
+            category_id: formData.category_id,
+            amount: parseFloat(formData.amount),
+            currency: formData.currency,
+            expense_date: formData.expense_date,
+            description: formData.description,
+            business_purpose: formData.business_purpose || null,
+            status: "submitted",
+            submitted_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (reimbursementError) throw reimbursementError;
+
+        // Upload files if any
+        if (selectedFiles && selectedFiles.length > 0 && reimbursement) {
+          await uploadFiles((reimbursement as any).id);
+        }
+
+        toast({
+          title: "Success",
+          description: "Reimbursement request submitted successfully",
+        });
       }
-
-      toast({
-        title: "Success",
-        description: "Reimbursement request submitted successfully",
-      });
 
       // Reset form
       setFormData({
         category_id: "",
         amount: "",
+        currency: "USD",
         expense_date: "",
         description: "",
         business_purpose: "",
@@ -153,11 +224,11 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
       
       onSuccess?.();
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error submitting reimbursement:", error);
       toast({
         title: "Error",
-        description: "Failed to submit reimbursement request",
+        description: error?.message || `Failed to ${isEditMode ? 'update' : 'submit'} reimbursement request`,
         variant: "destructive",
       });
     } finally {
@@ -169,7 +240,7 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>New Reimbursement Request</DialogTitle>
+          <DialogTitle>{isEditMode ? "Edit Reimbursement Request" : "New Reimbursement Request"}</DialogTitle>
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -211,17 +282,39 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
             )}
           </div>
 
-          <div>
-            <Label htmlFor="amount">Amount ($)</Label>
-            <Input
-              id="amount"
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.amount}
-              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-              required
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="currency">Currency</Label>
+              <Select
+                value={formData.currency}
+                onValueChange={(value) => setFormData({ ...formData, currency: value })}
+                required
+              >
+                <SelectTrigger className="bg-background border-input">
+                  <SelectValue placeholder="Select currency" />
+                </SelectTrigger>
+                <SelectContent className="bg-background border-border shadow-lg z-50">
+                  <SelectItem value="USD">USD ($)</SelectItem>
+                  <SelectItem value="EUR">EUR (€)</SelectItem>
+                  <SelectItem value="GBP">GBP (£)</SelectItem>
+                  <SelectItem value="INR">INR (₹)</SelectItem>
+                  <SelectItem value="CAD">CAD (C$)</SelectItem>
+                  <SelectItem value="AUD">AUD (A$)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="amount">Amount</Label>
+              <Input
+                id="amount"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.amount}
+                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                required
+              />
+            </div>
           </div>
 
           <div>
@@ -307,7 +400,7 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Submitting..." : "Submit Request"}
+              {loading ? (isEditMode ? "Updating..." : "Submitting...") : (isEditMode ? "Update Request" : "Submit Request")}
             </Button>
           </DialogFooter>
         </form>

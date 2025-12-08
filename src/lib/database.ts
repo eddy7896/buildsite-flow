@@ -645,7 +645,8 @@ const storage = {
           const { uploadFile } = await import('@/services/file-storage');
           const fileBuffer = await file.arrayBuffer();
           const userId = (window as any).__currentUserId || 'system';
-          const result = await uploadFile(bucket, path, Buffer.from(fileBuffer), userId, file.type);
+          // Pass ArrayBuffer directly - uploadFile now handles it
+          const result = await uploadFile(bucket, path, fileBuffer, userId, file.type);
           return { data: { path: result.file_path }, error: null };
         } catch (error: any) {
           return { data: null, error };

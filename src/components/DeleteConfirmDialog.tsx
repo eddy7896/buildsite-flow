@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/database';
+import { deleteRecord, updateRecord } from '@/services/api/postgresql-service';
 
 interface DeleteConfirmDialogProps {
   isOpen: boolean;
@@ -11,6 +11,8 @@ interface DeleteConfirmDialogProps {
   itemName: string;
   itemId: string;
   tableName: string;
+  softDelete?: boolean; // If true, sets is_active to false instead of hard delete
+  userId?: string; // Current user ID for audit logging
 }
 
 const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
@@ -21,30 +23,40 @@ const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
   itemName,
   itemId,
   tableName,
+  softDelete = false,
+  userId,
 }) => {
   const { toast } = useToast();
 
   const handleDelete = async () => {
     try {
-      const { error } = await supabase
-        .from(tableName as any)
-        .delete()
-        .eq('id', itemId);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Success',
-        description: `${itemType} deleted successfully`,
-      });
+      // Always use soft delete for users table to avoid foreign key constraint issues with audit_logs
+      const shouldSoftDelete = softDelete || tableName === 'users';
+      
+      if (shouldSoftDelete) {
+        // Use soft delete (set is_active to false)
+        // Pass userId for proper audit logging
+        await updateRecord(tableName, { is_active: false }, { id: itemId }, userId);
+        toast({
+          title: 'Success',
+          description: `${itemType} deactivated successfully`,
+        });
+      } else {
+        // Use hard delete for other tables
+        await deleteRecord(tableName, { id: itemId });
+        toast({
+          title: 'Success',
+          description: `${itemType} deleted successfully`,
+        });
+      }
 
       onDeleted();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error deleting ${itemType}:`, error);
       toast({
         title: 'Error',
-        description: `Failed to delete ${itemType.toLowerCase()}`,
+        description: error.message || error.detail || `Failed to delete ${itemType.toLowerCase()}`,
         variant: 'destructive',
       });
     }

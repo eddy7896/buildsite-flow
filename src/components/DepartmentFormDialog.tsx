@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Department {
   id: string;
@@ -46,52 +47,84 @@ export function DepartmentFormDialog({
     budget: "",
   });
   const { toast } = useToast();
+  const { profile } = useAuth();
 
   useEffect(() => {
     if (open) {
+      // Fetch data when dialog opens
       fetchDepartments();
       fetchProfiles();
-      if (department) {
+      
+      // Set form data based on whether we're editing or creating
+      if (department && department.id) {
+        // Editing existing department - populate with current values
+        const managerId = department.manager_id && String(department.manager_id).trim() !== "" 
+          ? String(department.manager_id) 
+          : "__none__";
+        const parentId = department.parent_department_id && String(department.parent_department_id).trim() !== "" 
+          ? String(department.parent_department_id) 
+          : "__none__";
+        
         setFormData({
-          name: department.name,
+          name: department.name || "",
           description: department.description || "",
-          manager_id: department.manager_id || "",
-          parent_department_id: department.parent_department_id || "",
-          budget: department.budget?.toString() || "",
+          manager_id: managerId,
+          parent_department_id: parentId,
+          budget: department.budget ? String(department.budget) : "",
         });
       } else {
+        // Creating new department - reset form
         setFormData({
           name: "",
           description: "",
-          manager_id: "",
-          parent_department_id: "",
+          manager_id: "__none__",
+          parent_department_id: "__none__",
           budget: "",
         });
       }
+    } else {
+      // Reset form when dialog closes
+      setFormData({
+        name: "",
+        description: "",
+        manager_id: "__none__",
+        parent_department_id: "__none__",
+        budget: "",
+      });
     }
   }, [open, department]);
 
   const fetchDepartments = async () => {
-    const { data } = await supabase
-      .from("departments")
-      .select("id, name")
-      .eq("is_active", true)
-      .order("name");
+    try {
+      const { data, error } = await db
+        .from("departments")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("name");
 
-    if (data) {
-      setDepartments(data);
+      if (error) throw error;
+      if (data) {
+        setDepartments(data);
+      }
+    } catch (error) {
+      console.error("Error fetching departments:", error);
     }
   };
 
   const fetchProfiles = async () => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("user_id, full_name")
-      .eq("is_active", true)
-      .order("full_name");
+    try {
+      const { data, error } = await db
+        .from("profiles")
+        .select("user_id, full_name")
+        .eq("is_active", true)
+        .order("full_name");
 
-    if (data) {
-      setProfiles(data);
+      if (error) throw error;
+      if (data) {
+        setProfiles(data);
+      }
+    } catch (error) {
+      console.error("Error fetching profiles:", error);
     }
   };
 
@@ -100,38 +133,54 @@ export function DepartmentFormDialog({
     setLoading(true);
 
     try {
-      const departmentData = {
-        name: formData.name,
-        description: formData.description || null,
-        manager_id: formData.manager_id || null,
-        parent_department_id: formData.parent_department_id || null,
+      // Get agency_id from profile, or use a default for development
+      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
+
+      const departmentData: any = {
+        name: formData.name.trim(),
+        description: formData.description?.trim() || null,
+        manager_id: formData.manager_id && formData.manager_id !== "__none__" ? formData.manager_id : null,
+        parent_department_id: formData.parent_department_id && formData.parent_department_id !== "__none__" ? formData.parent_department_id : null,
         budget: formData.budget ? parseFloat(formData.budget) : 0,
+        is_active: true,
       };
 
+      // Only add agency_id when creating new department
+      if (!department) {
+        departmentData.agency_id = agencyId;
+      }
+
       if (department) {
-        const { error } = await supabase
+        const { error } = await db
           .from("departments")
           .update(departmentData)
           .eq("id", department.id);
 
         if (error) throw error;
-        toast({ title: "Department updated successfully" });
+        toast({ 
+          title: "Success", 
+          description: "Department updated successfully" 
+        });
       } else {
-        const { error } = await supabase
+        const { error } = await db
           .from("departments")
           .insert([departmentData]);
 
         if (error) throw error;
-        toast({ title: "Department created successfully" });
+        toast({ 
+          title: "Success", 
+          description: "Department created successfully" 
+        });
       }
 
       onDepartmentSaved();
       onOpenChange(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving department:", error);
+      const errorMessage = error?.message || error?.detail || "Failed to save department";
       toast({
         title: "Error",
-        description: "Failed to save department",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -146,6 +195,11 @@ export function DepartmentFormDialog({
           <DialogTitle>
             {department ? "Edit Department" : "Create Department"}
           </DialogTitle>
+          <DialogDescription>
+            {department 
+              ? "Update the department information below." 
+              : "Fill in the details to create a new department."}
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -178,7 +232,7 @@ export function DepartmentFormDialog({
                 <SelectValue placeholder="Select parent department (optional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None (Top Level)</SelectItem>
+                <SelectItem value="__none__">None (Top Level)</SelectItem>
                 {departments
                   .filter(d => d.id !== department?.id)
                   .map((dept) => (
@@ -200,7 +254,7 @@ export function DepartmentFormDialog({
                 <SelectValue placeholder="Select department manager (optional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No Manager Assigned</SelectItem>
+                <SelectItem value="__none__">No Manager Assigned</SelectItem>
                 {profiles.map((profile) => (
                   <SelectItem key={profile.user_id} value={profile.user_id}>
                     {profile.full_name}

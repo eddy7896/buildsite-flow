@@ -157,7 +157,7 @@ const ClientFormDialog: React.FC<ClientFormDialogProps> = ({
       if (client) {
         // Update existing client
         const { id, client_number, ...updateData } = dataToSubmit;
-        const { error } = await supabase
+        const { error } = await db
           .from('clients')
           .update(updateData)
           .eq('id', client.id);
@@ -170,11 +170,11 @@ const ClientFormDialog: React.FC<ClientFormDialogProps> = ({
         });
       } else {
         // Create new client - generate client number
-        const { data: clientNumberData } = await supabase
+        const { data: clientNumberData } = await db
           .rpc('generate_client_number');
 
         const { id, client_number, ...insertData } = dataToSubmit;
-        const { error } = await supabase
+        const { error } = await db
           .from('clients')
           .insert({
             id: generateUUID(),

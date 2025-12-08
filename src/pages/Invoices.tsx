@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Plus, Search, Filter, Download, Eye, DollarSign, FileText, Calendar, TrendingUp, Edit, Trash2, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { db } from '@/lib/database';
+import { selectRecords } from '@/services/api/postgresql-service';
 import { useToast } from "@/hooks/use-toast";
 import InvoiceFormDialog from "@/components/InvoiceFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
@@ -45,18 +45,15 @@ const Invoices = () => {
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const { data, error } = await db
-        .from('invoices')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setInvoices(data || []);
-    } catch (error) {
+      const invoicesData = await selectRecords('invoices', {
+        orderBy: 'created_at DESC',
+      });
+      setInvoices(invoicesData || []);
+    } catch (error: any) {
       console.error('Error fetching invoices:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch invoices. Please try again.",
+        description: error.message || "Failed to fetch invoices. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -87,12 +84,65 @@ const Invoices = () => {
     fetchInvoices();
   };
 
+  // Helper function to get invoice total amount (handle null total_amount)
+  const getInvoiceTotal = (invoice: Invoice): number => {
+    if (invoice.total_amount !== null && invoice.total_amount !== undefined) {
+      return Number(invoice.total_amount) || 0;
+    }
+    // Calculate if total_amount is null (generated column might not be set)
+    const subtotal = Number(invoice.subtotal) || 0;
+    const discount = Number(invoice.discount) || 0;
+    const taxRate = Number(invoice.tax_rate) || 0;
+    const afterDiscount = Math.max(0, subtotal - discount);
+    const taxAmount = (afterDiscount * taxRate) / 100;
+    return Number((afterDiscount + taxAmount).toFixed(2));
+  };
+
+  // Format currency with proper Indian number formatting
+  const formatCurrency = (amount: number): string => {
+    const numAmount = Number(amount) || 0;
+    return numAmount.toLocaleString('en-IN', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+      useGrouping: true
+    });
+  };
+
   // Calculate stats from real data
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Calculate totals ensuring proper number conversion
+  const totalAmount = invoices.reduce((sum, inv) => {
+    const amount = getInvoiceTotal(inv);
+    return Number(sum) + Number(amount);
+  }, 0);
+
+  const pendingInvoices = invoices.filter(inv => inv.status !== 'paid' && inv.status !== 'cancelled');
+  const pendingAmount = pendingInvoices.reduce((sum, inv) => {
+    const amount = getInvoiceTotal(inv);
+    return Number(sum) + Number(amount);
+  }, 0);
+
+  const overdueInvoices = invoices.filter(inv => {
+    if (inv.status === 'paid' || inv.status === 'cancelled') return false;
+    if (!inv.due_date) return false;
+    const dueDate = new Date(inv.due_date);
+    dueDate.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  });
+  const overdueAmount = overdueInvoices.reduce((sum, inv) => {
+    const amount = getInvoiceTotal(inv);
+    return Number(sum) + Number(amount);
+  }, 0);
+
   const invoiceStats = {
     totalInvoices: invoices.length,
-    totalAmount: invoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0),
-    pendingAmount: invoices.filter(inv => inv.status === 'pending').reduce((sum, inv) => sum + (inv.total_amount || 0), 0),
-    overdueAmount: invoices.filter(inv => inv.status === 'overdue' || (inv.status !== 'paid' && inv.due_date && new Date(inv.due_date) < new Date())).reduce((sum, inv) => sum + (inv.total_amount || 0), 0)
+    totalAmount: Number(totalAmount.toFixed(2)),
+    pendingCount: pendingInvoices.length,
+    pendingAmount: Number(pendingAmount.toFixed(2)),
+    overdueCount: overdueInvoices.length,
+    overdueAmount: Number(overdueAmount.toFixed(2))
   };
 
   const getStatusColor = (status: string) => {
@@ -150,7 +200,7 @@ const Invoices = () => {
           <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
               <FileText className="h-6 w-6 lg:h-8 lg:w-8 text-blue-600 flex-shrink-0" />
-              <div className="ml-3 lg:ml-4 min-w-0">
+              <div className="ml-3 lg:ml-4 min-w-0 flex-1">
                 <p className="text-xs lg:text-sm font-medium text-muted-foreground">Total Invoices</p>
                 <p className="text-xl lg:text-2xl font-bold">{invoiceStats.totalInvoices}</p>
               </div>
@@ -161,9 +211,11 @@ const Invoices = () => {
           <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
               <DollarSign className="h-6 w-6 lg:h-8 lg:w-8 text-green-600 flex-shrink-0" />
-              <div className="ml-3 lg:ml-4 min-w-0">
+              <div className="ml-3 lg:ml-4 min-w-0 flex-1">
                 <p className="text-xs lg:text-sm font-medium text-muted-foreground">Total Amount</p>
-                <p className="text-lg lg:text-2xl font-bold truncate">₹{invoiceStats.totalAmount.toLocaleString()}</p>
+                <p className="text-lg lg:text-xl xl:text-2xl font-bold break-words">
+                  ₹{formatCurrency(invoiceStats.totalAmount)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -172,9 +224,13 @@ const Invoices = () => {
           <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
               <Calendar className="h-6 w-6 lg:h-8 lg:w-8 text-yellow-600 flex-shrink-0" />
-              <div className="ml-3 lg:ml-4 min-w-0">
-                <p className="text-xs lg:text-sm font-medium text-muted-foreground">Pending</p>
-                <p className="text-lg lg:text-2xl font-bold truncate">₹{invoiceStats.pendingAmount.toLocaleString()}</p>
+              <div className="ml-3 lg:ml-4 min-w-0 flex-1">
+                <p className="text-xs lg:text-sm font-medium text-muted-foreground">
+                  Pending {invoiceStats.pendingCount > 0 && `(${invoiceStats.pendingCount})`}
+                </p>
+                <p className="text-lg lg:text-xl xl:text-2xl font-bold break-words">
+                  ₹{formatCurrency(invoiceStats.pendingAmount)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -183,9 +239,13 @@ const Invoices = () => {
           <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
               <TrendingUp className="h-6 w-6 lg:h-8 lg:w-8 text-red-600 flex-shrink-0" />
-              <div className="ml-3 lg:ml-4 min-w-0">
-                <p className="text-xs lg:text-sm font-medium text-muted-foreground">Overdue</p>
-                <p className="text-lg lg:text-2xl font-bold truncate">₹{invoiceStats.overdueAmount.toLocaleString()}</p>
+              <div className="ml-3 lg:ml-4 min-w-0 flex-1">
+                <p className="text-xs lg:text-sm font-medium text-muted-foreground">
+                  Overdue {invoiceStats.overdueCount > 0 && `(${invoiceStats.overdueCount})`}
+                </p>
+                <p className="text-lg lg:text-xl xl:text-2xl font-bold break-words">
+                  ₹{formatCurrency(invoiceStats.overdueAmount)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -252,7 +312,9 @@ const Invoices = () => {
                         {/* Mobile: Show amount and dates prominently */}
                         <div className="lg:hidden bg-muted/30 p-3 rounded-lg">
                           <div className="flex justify-between items-center mb-2">
-                            <span className="font-bold text-lg">₹{(invoice.total_amount || 0).toLocaleString()}</span>
+                            <span className="font-bold text-lg">
+                              ₹{formatCurrency(getInvoiceTotal(invoice))}
+                            </span>
                             <Badge variant={getStatusColor(invoice.status)} className="text-xs">
                               {invoice.status}
                             </Badge>
@@ -271,7 +333,9 @@ const Invoices = () => {
 
                       {/* Desktop: Amount and dates */}
                       <div className="hidden lg:flex lg:flex-col lg:items-end lg:text-right lg:min-w-fit lg:ml-4">
-                        <p className="font-bold text-xl">₹{(invoice.total_amount || 0).toLocaleString()}</p>
+                        <p className="font-bold text-xl">
+                          ₹{formatCurrency(getInvoiceTotal(invoice))}
+                        </p>
                         <p className="text-sm text-muted-foreground">
                           Issue: {new Date(invoice.issue_date).toLocaleDateString()}
                         </p>

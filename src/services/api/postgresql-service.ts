@@ -296,9 +296,17 @@ export async function updateRecord<T = any>(
   const { clause: whereClause, params: whereParams } = buildWhereClause(where, whereStartIndex);
   const allParams = [...updateValues, ...whereParams];
 
+  // Tables that don't have updated_at column
+  const tablesWithoutUpdatedAt = ['user_roles'];
+  
+  // Only add updated_at if the table has this column
+  const updatedAtClause = tablesWithoutUpdatedAt.includes(table) 
+    ? '' 
+    : ', updated_at = NOW()';
+
   const query = `
     UPDATE public.${table}
-    SET ${setClause}, updated_at = NOW()
+    SET ${setClause}${updatedAtClause}
     ${whereClause}
     RETURNING *
   `;

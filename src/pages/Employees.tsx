@@ -2,15 +2,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Plus, Search, Filter, Mail, Phone, Loader2, Edit, Trash2, Eye, Users, UserCheck, UserX, Briefcase } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
+import { selectRecords, updateRecord } from '@/services/api/postgresql-service';
 
 interface Employee {
   id: string;
@@ -28,12 +30,15 @@ interface Employee {
   work_location?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
+  avatar_url?: string;
 }
 
 const Employees = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -43,59 +48,82 @@ const Employees = () => {
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Employee>>({});
 
+  const fetchDepartments = async () => {
+    try {
+      const deptData = await selectRecords('departments', {
+        select: 'id, name',
+        filters: [
+          { column: 'is_active', operator: 'eq', value: true }
+        ],
+        orderBy: 'name ASC'
+      });
+      setDepartments(deptData);
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+    }
+  };
+
   const fetchEmployees = async () => {
     try {
       setLoading(true);
       
       // Fetch employee details
-      const { data: employeeData, error: employeeError } = await db
-        .from('employee_details')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (employeeError) {
-        console.error('Employee fetch error:', employeeError);
-        throw employeeError;
-      }
-
-      // Fetch profiles for email
-      const { data: profilesData } = await db
-        .from('profiles')
-        .select('user_id, full_name');
-
-      const profileMap = new Map<string, string>();
-      profilesData?.forEach((p: any) => {
-        profileMap.set(p.user_id, p.full_name);
+      const employeeData = await selectRecords('employee_details', {
+        orderBy: 'created_at DESC'
       });
 
+      // Fetch profiles for department, position, and avatar
+      const profileData = await selectRecords('profiles', {
+        select: 'user_id, full_name, phone, department, position, hire_date, avatar_url'
+      });
+
+      // Fetch users for email
+      const userIds = employeeData.map((emp: any) => emp.user_id).filter(Boolean);
+      let usersData: any[] = [];
+      if (userIds.length > 0) {
+        usersData = await selectRecords('users', {
+          select: 'id, email',
+          filters: [
+            { column: 'id', operator: 'in', value: userIds }
+          ]
+        });
+      }
+
+      // Create maps for quick lookup
+      const profileMap = new Map(profileData.map((p: any) => [p.user_id, p]));
+      const userMap = new Map(usersData.map((u: any) => [u.id, u]));
+
       // Transform the data to match our interface
-      const transformedEmployees: Employee[] = (employeeData || []).map((emp: any) => {
-        const fullName = profileMap.get(emp.user_id) || `${emp.first_name || ''} ${emp.last_name || ''}`.trim();
+      const transformedEmployees: Employee[] = employeeData.map((emp: any) => {
+        const profile = profileMap.get(emp.user_id);
+        const user = userMap.get(emp.user_id);
+        
         return {
           id: emp.id,
           user_id: emp.user_id,
-          employee_id: emp.employee_id || `EMP-${emp.id.substring(0, 8).toUpperCase()}`,
-          first_name: emp.first_name || fullName.split(' ')[0] || 'Unknown',
-          last_name: emp.last_name || fullName.split(' ').slice(1).join(' ') || '',
-          email: `${(fullName || 'employee').toLowerCase().replace(/\s+/g, '.')}@company.com`,
-          phone: emp.phone,
-          department: emp.department,
-          position: emp.emp_position || emp.position,
+          employee_id: emp.employee_id,
+          first_name: emp.first_name,
+          last_name: emp.last_name,
+          email: user?.email || undefined,
+          phone: profile?.phone || emp.phone || undefined,
+          department: profile?.department || undefined,
+          position: profile?.position || undefined,
           is_active: emp.is_active !== false,
-          hire_date: emp.hire_date,
+          hire_date: profile?.hire_date || emp.hire_date || undefined,
           employment_type: emp.employment_type || 'full_time',
-          work_location: emp.work_location,
-          emergency_contact_name: emp.emergency_contact_name,
-          emergency_contact_phone: emp.emergency_contact_phone,
+          work_location: emp.work_location || undefined,
+          emergency_contact_name: emp.emergency_contact_name || undefined,
+          emergency_contact_phone: emp.emergency_contact_phone || undefined,
+          avatar_url: profile?.avatar_url || undefined,
         };
       });
 
       setEmployees(transformedEmployees);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching employees:', error);
       toast({
         title: "Error",
-        description: "Failed to fetch employees. Please try again.",
+        description: error.message || "Failed to fetch employees. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -104,6 +132,7 @@ const Employees = () => {
   };
 
   useEffect(() => {
+    fetchDepartments();
     fetchEmployees();
   }, []);
 
@@ -111,7 +140,8 @@ const Employees = () => {
     `${employee.first_name} ${employee.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
     employee.employee_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
     employee.department?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    employee.position?.toLowerCase().includes(searchTerm.toLowerCase())
+    employee.position?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    employee.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const stats = {
@@ -147,25 +177,37 @@ const Employees = () => {
   };
 
   const handleSaveEmployee = async () => {
-    if (!selectedEmployee) return;
+    if (!selectedEmployee || !user?.id) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to update employees",
+        variant: "destructive",
+      });
+      return;
+    }
     
     setSaving(true);
     try {
-      const { error } = await db
-        .from('employee_details')
-        .update({
-          first_name: editForm.first_name,
-          last_name: editForm.last_name,
+      // Update employee_details
+      await updateRecord('employee_details', {
+        first_name: editForm.first_name,
+        last_name: editForm.last_name,
+        work_location: editForm.work_location,
+        employment_type: editForm.employment_type,
+        is_active: editForm.is_active,
+      }, { id: selectedEmployee.id }, user.id);
+
+      // Update profile if it exists
+      try {
+        await updateRecord('profiles', {
           phone: editForm.phone,
           department: editForm.department,
-          emp_position: editForm.position,
-          employment_type: editForm.employment_type,
-          work_location: editForm.work_location,
-          is_active: editForm.is_active,
-        })
-        .eq('id', selectedEmployee.id);
-
-      if (error) throw error;
+          position: editForm.position,
+        }, { user_id: selectedEmployee.user_id }, user.id);
+      } catch (profileError) {
+        // Profile might not exist, that's okay
+        console.warn('Could not update profile:', profileError);
+      }
 
       toast({
         title: "Success",
@@ -174,11 +216,11 @@ const Employees = () => {
 
       setShowEditDialog(false);
       fetchEmployees();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating employee:', error);
       toast({
         title: "Error",
-        description: "Failed to update employee",
+        description: error.message || "Failed to update employee",
         variant: "destructive",
       });
     } finally {
@@ -192,8 +234,12 @@ const Employees = () => {
 
   const getEmploymentTypeLabel = (type?: string) => {
     switch (type) {
-      case 'full_time': return 'Full Time';
-      case 'part_time': return 'Part Time';
+      case 'full_time':
+      case 'full-time':
+        return 'Full Time';
+      case 'part_time':
+      case 'part-time':
+        return 'Part Time';
       case 'contract': return 'Contract';
       case 'intern': return 'Intern';
       default: return type || 'Full Time';
@@ -202,25 +248,25 @@ const Employees = () => {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Employees</h1>
-          <p className="text-muted-foreground">Manage employee information and records</p>
+          <h1 className="text-2xl sm:text-3xl font-bold">Employees</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Manage employee information and records</p>
         </div>
-        <Button onClick={() => navigate('/create-employee')}>
+        <Button onClick={() => navigate('/create-employee')} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           Add Employee
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <Users className="h-8 w-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm text-muted-foreground">Total Employees</p>
+              <Users className="h-8 w-8 text-blue-600 flex-shrink-0" />
+              <div className="ml-4 min-w-0">
+                <p className="text-sm text-muted-foreground truncate">Total Employees</p>
                 <p className="text-2xl font-bold">{stats.total}</p>
               </div>
             </div>
@@ -229,9 +275,9 @@ const Employees = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <UserCheck className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm text-muted-foreground">Active</p>
+              <UserCheck className="h-8 w-8 text-green-600 flex-shrink-0" />
+              <div className="ml-4 min-w-0">
+                <p className="text-sm text-muted-foreground truncate">Active</p>
                 <p className="text-2xl font-bold">{stats.active}</p>
               </div>
             </div>
@@ -240,9 +286,9 @@ const Employees = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <UserX className="h-8 w-8 text-red-600" />
-              <div className="ml-4">
-                <p className="text-sm text-muted-foreground">Inactive</p>
+              <UserX className="h-8 w-8 text-red-600 flex-shrink-0" />
+              <div className="ml-4 min-w-0">
+                <p className="text-sm text-muted-foreground truncate">Inactive</p>
                 <p className="text-2xl font-bold">{stats.inactive}</p>
               </div>
             </div>
@@ -251,9 +297,9 @@ const Employees = () => {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center">
-              <Briefcase className="h-8 w-8 text-purple-600" />
-              <div className="ml-4">
-                <p className="text-sm text-muted-foreground">Full Time</p>
+              <Briefcase className="h-8 w-8 text-purple-600 flex-shrink-0" />
+              <div className="ml-4 min-w-0">
+                <p className="text-sm text-muted-foreground truncate">Full Time</p>
                 <p className="text-2xl font-bold">{stats.fullTime}</p>
               </div>
             </div>
@@ -262,18 +308,18 @@ const Employees = () => {
       </div>
 
       <Card className="mb-6">
-        <CardContent className="pt-6">
-          <div className="flex gap-4">
+        <CardContent className="pt-4 sm:pt-6">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
-                placeholder="Search employees by name, ID, department, or position..." 
-                className="pl-10" 
+                placeholder="Search employees..." 
+                className="pl-10 w-full" 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button variant="outline">
+            <Button variant="outline" className="w-full sm:w-auto">
               <Filter className="mr-2 h-4 w-4" />
               Filter
             </Button>
@@ -307,59 +353,96 @@ const Employees = () => {
         <div className="grid gap-4">
           {filteredEmployees.map((employee) => (
             <Card key={employee.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                      <span className="text-lg font-semibold text-primary">
+              <CardContent className="pt-4 sm:pt-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  {/* Left Section: Avatar and Employee Info */}
+                  <div className="flex items-start sm:items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                    <Avatar className="h-12 w-12 sm:h-14 sm:w-14 border-2 border-primary/20 flex-shrink-0">
+                      <AvatarImage 
+                        src={employee.avatar_url && employee.avatar_url.startsWith('data:') 
+                          ? employee.avatar_url 
+                          : employee.avatar_url || undefined} 
+                        alt={`${employee.first_name} ${employee.last_name}`} 
+                      />
+                      <AvatarFallback className="bg-primary/10 text-primary text-lg font-semibold">
                         {employee.first_name.charAt(0)}{employee.last_name.charAt(0)}
-                      </span>
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold">
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base sm:text-lg font-semibold truncate">
                         {employee.first_name} {employee.last_name}
                       </h3>
-                      <p className="text-muted-foreground">{employee.position || 'No position assigned'}</p>
-                      <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <Mail className="h-3 w-3" />
-                          {employee.email}
-                        </div>
+                      <p className="text-sm sm:text-base text-muted-foreground truncate">
+                        {employee.position || 'No position assigned'}
+                      </p>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1 text-xs sm:text-sm text-muted-foreground">
+                        {employee.email && (
+                          <div className="flex items-center gap-1 truncate">
+                            <Mail className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">{employee.email}</span>
+                          </div>
+                        )}
                         {employee.phone && (
                           <div className="flex items-center gap-1">
-                            <Phone className="h-3 w-3" />
-                            {employee.phone}
+                            <Phone className="h-3 w-3 flex-shrink-0" />
+                            <span>{employee.phone}</span>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge variant="outline">{employee.department || 'No department'}</Badge>
-                        <Badge variant="secondary">{getEmploymentTypeLabel(employee.employment_type)}</Badge>
-                        <Badge variant={getStatusColor(employee.is_active)}>
+
+                  {/* Right Section: Badges, Info, and Actions */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                    {/* Badges and Employee Info */}
+                    <div className="flex flex-col sm:items-end gap-2">
+                      <div className="flex flex-wrap items-center gap-2 justify-start sm:justify-end">
+                        <Badge variant="outline" className="text-xs whitespace-nowrap">
+                          {employee.department || 'No department'}
+                        </Badge>
+                        <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                          {getEmploymentTypeLabel(employee.employment_type)}
+                        </Badge>
+                        <Badge variant={getStatusColor(employee.is_active)} className="text-xs whitespace-nowrap">
                           {employee.is_active ? 'Active' : 'Inactive'}
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        ID: {employee.employee_id}
-                      </p>
-                      {employee.hire_date && (
-                        <p className="text-sm text-muted-foreground">
-                          Joined: {new Date(employee.hire_date).toLocaleDateString()}
+                      <div className="text-left sm:text-right">
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                          ID: <span className="font-mono">{employee.employee_id}</span>
                         </p>
-                      )}
+                        {employee.hire_date && (
+                          <p className="text-xs sm:text-sm text-muted-foreground">
+                            Joined: {new Date(employee.hire_date).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => handleViewEmployee(employee)}>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 justify-start sm:justify-end">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleViewEmployee(employee)}
+                        className="flex-shrink-0"
+                      >
                         <Eye className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleEditEmployee(employee)}>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleEditEmployee(employee)}
+                        className="flex-shrink-0"
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleDeleteEmployee(employee)}>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleDeleteEmployee(employee)}
+                        className="flex-shrink-0"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -381,11 +464,17 @@ const Employees = () => {
           {selectedEmployee && (
             <div className="space-y-4">
               <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-                  <span className="text-xl font-semibold text-primary">
+                <Avatar className="h-16 w-16 border-2 border-primary/20">
+                  <AvatarImage 
+                    src={selectedEmployee.avatar_url && selectedEmployee.avatar_url.startsWith('data:') 
+                      ? selectedEmployee.avatar_url 
+                      : selectedEmployee.avatar_url || undefined} 
+                    alt={`${selectedEmployee.first_name} ${selectedEmployee.last_name}`} 
+                  />
+                  <AvatarFallback className="bg-primary/10 text-primary text-xl font-semibold">
                     {selectedEmployee.first_name.charAt(0)}{selectedEmployee.last_name.charAt(0)}
-                  </span>
-                </div>
+                  </AvatarFallback>
+                </Avatar>
                 <div>
                   <h3 className="text-xl font-semibold">
                     {selectedEmployee.first_name} {selectedEmployee.last_name}
@@ -403,7 +492,7 @@ const Employees = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="font-medium">{selectedEmployee.email}</p>
+                  <p className="font-medium">{selectedEmployee.email || 'Not provided'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Phone</p>
@@ -497,14 +586,15 @@ const Employees = () => {
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Engineering">Engineering</SelectItem>
-                    <SelectItem value="Development">Development</SelectItem>
-                    <SelectItem value="Design">Design</SelectItem>
-                    <SelectItem value="Marketing">Marketing</SelectItem>
-                    <SelectItem value="Sales">Sales</SelectItem>
-                    <SelectItem value="Finance">Finance</SelectItem>
-                    <SelectItem value="Human Resources">Human Resources</SelectItem>
-                    <SelectItem value="Operations">Operations</SelectItem>
+                    {departments.length > 0 ? (
+                      departments.map((dept) => (
+                        <SelectItem key={dept.id} value={dept.name}>
+                          {dept.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="" disabled>No departments available</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

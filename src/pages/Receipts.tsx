@@ -2,10 +2,28 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Filter, Download, Eye, Upload, FileText, DollarSign, Calendar, Tag, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { 
+  Plus, Search, Filter, Download, Eye, Upload, FileText, DollarSign, Calendar, Tag, 
+  Loader2, Edit, Trash2, CheckCircle, XCircle, X 
+} from "lucide-react";
 import { useState, useEffect } from "react";
-import { db } from '@/lib/database';
+import { selectRecords, deleteRecord, updateRecord } from '@/services/api/postgresql-service';
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { ReceiptFormDialog } from "@/components/ReceiptFormDialog";
+import { ReceiptViewDialog } from "@/components/ReceiptViewDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { format } from "date-fns";
 
 interface Receipt {
   id: string;
@@ -17,6 +35,9 @@ interface Receipt {
   description: string;
   receiptUrl: string | null;
   request_id?: string;
+  category_id?: string;
+  business_purpose?: string;
+  employee_id?: string;
 }
 
 interface ReceiptStats {
@@ -28,8 +49,11 @@ interface ReceiptStats {
 
 const Receipts = () => {
   const { toast } = useToast();
+  const { user, userRole, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [receiptStats, setReceiptStats] = useState<ReceiptStats>({
     totalReceipts: 0,
     totalAmount: 0,
@@ -37,65 +61,122 @@ const Receipts = () => {
     pendingReview: 0
   });
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  
+  // Dialog states
+  const [showFormDialog, setShowFormDialog] = useState(false);
+  const [showViewDialog, setShowViewDialog] = useState(false);
+  const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
+  const [receiptToDelete, setReceiptToDelete] = useState<Receipt | null>(null);
+  const [receiptToUpdateStatus, setReceiptToUpdateStatus] = useState<{ receipt: Receipt; newStatus: string } | null>(null);
+
+  const isFinanceManager = userRole === 'admin' || userRole === 'finance_manager';
 
   useEffect(() => {
-    fetchReceipts();
-  }, []);
+    if (profile?.agency_id) {
+      fetchReceipts();
+      fetchCategories();
+    }
+  }, [profile?.agency_id]);
+
+  const fetchCategories = async () => {
+    try {
+      if (!profile?.agency_id) {
+        setCategories([]);
+        return;
+      }
+
+      const categoriesData = await selectRecords('expense_categories', {
+        where: { 
+          agency_id: profile.agency_id,
+          is_active: true 
+        },
+        orderBy: 'name ASC',
+      });
+      
+      setCategories((categoriesData || []).map((cat: any) => ({
+        id: cat.id,
+        name: cat.name
+      })));
+    } catch (error: any) {
+      console.error('Error fetching categories:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load expense categories",
+        variant: "destructive",
+      });
+    }
+  };
 
   const fetchReceipts = async () => {
     try {
       setLoading(true);
 
-      // Fetch reimbursement requests with attachments
-      const { data: requests, error: requestsError } = await db
-        .from('reimbursement_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
+      if (!profile?.agency_id) {
+        setReceipts([]);
+        setReceiptStats({
+          totalReceipts: 0,
+          totalAmount: 0,
+          thisMonth: 0,
+          pendingReview: 0
+        });
+        return;
+      }
 
-      if (requestsError) throw requestsError;
+      // Fetch reimbursement requests with agency_id filter
+      const requests = await selectRecords('reimbursement_requests', {
+        where: { agency_id: profile.agency_id },
+        orderBy: 'created_at DESC',
+      });
+
+      if (!requests || requests.length === 0) {
+        setReceipts([]);
+        setReceiptStats({
+          totalReceipts: 0,
+          totalAmount: 0,
+          thisMonth: 0,
+          pendingReview: 0
+        });
+        return;
+      }
 
       // Fetch expense categories
-      const { data: categories, error: categoriesError } = await db
-        .from('expense_categories')
-        .select('id, name');
+      const categoriesData = await selectRecords('expense_categories', {
+        where: { agency_id: profile.agency_id },
+      });
 
-      if (categoriesError) throw categoriesError;
-      const categoryMap = new Map((categories || []).map((c: any) => [c.id, c.name]));
+      const categoryMap = new Map((categoriesData || []).map((c: any) => [c.id, c.name]));
 
       // Fetch attachments for all requests
-      const requestIds = (requests || []).map(r => r.id).filter(Boolean);
+      const requestIds = requests.map((r: any) => r.id).filter(Boolean);
       let attachments: any[] = [];
       
       if (requestIds.length > 0) {
-        const { data: attachmentsData, error: attachmentsError } = await db
-          .from('reimbursement_attachments')
-          .select('*')
-          .in('reimbursement_request_id', requestIds);
-
-        if (attachmentsError) throw attachmentsError;
-        attachments = attachmentsData || [];
+        attachments = await selectRecords('reimbursement_attachments', {
+          where: { 
+            reimbursement_id: { operator: 'IN', value: requestIds }
+          },
+        });
       }
 
-      const attachmentsMap = new Map(attachments.map((a: any) => [a.reimbursement_request_id, a]));
+      const attachmentsMap = new Map(attachments.map((a: any) => [a.reimbursement_id, a]));
 
-      // Fetch employee profiles for vendor names (using employee name as vendor)
-      const employeeIds = (requests || []).map(r => r.employee_id).filter(Boolean);
+      // Fetch employee profiles for vendor names
+      const employeeIds = requests.map((r: any) => r.employee_id).filter(Boolean);
       let profiles: any[] = [];
 
       if (employeeIds.length > 0) {
-        const { data: profilesData, error: profilesError } = await db
-          .from('profiles')
-          .select('user_id, full_name')
-          .in('user_id', employeeIds);
-
-        if (profilesError) throw profilesError;
-        profiles = profilesData || [];
+        profiles = await selectRecords('profiles', {
+          where: { 
+            user_id: { operator: 'IN', value: employeeIds }
+          },
+        });
       }
 
       const profileMap = new Map(profiles.map((p: any) => [p.user_id, p.full_name]));
 
       // Transform reimbursement requests to receipts
-      const transformedReceipts: Receipt[] = (requests || []).map((request: any) => {
+      const transformedReceipts: Receipt[] = requests.map((request: any) => {
         const attachment = attachmentsMap.get(request.id);
         const categoryName = categoryMap.get(request.category_id) || 'Uncategorized';
         const vendorName = profileMap.get(request.employee_id) || 'Unknown Employee';
@@ -105,11 +186,14 @@ const Receipts = () => {
           vendor: vendorName,
           category: categoryName,
           amount: Number(request.amount || 0),
-          date: request.expense_date || request.created_at.split('T')[0],
-          status: request.status || 'pending',
+          date: request.expense_date || request.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+          status: request.status || 'submitted',
           description: request.description || request.notes || 'No description',
           receiptUrl: attachment?.file_path || null,
-          request_id: request.id
+          request_id: request.id,
+          category_id: request.category_id,
+          business_purpose: request.business_purpose,
+          employee_id: request.employee_id
         };
       });
 
@@ -127,7 +211,9 @@ const Receipts = () => {
         return receiptDate.getMonth() === currentMonth && receiptDate.getFullYear() === currentYear;
       }).length;
 
-      const pendingReview = transformedReceipts.filter(r => r.status === 'pending').length;
+      const pendingReview = transformedReceipts.filter(r => 
+        r.status === 'submitted' || r.status === 'manager_review' || r.status === 'finance_review'
+      ).length;
 
       setReceiptStats({
         totalReceipts,
@@ -140,19 +226,95 @@ const Receipts = () => {
       console.error('Error fetching receipts:', error);
       toast({
         title: "Error",
-        description: "Failed to load receipts. Please try again.",
+        description: error?.message || "Failed to load receipts. Please try again.",
         variant: "destructive",
       });
+      setReceipts([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const filteredReceipts = receipts.filter(receipt =>
-    receipt.vendor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    receipt.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    receipt.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleDelete = async () => {
+    if (!receiptToDelete?.request_id || !user?.id) return;
+
+    try {
+      // First delete attachments
+      const attachments = await selectRecords('reimbursement_attachments', {
+        where: { reimbursement_id: receiptToDelete.request_id },
+      });
+
+      for (const attachment of attachments || []) {
+        await deleteRecord('reimbursement_attachments', attachment.id, user.id);
+      }
+
+      // Then delete the reimbursement request
+      await deleteRecord('reimbursement_requests', receiptToDelete.request_id, user.id);
+
+      toast({
+        title: "Success",
+        description: "Receipt deleted successfully",
+      });
+
+      setReceiptToDelete(null);
+      fetchReceipts();
+    } catch (error: any) {
+      console.error('Error deleting receipt:', error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to delete receipt",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleStatusUpdate = async () => {
+    if (!receiptToUpdateStatus?.receipt.request_id || !user?.id) return;
+
+    try {
+      const updateData: any = {
+        status: receiptToUpdateStatus.newStatus,
+      };
+
+      if (receiptToUpdateStatus.newStatus === 'approved') {
+        updateData.reviewed_by = user.id;
+        updateData.reviewed_at = new Date().toISOString();
+      } else if (receiptToUpdateStatus.newStatus === 'rejected') {
+        updateData.reviewed_by = user.id;
+        updateData.reviewed_at = new Date().toISOString();
+      }
+
+      await updateRecord('reimbursement_requests', updateData, { id: receiptToUpdateStatus.receipt.request_id }, user.id);
+
+      toast({
+        title: "Success",
+        description: `Receipt ${receiptToUpdateStatus.newStatus} successfully`,
+      });
+
+      setReceiptToUpdateStatus(null);
+      fetchReceipts();
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to update receipt status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const filteredReceipts = receipts.filter(receipt => {
+    const matchesSearch = 
+      receipt.vendor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      receipt.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      receipt.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      receipt.id.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = statusFilter === 'all' || receipt.status === statusFilter;
+    const matchesCategory = categoryFilter === 'all' || receipt.category_id === categoryFilter;
+
+    return matchesSearch && matchesStatus && matchesCategory;
+  });
 
   if (loading) {
     return (
@@ -165,12 +327,25 @@ const Receipts = () => {
     );
   }
 
+  if (!profile?.agency_id) {
+    return (
+      <div className="p-6">
+        <div className="text-center py-8">
+          <p className="text-muted-foreground">Unable to load receipts. Please ensure you are logged in.</p>
+        </div>
+      </div>
+    );
+  }
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'approved': return 'default';
-      case 'pending': return 'secondary';
+    switch (status.toLowerCase()) {
+      case 'approved': 
+      case 'paid': return 'default';
+      case 'submitted': 
+      case 'manager_review':
+      case 'finance_review': return 'secondary';
       case 'rejected': return 'destructive';
+      case 'draft': return 'outline';
       default: return 'secondary';
     }
   };
@@ -193,11 +368,10 @@ const Receipts = () => {
           <p className="text-muted-foreground">Manage expense receipts and reimbursements</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <Upload className="mr-2 h-4 w-4" />
-            Upload Receipt
-          </Button>
-          <Button>
+          <Button onClick={() => {
+            setSelectedReceipt(null);
+            setShowFormDialog(true);
+          }}>
             <Plus className="mr-2 h-4 w-4" />
             Add Expense
           </Button>
@@ -263,10 +437,32 @@ const Receipts = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button variant="outline">
-              <Filter className="mr-2 h-4 w-4" />
-              Filter
-            </Button>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="submitted">Submitted</SelectItem>
+                <SelectItem value="manager_review">Manager Review</SelectItem>
+                <SelectItem value="finance_review">Finance Review</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -281,19 +477,21 @@ const Receipts = () => {
             {filteredReceipts.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-muted-foreground">
-                  {searchTerm ? 'No receipts found matching your search.' : 'No receipts found.'}
+                  {searchTerm || statusFilter !== 'all' || categoryFilter !== 'all' 
+                    ? 'No receipts found matching your filters.' 
+                    : 'No receipts found.'}
                 </p>
               </div>
             ) : (
               filteredReceipts.map((receipt) => (
-              <div key={receipt.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center space-x-4">
+              <div key={receipt.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors">
+                <div className="flex items-center space-x-4 flex-1">
                   <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                     <FileText className="h-5 w-5 text-primary" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold">{receipt.vendor}</h3>
-                    <p className="text-sm text-muted-foreground">{receipt.description}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-1">{receipt.description}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs text-muted-foreground">{receipt.id}</span>
                       <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(receipt.category)}`}>
@@ -305,7 +503,7 @@ const Receipts = () => {
                 <div className="text-right mr-4">
                   <p className="font-bold text-lg">₹{receipt.amount.toFixed(2)}</p>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(receipt.date).toLocaleDateString()}
+                    {format(new Date(receipt.date), "MMM dd, yyyy")}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -313,12 +511,67 @@ const Receipts = () => {
                     {receipt.status}
                   </Badge>
                   <div className="flex gap-1">
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setSelectedReceipt(receipt);
+                        setShowViewDialog(true);
+                      }}
+                      title="View details"
+                    >
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" size="sm">
-                      <Download className="h-4 w-4" />
-                    </Button>
+                    {(user?.id === receipt.employee_id || isFinanceManager) && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedReceipt(receipt);
+                          setShowFormDialog(true);
+                        }}
+                        title="Edit receipt"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {isFinanceManager && (receipt.status === 'submitted' || receipt.status === 'manager_review' || receipt.status === 'finance_review') && (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setReceiptToUpdateStatus({ receipt, newStatus: 'approved' });
+                          }}
+                          title="Approve"
+                          className="text-green-600 hover:text-green-700"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setReceiptToUpdateStatus({ receipt, newStatus: 'rejected' });
+                          }}
+                          title="Reject"
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
+                    {(user?.id === receipt.employee_id || isFinanceManager) && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setReceiptToDelete(receipt)}
+                        title="Delete receipt"
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -327,6 +580,58 @@ const Receipts = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Form Dialog */}
+      <ReceiptFormDialog
+        open={showFormDialog}
+        onOpenChange={setShowFormDialog}
+        onSuccess={fetchReceipts}
+        receipt={selectedReceipt}
+      />
+
+      {/* View Dialog */}
+      <ReceiptViewDialog
+        open={showViewDialog}
+        onOpenChange={setShowViewDialog}
+        receipt={selectedReceipt}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!receiptToDelete} onOpenChange={(open) => !open && setReceiptToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the receipt
+              and all associated attachments.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Status Update Confirmation Dialog */}
+      <AlertDialog open={!!receiptToUpdateStatus} onOpenChange={(open) => !open && setReceiptToUpdateStatus(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Update Receipt Status</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to {receiptToUpdateStatus?.newStatus} this receipt?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleStatusUpdate}>
+              {receiptToUpdateStatus?.newStatus === 'approved' ? 'Approve' : 'Reject'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

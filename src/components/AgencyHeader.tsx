@@ -1,64 +1,30 @@
-import { useState, useEffect } from "react";
-import { db } from '@/lib/database';
 import { NotificationCenter } from "./NotificationCenter";
-
-interface AgencyInfo {
-  agency_name: string | null;
-  logo_url: string | null;
-}
+import { useAgencySettings } from "@/hooks/useAgencySettings";
 
 export const AgencyHeader = () => {
-  const [agencyInfo, setAgencyInfo] = useState<AgencyInfo>({
-    agency_name: null,
-    logo_url: null
-  });
+  const { settings: agencySettings, loading } = useAgencySettings();
 
-  useEffect(() => {
-    fetchAgencyInfo();
-  }, []);
-
-  const fetchAgencyInfo = async () => {
-    try {
-      const { data, error } = await db
-        .from('agency_settings')
-        .select('agency_name, logo_url')
-        .limit(1)
-        .single();
-
-      if (error) {
-        console.error('Error fetching agency info:', error);
-        return;
-      }
-
-      if (data) {
-        console.log('Agency data fetched:', data);
-        setAgencyInfo({
-          agency_name: data.agency_name,
-          logo_url: data.logo_url
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching agency info:', error);
-    }
-  };
-
-  if (!agencyInfo.agency_name && !agencyInfo.logo_url) {
-    return null;
+  if (loading || (!agencySettings?.agency_name && !agencySettings?.logo_url)) {
+    return (
+      <div className="flex items-center gap-3 ml-auto">
+        <NotificationCenter />
+      </div>
+    );
   }
 
   return (
     <div className="flex items-center gap-3 ml-auto">
       <NotificationCenter />
-      {agencyInfo.logo_url && (
+      {agencySettings?.logo_url && (
         <img
-          src={agencyInfo.logo_url}
+          src={agencySettings.logo_url}
           alt="Agency Logo"
           className="h-8 w-8 object-contain"
         />
       )}
-      {agencyInfo.agency_name && (
+      {agencySettings?.agency_name && (
         <span className="font-semibold text-foreground">
-          {agencyInfo.agency_name}
+          {agencySettings.agency_name}
         </span>
       )}
     </div>

@@ -6,8 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Calendar, Clock, CheckCircle, XCircle, Plane, Heart, User, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
+import { selectRecords } from '@/services/api/postgresql-service';
+import LeaveRequestFormDialog from "@/components/LeaveRequestFormDialog";
 
 interface LeaveRequest {
   id: string;
@@ -32,6 +33,7 @@ const MyLeave = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [selectedTab, setSelectedTab] = useState('all');
+  const [showLeaveRequestDialog, setShowLeaveRequestDialog] = useState(false);
   const [leaveBalance, setLeaveBalance] = useState<Record<string, LeaveBalance>>({
     annual: { total: 0, used: 0, remaining: 0 },
     sick: { total: 0, used: 0, remaining: 0 },
@@ -52,54 +54,50 @@ const MyLeave = () => {
     try {
       setLoading(true);
 
-      // Fetch leave types
-      const { data: leaveTypes, error: typesError } = await db
-        .from('leave_types')
-        .select('id, name, max_days_per_year');
+      // Fetch leave types using PostgreSQL service
+      const leaveTypes = await selectRecords('leave_types', {
+        orderBy: 'name ASC'
+      });
 
-      if (typesError) throw typesError;
-
-      // Fetch user's leave requests
-      const { data: leaveRequests, error: requestsError } = await db
-        .from('leave_requests')
-        .select('*')
-        .eq('employee_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (requestsError) throw requestsError;
+      // Fetch user's leave requests using PostgreSQL service
+      const leaveRequests = await selectRecords('leave_requests', {
+        filters: [
+          { column: 'employee_id', operator: 'eq', value: user.id }
+        ],
+        orderBy: 'created_at DESC'
+      });
 
       // Fetch approver names for approved requests
-      const approverIds = (leaveRequests || [])
-        .filter(lr => lr.approved_by)
-        .map(lr => lr.approved_by)
+      const approverIds = leaveRequests
+        .filter((lr: any) => lr.approved_by)
+        .map((lr: any) => lr.approved_by)
         .filter(Boolean) as string[];
 
       let approvers: any[] = [];
       if (approverIds.length > 0) {
-        const { data: profilesData, error: profilesError } = await db
-          .from('profiles')
-          .select('user_id, full_name')
-          .in('user_id', approverIds);
-
-        if (profilesError) throw profilesError;
-        approvers = profilesData || [];
+        approvers = await selectRecords('profiles', {
+          select: 'user_id, full_name',
+          filters: [
+            { column: 'user_id', operator: 'in', value: approverIds }
+          ]
+        });
       }
 
       const approverMap = new Map(approvers.map((p: any) => [p.user_id, p.full_name]));
 
       // Calculate leave balances
       const balances: Record<string, LeaveBalance> = {};
-      const leaveTypeMap = new Map((leaveTypes || []).map((lt: any) => [lt.id, lt]));
+      const leaveTypeMap = new Map(leaveTypes.map((lt: any) => [lt.id, lt]));
 
-      (leaveTypes || []).forEach((leaveType: any) => {
+      leaveTypes.forEach((leaveType: any) => {
         const typeName = leaveType.name.toLowerCase();
-        const total = leaveType.max_days_per_year || 0;
+        const total = (leaveType as any).max_days_per_year || (leaveType as any).max_days || 0;
         
         // Calculate used days (only approved requests)
-        const approvedRequests = (leaveRequests || []).filter(
-          lr => lr.leave_type_id === leaveType.id && lr.status === 'approved'
+        const approvedRequests = leaveRequests.filter(
+          (lr: any) => lr.leave_type_id === leaveType.id && lr.status === 'approved'
         );
-        const used = approvedRequests.reduce((sum, lr) => sum + (lr.total_days || 0), 0);
+        const used = approvedRequests.reduce((sum: number, lr: any) => sum + (lr.total_days || 0), 0);
         const remaining = Math.max(0, total - used);
 
         // Map to common leave types
@@ -127,7 +125,7 @@ const MyLeave = () => {
       setLeaveBalance(balances);
 
       // Transform leave requests
-      const transformedRequests: LeaveRequest[] = (leaveRequests || []).map((request: any) => {
+      const transformedRequests: LeaveRequest[] = leaveRequests.map((request: any) => {
         const leaveType = leaveTypeMap.get(request.leave_type_id);
         const leaveTypeName = leaveType?.name || 'Leave';
         const approverName = request.approved_by 
@@ -230,7 +228,7 @@ const MyLeave = () => {
           <h1 className="text-3xl font-bold">My Leave</h1>
           <p className="text-muted-foreground">Manage your leave requests and view balances</p>
         </div>
-        <Button>
+        <Button onClick={() => setShowLeaveRequestDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Request Leave
         </Button>
@@ -333,6 +331,20 @@ const MyLeave = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Leave Request Dialog */}
+      <LeaveRequestFormDialog
+        isOpen={showLeaveRequestDialog}
+        onClose={() => {
+          setShowLeaveRequestDialog(false);
+        }}
+        leaveRequest={null}
+        onLeaveRequestSaved={() => {
+          fetchMyLeaveData();
+          setShowLeaveRequestDialog(false);
+        }}
+        isEmployeeView={true}
+      />
     </div>
   );
 };

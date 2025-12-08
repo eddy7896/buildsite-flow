@@ -4,12 +4,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { generateUUID } from '@/lib/uuid';
 import { Loader2, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import bcrypt from 'bcryptjs';
+import { selectRecords, insertRecord, updateRecord } from '@/services/api/postgresql-service';
 
 interface User {
   id: string;
@@ -47,6 +48,7 @@ const generatePassword = () => {
 
 const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogProps) => {
   const { toast } = useToast();
+  const { user: currentUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showCredentials, setShowCredentials] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -62,6 +64,14 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
     phone: '',
     hire_date: ''
   });
+
+  const [passwordData, setPasswordData] = useState({
+    newPassword: '',
+    confirmPassword: ''
+  });
+
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -85,6 +95,10 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
         hire_date: ''
       });
     }
+    setPasswordData({
+      newPassword: '',
+      confirmPassword: ''
+    });
     setCreatedUser(null);
     setShowCredentials(false);
   }, [user, isOpen]);
@@ -113,59 +127,62 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
 
     try {
       if (user) {
-        // Update user profile
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({
-            full_name: formData.name,
-            phone: formData.phone || null,
-            department: formData.department || null,
-            position: formData.position || null,
-            hire_date: formData.hire_date || null
-          })
-          .eq('user_id', user.id);
+        // Validate password if provided
+        if (passwordData.newPassword) {
+          if (passwordData.newPassword.length < 8) {
+            throw new Error('Password must be at least 8 characters long');
+          }
+          if (passwordData.newPassword !== passwordData.confirmPassword) {
+            throw new Error('Passwords do not match');
+          }
+        }
 
-        if (profileError) {
-          throw profileError;
+        // Update user profile using PostgreSQL service
+        await updateRecord('profiles', {
+          full_name: formData.name,
+          phone: formData.phone || null,
+          department: formData.department || null,
+          position: formData.position || null,
+          hire_date: formData.hire_date || null
+        }, { user_id: user.id }, currentUser?.id);
+
+        // Update password if provided
+        if (passwordData.newPassword) {
+          const passwordHash = await bcrypt.hash(passwordData.newPassword, 10);
+          await updateRecord('users', { password_hash: passwordHash }, { id: user.id }, currentUser?.id);
         }
 
         // Update user role - get the first role for this user and update it
         // If multiple roles exist, we update the first one
-        const { data: existingRoles } = await supabase
-          .from('user_roles')
-          .select('id')
-          .eq('user_id', user.id)
-          .limit(1);
+        const existingRoles = await selectRecords('user_roles', {
+          select: 'id',
+          filters: [{ column: 'user_id', operator: 'eq', value: user.id }],
+          limit: 1
+        });
 
         if (existingRoles && existingRoles.length > 0) {
           // Update existing role
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .update({ role: formData.role as any })
-            .eq('id', existingRoles[0].id);
-
-          if (roleError) {
-            throw roleError;
-          }
+          await updateRecord(
+            'user_roles',
+            { role: formData.role as any },
+            { id: existingRoles[0].id },
+            currentUser?.id
+          );
         } else {
           // Insert new role if it doesn't exist
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .insert({
-              id: generateUUID(),
-              user_id: user.id,
-              role: formData.role as any,
-              agency_id: '550e8400-e29b-41d4-a716-446655440000'
-            });
-
-          if (roleError) {
-            throw roleError;
-          }
+          await insertRecord('user_roles', {
+            id: generateUUID(),
+            user_id: user.id,
+            role: formData.role as any,
+            agency_id: '550e8400-e29b-41d4-a716-446655440000'
+          }, currentUser?.id);
         }
 
         toast({
           title: "Success",
-          description: "User updated successfully",
+          description: passwordData.newPassword 
+            ? "User updated successfully. Password has been changed."
+            : "User updated successfully",
         });
 
         onUserSaved();
@@ -179,17 +196,16 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
         const passwordHash = await bcrypt.hash(temporaryPassword, 10);
         
         // Create user record
-        const { insertRecord, updateRecord, selectOne } = await import('@/services/api/postgresql-service');
-        
         await insertRecord('users', {
           id: newUserId,
           email: formData.email,
           password_hash: passwordHash,
           is_active: true,
           email_confirmed: true
-        });
+        }, currentUser?.id);
 
-        // Profile is automatically created by database trigger, so update it instead of inserting
+        // Check if profile was created by trigger, otherwise create it
+        const { selectOne } = await import('@/services/api/postgresql-service');
         const existingProfile = await selectOne('profiles', { user_id: newUserId });
         
         const profileData = {
@@ -204,14 +220,14 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
 
         if (existingProfile) {
           // Update existing profile created by trigger
-          await updateRecord('profiles', profileData, { user_id: newUserId });
+          await updateRecord('profiles', profileData, { user_id: newUserId }, currentUser?.id);
         } else {
           // Fallback: if trigger didn't create profile, insert it manually
           await insertRecord('profiles', {
             id: generateUUID(),
             user_id: newUserId,
             ...profileData,
-          });
+          }, currentUser?.id);
         }
 
         // Assign role
@@ -220,7 +236,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           user_id: newUserId,
           role: formData.role || 'employee',
           agency_id: '550e8400-e29b-41d4-a716-446655440000'
-        });
+        }, currentUser?.id);
 
         // Store the created user credentials to display
         setCreatedUser({
@@ -442,6 +458,67 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
               disabled={loading}
             />
           </div>
+
+          {user && (
+            <div className="space-y-4 pt-4 border-t">
+              <div className="space-y-2">
+                <Label className="text-base font-semibold">Change Password (Optional)</Label>
+                <p className="text-sm text-muted-foreground">
+                  Leave blank to keep current password. Admin can reset user password.
+                </p>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="newPassword">New Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="newPassword"
+                      type={showNewPassword ? "text" : "password"}
+                      value={passwordData.newPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                      disabled={loading}
+                      placeholder="Min 8 characters"
+                      minLength={8}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      disabled={loading}
+                    >
+                      {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                      disabled={loading}
+                      placeholder="Confirm new password"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      disabled={loading}
+                    >
+                      {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={handleClose} disabled={loading}>

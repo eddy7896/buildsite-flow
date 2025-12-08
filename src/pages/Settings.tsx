@@ -10,7 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { db } from '@/lib/database';
 import { useAuth } from "@/hooks/useAuth";
+import { selectOne, updateRecord, insertRecord } from '@/services/api/postgresql-service';
 import { useCurrency } from "@/hooks/useCurrency";
+import { useAgencySettings } from "@/hooks/useAgencySettings";
+import { compressImage } from "@/utils/imageCompression";
 import { 
   Save, Bell, Shield, User, Building, Upload, X, DollarSign, 
   Palette, Globe, Calendar, Clock, Lock, Eye, EyeOff, Mail, 
@@ -121,6 +124,7 @@ const Settings = () => {
   const { user, profile, userRole } = useAuth();
   const { toast } = useToast();
   const { availableCurrencies } = useCurrency();
+  const { settings: agencySettingsData, saveSettings: saveAgencySettingsData, loading: loadingAgencyData } = useAgencySettings();
   
   // Loading states
   const [loadingAgency, setLoadingAgency] = useState(false);
@@ -192,7 +196,6 @@ const Settings = () => {
     const fetchAllSettings = async () => {
       setInitialLoading(true);
       await Promise.all([
-        fetchAgencySettings(),
         fetchProfileSettings(),
         fetchNotificationSettings(),
       ]);
@@ -202,41 +205,43 @@ const Settings = () => {
     fetchAllSettings();
   }, [user?.id]);
 
-  // Fetch Agency Settings
+  // Update agency settings when hook data changes
+  useEffect(() => {
+    if (agencySettingsData) {
+      fetchAgencySettings();
+    }
+  }, [agencySettingsData]);
+
+  // Fetch Agency Settings - now using the hook
   const fetchAgencySettings = async () => {
-    try {
-      const { data, error } = await db
-        .from('agency_settings')
-        .select('*')
-        .limit(1)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching agency settings:', error);
-        return;
+    if (agencySettingsData) {
+      // Parse working_days if it's a string
+      let workingDays = agencySettingsData.working_days;
+      if (typeof workingDays === 'string') {
+        try {
+          workingDays = JSON.parse(workingDays);
+        } catch {
+          workingDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+        }
       }
 
-      if (data) {
-        setAgencySettings({
-          id: data.id,
-          agency_id: data.agency_id,
-          agency_name: data.agency_name || '',
-          logo_url: data.logo_url || '',
-          domain: data.domain || '',
-          default_currency: data.default_currency || data.currency || 'IN',
-          primary_color: data.primary_color || '#3b82f6',
-          secondary_color: data.secondary_color || '#1e40af',
-          timezone: data.timezone || 'Asia/Kolkata',
-          date_format: data.date_format || 'DD/MM/YYYY',
-          fiscal_year_start: data.fiscal_year_start || '04-01',
-          working_hours_start: data.working_hours_start || '09:00',
-          working_hours_end: data.working_hours_end || '18:00',
-          working_days: data.working_days || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
-        });
-        setLogoPreview(data.logo_url || '');
-      }
-    } catch (error) {
-      console.error('Error fetching agency settings:', error);
+      setAgencySettings({
+        id: agencySettingsData.id,
+        agency_id: agencySettingsData.agency_id,
+        agency_name: agencySettingsData.agency_name || '',
+        logo_url: agencySettingsData.logo_url || '',
+        domain: agencySettingsData.domain || '',
+        default_currency: agencySettingsData.default_currency || 'IN',
+        primary_color: agencySettingsData.primary_color || '#3b82f6',
+        secondary_color: agencySettingsData.secondary_color || '#1e40af',
+        timezone: agencySettingsData.timezone || 'Asia/Kolkata',
+        date_format: agencySettingsData.date_format || 'DD/MM/YYYY',
+        fiscal_year_start: agencySettingsData.fiscal_year_start || '04-01',
+        working_hours_start: agencySettingsData.working_hours_start || '09:00',
+        working_hours_end: agencySettingsData.working_hours_end || '18:00',
+        working_days: (workingDays as string[]) || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
+      });
+      setLogoPreview(agencySettingsData.logo_url || '');
     }
   };
 
@@ -245,28 +250,20 @@ const Settings = () => {
     if (!user?.id) return;
     
     try {
-      const { data, error } = await db
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
+      // Fetch profile using PostgreSQL service
+      const profileData = await selectOne('profiles', { user_id: user.id });
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile settings:', error);
-        return;
-      }
-
-      if (data) {
+      if (profileData) {
         setProfileSettings({
-          id: data.id,
-          user_id: data.user_id,
-          full_name: data.full_name || '',
-          phone: data.phone || '',
-          department: data.department || '',
-          position: data.position || '',
-          avatar_url: data.avatar_url || '',
+          id: profileData.id,
+          user_id: profileData.user_id,
+          full_name: profileData.full_name || '',
+          phone: profileData.phone || '',
+          department: profileData.department || '',
+          position: profileData.position || '',
+          avatar_url: profileData.avatar_url || '',
         });
-        setAvatarPreview(data.avatar_url || '');
+        setAvatarPreview(profileData.avatar_url || '');
       } else if (profile) {
         // Use profile from auth context if available
         setProfileSettings({
@@ -323,7 +320,7 @@ const Settings = () => {
   };
 
   // Handle logo file change
-  const handleLogoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
@@ -335,12 +332,21 @@ const Settings = () => {
         return;
       }
 
-      setLogoFile(file);
-      const reader = new FileReader();
-      reader.onload = () => {
-        setLogoPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        setLogoFile(file);
+        // Compress the image more aggressively to reduce size (max 600x600, 70% quality)
+        // This ensures even large images are compressed to a reasonable size
+        const compressedDataUrl = await compressImage(file, 600, 600, 0.7);
+        const sizeMB = (compressedDataUrl.length / (1024 * 1024)).toFixed(2);
+        console.log(`[Settings] Compressed logo: ${sizeMB}MB`);
+        setLogoPreview(compressedDataUrl);
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to process logo image",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -393,17 +399,8 @@ const Settings = () => {
 
     setLoadingAgency(true);
     try {
-      let logoUrl = agencySettings.logo_url;
-
-      // If a new logo file is selected, use the base64 preview
-      // In production, you would upload to storage and get a URL
-      if (logoFile) {
-        logoUrl = logoPreview;
-      }
-
-      const settingsToSave = {
+      const settingsToSave: any = {
         agency_name: agencySettings.agency_name,
-        logo_url: logoUrl,
         domain: agencySettings.domain,
         default_currency: agencySettings.default_currency,
         currency: agencySettings.default_currency, // Also save as currency for backward compatibility
@@ -417,60 +414,51 @@ const Settings = () => {
         working_days: agencySettings.working_days,
       };
 
-      // Try to update existing settings first
-      const { data: existingData, error: fetchError } = await db
-        .from('agency_settings')
-        .select('id')
-        .limit(1)
-        .single();
-
-      console.log('[Settings] Existing agency settings:', existingData, 'Error:', fetchError);
-
-      if (existingData && existingData.id) {
-        console.log('[Settings] Updating existing settings with ID:', existingData.id);
-        const { data: updateData, error: updateError } = await db
-          .from('agency_settings')
-          .update(settingsToSave)
-          .eq('id', existingData.id);
-
-        if (updateError) {
-          console.error('[Settings] Update error:', updateError);
-          throw updateError;
-        }
-        console.log('[Settings] Update successful:', updateData);
-      } else {
-        // Insert new settings
-        console.log('[Settings] No existing settings found, inserting new record');
-        const { data: insertData, error: insertError } = await db
-          .from('agency_settings')
-          .insert({
-            ...settingsToSave,
-            agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000',
+      // Only include logo_url if a new logo file was selected
+      // This avoids sending large base64 strings if the logo hasn't changed
+      if (logoFile && logoPreview) {
+        // Log the size for debugging
+        const logoSize = logoPreview.length;
+        const logoSizeMB = (logoSize / (1024 * 1024)).toFixed(2);
+        console.log(`[Settings] Logo size: ${logoSizeMB}MB (${logoSize} bytes)`);
+        
+        // Warn if still too large (shouldn't happen with compression, but just in case)
+        if (logoSize > 5 * 1024 * 1024) {
+          toast({
+            title: "Warning",
+            description: `Logo is ${logoSizeMB}MB. Consider using a smaller image.`,
+            variant: "destructive",
           });
-
-        if (insertError) {
-          console.error('[Settings] Insert error:', insertError);
-          throw insertError;
         }
-        console.log('[Settings] Insert successful:', insertData);
+        
+        settingsToSave.logo_url = logoPreview;
+      } else if (!agencySettings.logo_url && agencySettingsData?.logo_url) {
+        // If logo was removed, send empty string
+        settingsToSave.logo_url = '';
       }
+      // If logo hasn't changed, don't include it in the update
 
-      setAgencySettings(prev => ({ ...prev, logo_url: logoUrl }));
-      setLogoFile(null);
+      // Use the hook's saveSettings function
+      const result = await saveAgencySettingsData(settingsToSave);
 
-      // Apply theme colors to CSS variables
-      document.documentElement.style.setProperty('--primary', agencySettings.primary_color);
-      document.documentElement.style.setProperty('--primary-dark', agencySettings.secondary_color);
+      if (result.success) {
+        if (logoFile && logoPreview) {
+          setAgencySettings(prev => ({ ...prev, logo_url: logoPreview }));
+        }
+        setLogoFile(null);
 
-      toast({
-        title: "Success",
-        description: "Agency settings updated successfully",
-      });
-    } catch (error) {
+        toast({
+          title: "Success",
+          description: "Agency settings updated successfully",
+        });
+      } else {
+        throw new Error(result.error || 'Failed to save settings');
+      }
+    } catch (error: any) {
       console.error('Error saving agency settings:', error);
       toast({
         title: "Error",
-        description: "Failed to update agency settings",
+        description: error.message || "Failed to update agency settings",
         variant: "destructive",
       });
     } finally {
@@ -493,9 +481,30 @@ const Settings = () => {
     try {
       let avatarUrl = profileSettings.avatar_url;
 
-      // If a new avatar file is selected, use the base64 preview
+      // If a new avatar file is selected, upload it to file storage
       if (avatarFile) {
-        avatarUrl = avatarPreview;
+        try {
+          // Upload avatar to file storage
+          const fileExt = avatarFile.name.split('.').pop() || 'jpg';
+          const fileName = `avatars/${user.id}_${Date.now()}.${fileExt}`;
+          
+          const { data: uploadData, error: uploadError } = await db.storage
+            .from('avatars')
+            .upload(fileName, avatarFile);
+
+          if (uploadError) throw uploadError;
+
+          // Get public URL for the uploaded file
+          const { data: urlData } = db.storage
+            .from('avatars')
+            .getPublicUrl(fileName);
+
+          avatarUrl = urlData?.publicUrl || avatarPreview; // Fallback to base64 if URL generation fails
+        } catch (uploadError: any) {
+          console.error('Error uploading avatar:', uploadError);
+          // Fallback to base64 if upload fails
+          avatarUrl = avatarPreview;
+        }
       }
 
       const profileToSave = {
@@ -506,30 +515,18 @@ const Settings = () => {
         avatar_url: avatarUrl,
       };
 
-      // Check if profile exists
-      const { data: existingProfile } = await db
-        .from('profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
+      // Check if profile exists and update/insert using PostgreSQL service
+      const existingProfile = await selectOne('profiles', { user_id: user.id });
 
       if (existingProfile) {
-        const { error } = await db
-          .from('profiles')
-          .update(profileToSave)
-          .eq('user_id', user.id);
-
-        if (error) throw error;
+        await updateRecord('profiles', profileToSave, { user_id: user.id }, user.id);
       } else {
-        const { error } = await db
-          .from('profiles')
-          .insert({
-            ...profileToSave,
-            user_id: user.id,
-            agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000',
-          });
-
-        if (error) throw error;
+        await insertRecord('profiles', {
+          ...profileToSave,
+          user_id: user.id,
+          agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000',
+          is_active: true,
+        }, user.id);
       }
 
       setProfileSettings(prev => ({ ...prev, avatar_url: avatarUrl }));
@@ -539,11 +536,11 @@ const Settings = () => {
         title: "Success",
         description: "Profile settings updated successfully",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving profile settings:', error);
       toast({
         title: "Error",
-        description: "Failed to update profile settings",
+        description: error.message || "Failed to update profile settings",
         variant: "destructive",
       });
     } finally {
@@ -720,7 +717,7 @@ const Settings = () => {
     }));
   };
 
-  if (initialLoading) {
+  if (initialLoading || loadingAgencyData) {
     return (
       <div className="flex items-center justify-center h-screen">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, FileCheck, Send, DollarSign, Calendar, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, FileCheck, Send, DollarSign, Calendar, Edit, Trash2, Eye } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,19 +9,69 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/database';
 import QuotationFormDialog from '@/components/QuotationFormDialog';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
+import QuotationTemplateDialog from '@/components/QuotationTemplateDialog';
+import QuotationPreviewDialog from '@/components/QuotationPreviewDialog';
+
+interface Quotation {
+  id: string;
+  quote_number: string;
+  client_id: string;
+  template_id?: string | null;
+  title: string;
+  description?: string;
+  status: string;
+  valid_until: string;
+  subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  total_amount: number;
+  terms_conditions?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  client?: {
+    id: string;
+    name: string;
+    company_name?: string;
+  };
+  line_items?: Array<{
+    id: string;
+    item_name: string;
+    description?: string;
+    quantity: number;
+    unit_price: number;
+    discount_percentage: number;
+    line_total: number;
+  }>;
+}
+
+interface QuotationTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  template_content?: any;
+  is_active: boolean;
+  last_used?: string;
+  created_at: string;
+}
 
 const Quotations = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
-  const [quotations, setQuotations] = useState<any[]>([]);
+  const [quotations, setQuotations] = useState<Quotation[]>([]);
+  const [templates, setTemplates] = useState<QuotationTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [quotationFormOpen, setQuotationFormOpen] = useState(false);
-  const [selectedQuotation, setSelectedQuotation] = useState<any>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [quotationToDelete, setQuotationToDelete] = useState<any>(null);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<QuotationTemplate | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [previewQuotationId, setPreviewQuotationId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchQuotations();
+    fetchTemplates();
   }, []);
 
   const fetchQuotations = async () => {
@@ -33,16 +83,74 @@ const Quotations = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setQuotations(data || []);
-    } catch (error) {
+
+      // Fetch client names
+      const clientIds = [...new Set((data || []).map((q: any) => q.client_id).filter(Boolean))];
+      let clientsMap = new Map();
+
+      if (clientIds.length > 0) {
+        const { data: clientsData, error: clientsError } = await db
+          .from('clients')
+          .select('id, name, company_name')
+          .in('id', clientIds);
+
+        if (!clientsError && clientsData) {
+          clientsMap = new Map(clientsData.map((c: any) => [c.id, c]));
+        }
+      }
+
+      // Fetch line items for all quotations
+      const quotationIds = (data || []).map((q: any) => q.id);
+      let lineItemsMap = new Map();
+
+      if (quotationIds.length > 0) {
+        const { data: lineItemsData, error: lineItemsError } = await db
+          .from('quotation_line_items')
+          .select('*')
+          .in('quotation_id', quotationIds)
+          .order('sort_order', { ascending: true });
+
+        if (!lineItemsError && lineItemsData) {
+          lineItemsData.forEach((item: any) => {
+            if (!lineItemsMap.has(item.quotation_id)) {
+              lineItemsMap.set(item.quotation_id, []);
+            }
+            lineItemsMap.get(item.quotation_id).push(item);
+          });
+        }
+      }
+
+      // Combine data
+      const quotationsWithDetails = (data || []).map((quote: any) => ({
+        ...quote,
+        client: clientsMap.get(quote.client_id),
+        line_items: lineItemsMap.get(quote.id) || [],
+      }));
+
+      setQuotations(quotationsWithDetails);
+    } catch (error: any) {
       console.error('Error fetching quotations:', error);
       toast({
         title: 'Error',
-        description: 'Failed to fetch quotations',
+        description: error.message || 'Failed to fetch quotations',
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTemplates = async () => {
+    try {
+      const { data, error } = await db
+        .from('quotation_templates')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setTemplates(data || []);
+    } catch (error: any) {
+      console.error('Error fetching templates:', error);
     }
   };
 
@@ -51,14 +159,139 @@ const Quotations = () => {
     setQuotationFormOpen(true);
   };
 
-  const handleEditQuotation = (quotation: any) => {
+  const handleEditQuotation = (quotation: Quotation) => {
     setSelectedQuotation(quotation);
     setQuotationFormOpen(true);
   };
 
-  const handleDeleteQuotation = (quotation: any) => {
-    setQuotationToDelete(quotation);
-    setDeleteDialogOpen(true);
+  const handlePreviewQuotation = (quotation: Quotation) => {
+    setPreviewQuotationId(quotation.id);
+    setPreviewDialogOpen(true);
+  };
+
+  const handleDeleteQuotation = async (quotation: Quotation) => {
+    if (!confirm(`Are you sure you want to delete quotation "${quotation.title}"? This will also delete all associated line items. This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Delete line items first
+      const { error: lineItemsError } = await db
+        .from('quotation_line_items')
+        .delete()
+        .eq('quotation_id', quotation.id);
+
+      if (lineItemsError) throw lineItemsError;
+
+      // Delete quotation
+      const { error: quotationError } = await db
+        .from('quotations')
+        .delete()
+        .eq('id', quotation.id);
+
+      if (quotationError) throw quotationError;
+
+      toast({
+        title: 'Success',
+        description: 'Quotation deleted successfully',
+      });
+
+      fetchQuotations();
+    } catch (error: any) {
+      console.error('Error deleting quotation:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete quotation',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSendQuotation = async (quotation: Quotation) => {
+    try {
+      const { error } = await db
+        .from('quotations')
+        .update({ 
+          status: 'sent',
+        })
+        .eq('id', quotation.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Quotation sent successfully',
+      });
+
+      fetchQuotations();
+    } catch (error: any) {
+      console.error('Error sending quotation:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to send quotation',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUseTemplate = async (template: QuotationTemplate) => {
+    setSelectedQuotation(null);
+    setQuotationFormOpen(true);
+    
+    // Update template last_used if column exists
+    try {
+      await db
+        .from('quotation_templates')
+        .update({ 
+          last_used: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', template.id);
+      
+      fetchTemplates();
+    } catch (error) {
+      // Column might not exist, ignore error
+      console.error('Error updating template:', error);
+    }
+  };
+
+  const handleNewTemplate = () => {
+    setSelectedTemplate(null);
+    setTemplateDialogOpen(true);
+  };
+
+  const handleEditTemplate = (template: QuotationTemplate) => {
+    setSelectedTemplate(template);
+    setTemplateDialogOpen(true);
+  };
+
+  const handleDeleteTemplate = async (template: QuotationTemplate) => {
+    if (!confirm(`Are you sure you want to delete template "${template.name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await db
+        .from('quotation_templates')
+        .delete()
+        .eq('id', template.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Template deleted successfully',
+      });
+
+      fetchTemplates();
+    } catch (error: any) {
+      console.error('Error deleting template:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete template',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleQuotationSaved = () => {
@@ -67,6 +300,10 @@ const Quotations = () => {
 
   const handleQuotationDeleted = () => {
     fetchQuotations();
+  };
+
+  const handleTemplateSaved = () => {
+    fetchTemplates();
   };
 
   // Calculate stats from real data
@@ -88,32 +325,17 @@ const Quotations = () => {
     }
   };
 
-  const filteredQuotations = quotations.filter(quote => 
-    quote.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    quote.quote_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    quote.client_id?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const templates = [
-    {
-      id: '1',
-      name: 'Standard Construction Quote',
-      description: 'General construction work quotation template',
-      lastUsed: '2024-01-15',
-    },
-    {
-      id: '2',
-      name: 'Renovation Estimate',
-      description: 'Template for renovation and refurbishment projects',
-      lastUsed: '2024-01-12',
-    },
-    {
-      id: '3',
-      name: 'Consulting Services',
-      description: 'Professional consulting services quotation',
-      lastUsed: '2024-01-08',
-    },
-  ];
+  const filteredQuotations = quotations.filter(quote => {
+    const matchesSearch = 
+      quote.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      quote.quote_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      quote.client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      quote.client?.company_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' || quote.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="container mx-auto p-4 lg:p-6 space-y-6">
@@ -187,10 +409,18 @@ const Quotations = () => {
             className="pl-10"
           />
         </div>
-        <Button variant="outline" className="w-full sm:w-auto">
-          <Filter className="h-4 w-4 mr-2" />
-          Filter
-        </Button>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-3 py-2 border rounded-md"
+        >
+          <option value="all">All Status</option>
+          <option value="draft">Draft</option>
+          <option value="sent">Sent</option>
+          <option value="accepted">Accepted</option>
+          <option value="rejected">Rejected</option>
+          <option value="expired">Expired</option>
+        </select>
       </div>
 
       {/* Quotations Content */}
@@ -217,7 +447,7 @@ const Quotations = () => {
                         <div>
                           <CardTitle className="text-lg">{quote.title}</CardTitle>
                           <p className="text-sm text-muted-foreground">
-                            {quote.quote_number} • {quote.client_id || 'No client'}
+                            {quote.quote_number} • {quote.client?.company_name || quote.client?.name || 'No client'}
                           </p>
                         </div>
                         <Badge className={getStatusColor(quote.status)}>
@@ -226,7 +456,7 @@ const Quotations = () => {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                         <div>
                           <p className="text-sm text-muted-foreground">Total Amount</p>
                           <p className="font-semibold">₹{(quote.total_amount || 0).toLocaleString()}</p>
@@ -246,6 +476,23 @@ const Quotations = () => {
                           <p className="font-semibold">{new Date(quote.created_at).toLocaleDateString()}</p>
                         </div>
                       </div>
+                      
+                      {quote.line_items && quote.line_items.length > 0 && (
+                        <div className="mb-4 p-3 bg-muted rounded-lg">
+                          <p className="text-sm font-medium mb-2">Line Items ({quote.line_items.length})</p>
+                          <div className="space-y-1">
+                            {quote.line_items.slice(0, 3).map((item, idx) => (
+                              <p key={idx} className="text-xs text-muted-foreground">
+                                {item.item_name} - Qty: {item.quantity} × ₹{item.unit_price.toLocaleString()}
+                              </p>
+                            ))}
+                            {quote.line_items.length > 3 && (
+                              <p className="text-xs text-muted-foreground">+{quote.line_items.length - 3} more items</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="mt-4 flex flex-col space-y-2 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
                         <div className="flex flex-col space-y-2 sm:flex-row sm:gap-2 sm:space-y-0">
                           <Button variant="outline" size="sm" onClick={() => handleEditQuotation(quote)} className="w-full sm:w-auto">
@@ -253,10 +500,26 @@ const Quotations = () => {
                             Edit
                           </Button>
                           {quote.status === 'draft' && (
-                            <Button size="sm" className="w-full sm:w-auto">Send Quote</Button>
+                            <Button size="sm" onClick={() => handleSendQuotation(quote)} className="w-full sm:w-auto">
+                              <Send className="h-4 w-4 mr-1" />
+                              Send Quote
+                            </Button>
                           )}
-                          <Button variant="outline" size="sm" className="w-full sm:w-auto">Download PDF</Button>
-                          <Button variant="outline" size="sm" onClick={() => handleDeleteQuotation(quote)} className="w-full sm:w-auto">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handlePreviewQuotation(quote)} 
+                            className="w-full sm:w-auto"
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            Preview
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleDeleteQuotation(quote)} 
+                            className="w-full sm:w-auto text-destructive hover:text-destructive"
+                          >
                             <Trash2 className="h-4 w-4 mr-1" />
                             Delete
                           </Button>
@@ -273,52 +536,90 @@ const Quotations = () => {
         <TabsContent value="templates" className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">Quotation Templates</h3>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleNewTemplate}>
               <Plus className="h-4 w-4 mr-2" />
               New Template
             </Button>
           </div>
           
           <div className="grid gap-4">
-            {templates.map((template) => (
-              <Card key={template.id} className="hover:shadow-md transition-shadow">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-lg">{template.name}</CardTitle>
-                  <p className="text-sm text-muted-foreground">{template.description}</p>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">
-                      Last used: {new Date(template.lastUsed).toLocaleDateString()}
-                    </p>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm">Edit</Button>
-                      <Button size="sm">Use Template</Button>
+            {templates.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No templates found. Create your first template to get started.
+              </div>
+            ) : (
+              templates.map((template) => (
+                <Card key={template.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">{template.name}</CardTitle>
+                    <p className="text-sm text-muted-foreground">{template.description || 'No description'}</p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          {template.last_used 
+                            ? `Last used: ${new Date(template.last_used).toLocaleDateString()}`
+                            : 'Never used'}
+                        </p>
+                        <Badge variant={template.is_active ? 'default' : 'secondary'} className="mt-2">
+                          {template.is_active ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleEditTemplate(template)}>
+                          Edit
+                        </Button>
+                        <Button size="sm" onClick={() => handleUseTemplate(template)}>
+                          Use Template
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleDeleteTemplate(template)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))
+            )}
           </div>
         </TabsContent>
       </Tabs>
 
       <QuotationFormDialog
         isOpen={quotationFormOpen}
-        onClose={() => setQuotationFormOpen(false)}
+        onClose={() => {
+          setQuotationFormOpen(false);
+          setSelectedQuotation(null);
+        }}
         quotation={selectedQuotation}
         onQuotationSaved={handleQuotationSaved}
       />
 
-      <DeleteConfirmDialog
-        isOpen={deleteDialogOpen}
-        onClose={() => setDeleteDialogOpen(false)}
-        onDeleted={handleQuotationDeleted}
-        itemType="Quotation"
-        itemName={quotationToDelete?.title || ''}
-        itemId={quotationToDelete?.id || ''}
-        tableName="quotations"
+      <QuotationTemplateDialog
+        isOpen={templateDialogOpen}
+        onClose={() => {
+          setTemplateDialogOpen(false);
+          setSelectedTemplate(null);
+        }}
+        template={selectedTemplate}
+        onTemplateSaved={handleTemplateSaved}
       />
+
+      <QuotationPreviewDialog
+        isOpen={previewDialogOpen}
+        onClose={() => {
+          setPreviewDialogOpen(false);
+          setPreviewQuotationId(null);
+        }}
+        quotationId={previewQuotationId}
+      />
+
     </div>
   );
 };

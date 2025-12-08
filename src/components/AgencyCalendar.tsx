@@ -5,9 +5,11 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/database';
 import { format, isSameDay, startOfMonth, endOfMonth } from 'date-fns';
 import { CalendarEventDialog } from './CalendarEventDialog';
+import { EventDetailsDialog } from './EventDetailsDialog';
 import { cn } from '@/lib/utils';
 
 interface CalendarEvent {
@@ -18,6 +20,13 @@ interface CalendarEvent {
   description?: string;
   color?: string;
   employee_name?: string;
+  // Additional fields for company events
+  location?: string;
+  event_type?: string;
+  all_day?: boolean;
+  start_date?: Date;
+  end_date?: Date;
+  is_company_event?: boolean; // Flag to identify if this is a company event that can be edited
 }
 
 interface AgencyCalendarProps {
@@ -26,10 +35,14 @@ interface AgencyCalendarProps {
 
 export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
   const { userRole } = useAuth();
+  const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEventDialog, setShowEventDialog] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [showEventDetails, setShowEventDetails] = useState(false);
+  const [eventToEdit, setEventToEdit] = useState<CalendarEvent | null>(null);
 
   const canManageEvents = userRole === 'admin' || userRole === 'hr' || userRole === 'super_admin';
 
@@ -60,7 +73,13 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
           date: new Date(event.start_date),
           type: 'event' as const,
           description: event.description,
-          color: event.color
+          color: event.color,
+          location: event.location,
+          event_type: event.event_type,
+          all_day: event.all_day,
+          start_date: new Date(event.start_date),
+          end_date: event.end_date ? new Date(event.end_date) : undefined,
+          is_company_event: true
         })));
       }
 
@@ -275,72 +294,122 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
   return (
     <div className="space-y-4">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Agency Calendar</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between pb-4 sm:pb-6">
+          <CardTitle className="text-xl sm:text-2xl font-bold">Agency Calendar</CardTitle>
           {canManageEvents && (
-            <Button onClick={() => setShowEventDialog(true)} size="sm">
+            <Button 
+              onClick={() => setShowEventDialog(true)} 
+              size="sm"
+              className="text-xs sm:text-sm px-3 sm:px-4 h-8 sm:h-9"
+            >
               Add Event
             </Button>
           )}
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             <div className="lg:col-span-2">
-              <CalendarComponent
-                mode="single"
-                selected={selectedDate}
-                onSelect={(date) => date && setSelectedDate(date)}
-                className="rounded-md border"
-                modifiers={{
-                  hasEvents: (date) => getEventsForDate(date).length > 0
-                }}
-                modifiersClassNames={{
-                  hasEvents: 'bg-primary/10 font-bold'
-                }}
-              />
+              <div className="w-full overflow-x-auto -mx-2 sm:mx-0 px-2 sm:px-0">
+                <CalendarComponent
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => date && setSelectedDate(date)}
+                  className="rounded-lg border shadow-sm bg-card w-full"
+                  modifiers={{
+                    hasEvents: (date) => {
+                      const dateEvents = getEventsForDate(date);
+                      return dateEvents.length > 0;
+                    },
+                    multipleEvents: (date) => {
+                      const dateEvents = getEventsForDate(date);
+                      return dateEvents.length > 1;
+                    }
+                  }}
+                  modifiersClassNames={{
+                    hasEvents: 'relative after:absolute after:bottom-1 sm:after:bottom-1.5 after:left-1/2 after:-translate-x-1/2 after:w-1.5 after:h-1.5 sm:after:w-2 sm:after:h-2 after:rounded-full after:bg-primary after:shadow-sm',
+                    multipleEvents: 'after:w-2 after:h-2 sm:after:w-2.5 sm:after:h-2.5'
+                  }}
+                />
+              </div>
             </div>
             
             <div className="space-y-4">
-              <div>
-                <h3 className="font-medium mb-2">
-                  {format(selectedDate, 'EEEE, MMMM d, yyyy')}
-                </h3>
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {selectedDateEvents.map((event) => (
-                    <div
-                      key={event.id}
-                      className={cn(
-                        "p-3 rounded-lg border border-border",
-                        "hover:bg-accent/50 transition-colors"
-                      )}
-                    >
-                      <div className="flex items-start space-x-2">
-                        <div className="flex-shrink-0 mt-1">
-                          {getEventIcon(event.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center space-x-2">
-                            <h4 className="text-sm font-medium truncate">
-                              {event.title}
-                            </h4>
-                            <Badge variant="outline" className="text-xs">
-                              {getEventTypeLabel(event.type)}
-                            </Badge>
+              <div className="sticky top-4">
+                <div className="mb-4 pb-3 border-b">
+                  <h3 className="text-lg sm:text-xl font-semibold text-foreground">
+                    {format(selectedDate, 'EEEE')}
+                  </h3>
+                  <p className="text-sm sm:text-base text-muted-foreground mt-1">
+                    {format(selectedDate, 'MMMM d, yyyy')}
+                  </p>
+                </div>
+                <div className="space-y-2 sm:space-y-3 max-h-[400px] sm:max-h-[500px] overflow-y-auto pr-2 scrollbar-thin">
+                  {selectedDateEvents.length > 0 ? (
+                    selectedDateEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        onClick={() => {
+                          setSelectedEvent(event);
+                          setShowEventDetails(true);
+                        }}
+                        className={cn(
+                          "p-3 sm:p-4 rounded-lg border-2 transition-all duration-200",
+                          "hover:shadow-md hover:scale-[1.02] cursor-pointer active:scale-[0.98]",
+                          "bg-card focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                        )}
+                        style={{
+                          borderLeftColor: event.color || '#3b82f6',
+                          borderLeftWidth: '4px'
+                        }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedEvent(event);
+                            setShowEventDetails(true);
+                          }
+                        }}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 mt-0.5 p-1.5 rounded-full bg-primary/10" style={{ color: event.color || '#3b82f6' }}>
+                            {getEventIcon(event.type)}
                           </div>
-                          {event.description && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {event.description}
-                            </p>
-                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <h4 className="text-sm sm:text-base font-semibold text-foreground line-clamp-2">
+                                {event.title}
+                              </h4>
+                              <Badge 
+                                variant="outline" 
+                                className="text-xs flex-shrink-0"
+                                style={{ 
+                                  borderColor: event.color || '#3b82f6',
+                                  color: event.color || '#3b82f6'
+                                }}
+                              >
+                                {getEventTypeLabel(event.type)}
+                              </Badge>
+                            </div>
+                            {event.description && (
+                              <p className="text-xs sm:text-sm text-muted-foreground mt-2 line-clamp-2">
+                                {event.description}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                  {selectedDateEvents.length === 0 && (
-                    <div className="text-center py-4">
-                      <Calendar className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">
+                    ))
+                  ) : (
+                    <div className="text-center py-8 sm:py-12">
+                      <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-muted/50 mb-4">
+                        <Calendar className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm sm:text-base text-muted-foreground font-medium">
                         No events on this date
+                      </p>
+                      <p className="text-xs sm:text-sm text-muted-foreground/70 mt-1">
+                        Select another date to view events
                       </p>
                     </div>
                   )}
@@ -354,10 +423,59 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
       {showEventDialog && (
         <CalendarEventDialog
           open={showEventDialog}
-          onOpenChange={setShowEventDialog}
+          onOpenChange={(open) => {
+            setShowEventDialog(open);
+            if (!open) setEventToEdit(null);
+          }}
           onEventCreated={fetchCalendarData}
+          editEvent={eventToEdit ? {
+            id: eventToEdit.id,
+            title: eventToEdit.title,
+            description: eventToEdit.description || '',
+            event_type: eventToEdit.event_type || 'meeting',
+            start_date: eventToEdit.start_date || eventToEdit.date,
+            end_date: eventToEdit.end_date || eventToEdit.date,
+            all_day: eventToEdit.all_day || false,
+            location: eventToEdit.location || '',
+            color: eventToEdit.color || '#3b82f6'
+          } : null}
         />
       )}
+
+      <EventDetailsDialog
+        open={showEventDetails}
+        onOpenChange={setShowEventDetails}
+        event={selectedEvent}
+        canEdit={canManageEvents}
+        onEdit={(event) => {
+          setEventToEdit(event);
+          setShowEventDialog(true);
+        }}
+        onDelete={async (eventId) => {
+          try {
+            const { error } = await db
+              .from('company_events')
+              .delete()
+              .eq('id', eventId);
+
+            if (error) throw error;
+
+            toast({
+              title: 'Success',
+              description: 'Event deleted successfully'
+            });
+
+            fetchCalendarData();
+          } catch (error: any) {
+            console.error('Error deleting event:', error);
+            toast({
+              title: 'Error',
+              description: error.message || 'Failed to delete event',
+              variant: 'destructive'
+            });
+          }
+        }}
+      />
     </div>
   );
 }

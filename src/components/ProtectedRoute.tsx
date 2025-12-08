@@ -10,7 +10,7 @@ type AppRole = 'super_admin' | 'ceo' | 'cto' | 'cfo' | 'coo' | 'admin' | 'operat
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredRole?: AppRole;
+  requiredRole?: AppRole | AppRole[];
 }
 
 const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
@@ -28,15 +28,30 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     return <Navigate to="/auth" replace />;
   }
 
-  if (requiredRole && userRole && !hasRoleOrHigher(userRole, requiredRole)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-destructive mb-2">Access Denied</h1>
-          <p className="text-muted-foreground">You don't have permission to access this page.</p>
+  if (requiredRole && userRole) {
+    let hasAccess = false;
+    
+    // Handle array of roles
+    if (Array.isArray(requiredRole)) {
+      // User has access if their role is in the array OR if they have higher authority than any role in the array
+      hasAccess = requiredRole.includes(userRole) || 
+                  requiredRole.some(role => hasRoleOrHigher(userRole, role));
+    } 
+    // Handle single role
+    else {
+      hasAccess = hasRoleOrHigher(userRole, requiredRole);
+    }
+    
+    if (!hasAccess) {
+      return (
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-destructive mb-2">Access Denied</h1>
+            <p className="text-muted-foreground">You don't have permission to access this page.</p>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
   }
 
   return <>{children}</>;

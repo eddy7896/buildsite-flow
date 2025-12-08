@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/database';
+import { insertRecord, updateRecord, selectRecords } from '@/services/api/postgresql-service';
+import { useAuth } from '@/hooks/useAuth';
 
 interface Invoice {
   id?: string;
@@ -32,7 +33,10 @@ interface InvoiceFormDialogProps {
 
 const InvoiceFormDialog: React.FC<InvoiceFormDialogProps> = ({ isOpen, onClose, invoice, onInvoiceSaved }) => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [clients, setClients] = useState<any[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(true);
   const [formData, setFormData] = useState<Invoice>({
     client_id: invoice?.client_id || '',
     title: invoice?.title || '',
@@ -46,36 +50,103 @@ const InvoiceFormDialog: React.FC<InvoiceFormDialogProps> = ({ isOpen, onClose, 
     notes: invoice?.notes || '',
   });
 
+  useEffect(() => {
+    if (isOpen) {
+      fetchClients();
+      if (invoice) {
+        setFormData({
+          client_id: invoice.client_id || '',
+          title: invoice.title || '',
+          description: invoice.description || '',
+          status: invoice.status || 'draft',
+          issue_date: invoice.issue_date || new Date().toISOString().split('T')[0],
+          due_date: invoice.due_date || '',
+          subtotal: invoice.subtotal || 0,
+          tax_rate: invoice.tax_rate || 18,
+          discount: invoice.discount || 0,
+          notes: invoice.notes || '',
+        });
+      } else {
+        setFormData({
+          client_id: '',
+          title: '',
+          description: '',
+          status: 'draft',
+          issue_date: new Date().toISOString().split('T')[0],
+          due_date: '',
+          subtotal: 0,
+          tax_rate: 18,
+          discount: 0,
+          notes: '',
+        });
+      }
+    }
+  }, [isOpen, invoice]);
+
+  const fetchClients = async () => {
+    try {
+      setClientsLoading(true);
+      const clientsData = await selectRecords('clients', {
+        where: { status: 'active' },
+        orderBy: 'name ASC',
+      });
+      // Filter out any invalid clients and ensure all have required fields
+      const validClients = (clientsData || []).filter(
+        (client: any) => client && client.id && typeof client.id === 'string' && client.id.trim() !== ''
+      );
+      setClients(validClients);
+    } catch (error) {
+      console.error('Error fetching clients:', error);
+      setClients([]); // Set empty array on error
+    } finally {
+      setClientsLoading(false);
+    }
+  };
+
+  const calculateTotal = () => {
+    const subtotal = parseFloat(String(formData.subtotal || 0));
+    const discount = parseFloat(String(formData.discount || 0));
+    const taxRate = parseFloat(String(formData.tax_rate || 0));
+    const afterDiscount = Math.max(0, subtotal - discount);
+    const taxAmount = (afterDiscount * taxRate) / 100;
+    return afterDiscount + taxAmount;
+  };
+
+  // Update total when form data changes
+  useEffect(() => {
+    if (isOpen) {
+      const total = calculateTotal();
+      // This will be saved when form is submitted
+    }
+  }, [formData.subtotal, formData.discount, formData.tax_rate, isOpen]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const cleanedData = {
+      const cleanedData: any = {
         ...formData,
         client_id: formData.client_id || null,
+        subtotal: parseFloat(String(formData.subtotal || 0)),
+        tax_rate: parseFloat(String(formData.tax_rate || 0)),
+        discount: parseFloat(String(formData.discount || 0)) || 0,
       };
 
+      // Remove total_amount for updates - it's a generated column
       if (invoice?.id) {
-        const { error } = await supabase
-          .from('invoices')
-          .update(cleanedData)
-          .eq('id', invoice.id);
-
-        if (error) throw error;
-
+        // Exclude total_amount from update - database will calculate it automatically
+        const { total_amount, ...updateData } = cleanedData;
+        await updateRecord('invoices', updateData, { id: invoice.id }, user?.id);
         toast({
           title: 'Success',
           description: 'Invoice updated successfully',
         });
       } else {
+        // For inserts, we can include total_amount if needed, but database will calculate it anyway
         const invoiceNumber = `INV-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
-        const { error } = await supabase
-          .from('invoices')
-          .insert([{ ...cleanedData, invoice_number: invoiceNumber }]);
-
-        if (error) throw error;
-
+        // Don't include total_amount - let database calculate it from the generated column formula
+        await insertRecord('invoices', { ...cleanedData, invoice_number: invoiceNumber }, user?.id);
         toast({
           title: 'Success',
           description: 'Invoice created successfully',
@@ -146,13 +217,37 @@ const InvoiceFormDialog: React.FC<InvoiceFormDialogProps> = ({ isOpen, onClose, 
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="client_id">Client ID</Label>
-              <Input
-                id="client_id"
-                value={formData.client_id}
-                onChange={(e) => setFormData(prev => ({ ...prev, client_id: e.target.value }))}
-                placeholder="Enter client ID"
-              />
+              <Label htmlFor="client_id">Client</Label>
+              <Select 
+                value={formData.client_id || undefined} 
+                onValueChange={(value) => setFormData(prev => ({ ...prev, client_id: value === 'none' ? '' : value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select client (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {!clientsLoading && clients.length > 0 ? (
+                    <>
+                      <SelectItem value="none">No Client</SelectItem>
+                      {clients.map((client) => {
+                        if (!client || !client.id) return null;
+                        const clientId = String(client.id);
+                        const clientName = client.name || client.company_name || 'Unnamed Client';
+                        const companyName = client.company_name && client.name ? `(${client.company_name})` : '';
+                        return (
+                          <SelectItem key={clientId} value={clientId}>
+                            {clientName} {companyName}
+                          </SelectItem>
+                        );
+                      })}
+                    </>
+                  ) : clientsLoading ? (
+                    <SelectItem value="loading" disabled>Loading clients...</SelectItem>
+                  ) : (
+                    <SelectItem value="no-clients" disabled>No clients available</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="due_date">Due Date</Label>
@@ -167,21 +262,25 @@ const InvoiceFormDialog: React.FC<InvoiceFormDialogProps> = ({ isOpen, onClose, 
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="subtotal">Subtotal (₹)</Label>
+              <Label htmlFor="subtotal">Subtotal (₹) *</Label>
               <Input
                 id="subtotal"
                 type="number"
+                step="0.01"
                 value={formData.subtotal}
-                onChange={(e) => setFormData(prev => ({ ...prev, subtotal: Number(e.target.value) }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, subtotal: Number(e.target.value) || 0 }))}
+                required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="tax_rate">Tax Rate (%)</Label>
+              <Label htmlFor="tax_rate">Tax Rate (%) *</Label>
               <Input
                 id="tax_rate"
                 type="number"
+                step="0.01"
                 value={formData.tax_rate}
-                onChange={(e) => setFormData(prev => ({ ...prev, tax_rate: Number(e.target.value) }))}
+                onChange={(e) => setFormData(prev => ({ ...prev, tax_rate: Number(e.target.value) || 0 }))}
+                required
               />
             </div>
             <div className="space-y-2">
@@ -189,9 +288,17 @@ const InvoiceFormDialog: React.FC<InvoiceFormDialogProps> = ({ isOpen, onClose, 
               <Input
                 id="discount"
                 type="number"
-                value={formData.discount}
-                onChange={(e) => setFormData(prev => ({ ...prev, discount: Number(e.target.value) }))}
+                step="0.01"
+                value={formData.discount || 0}
+                onChange={(e) => setFormData(prev => ({ ...prev, discount: Number(e.target.value) || 0 }))}
               />
+            </div>
+          </div>
+
+          <div className="p-4 bg-muted rounded-lg">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold">Total Amount:</span>
+              <span className="text-2xl font-bold">₹{calculateTotal().toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
           </div>
 

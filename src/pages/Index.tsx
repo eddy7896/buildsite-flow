@@ -11,7 +11,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { 
   LogOut, User, Building, Users, Calculator, DollarSign, Calendar, Clock, 
   TrendingUp, AlertCircle, CalendarDays, Shield, ChevronRight, Bell,
-  Briefcase, FileText, Settings
+  Briefcase, FileText, Settings, BookOpen
 } from 'lucide-react';
 import ClockInOut from '@/components/ClockInOut';
 import { AgencyCalendar } from '@/components/AgencyCalendar';
@@ -620,6 +620,12 @@ const Index = () => {
                 </>
               ) : userRole === 'finance_manager' ? (
                 <>
+                  <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
+                    <Link to="/financial-management">
+                      <BookOpen className="h-6 w-6" />
+                      <span className="text-sm">Financial Management</span>
+                    </Link>
+                  </Button>
                   <Button asChild variant="outline" className="h-20 flex flex-col space-y-2">
                     <Link to="/invoices">
                       <DollarSign className="h-6 w-6" />
