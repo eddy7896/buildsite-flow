@@ -52,7 +52,7 @@ export default function DepartmentManagement() {
   const fetchDepartments = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("departments")
         .select("*")
         .order("name");
@@ -62,16 +62,17 @@ export default function DepartmentManagement() {
       // Get team assignment counts and related data for each department
       const departmentsWithCounts = await Promise.all(
         (data || []).map(async (dept) => {
-          const { count } = await supabase
+          const { data: countData } = await db
             .from("team_assignments")
-            .select("*", { count: "exact", head: true })
+            .select("*")
             .eq("department_id", dept.id)
             .eq("is_active", true);
+          const count = countData?.length || 0;
 
           // Fetch manager info if manager_id exists
           let manager = null;
           if (dept.manager_id) {
-            const { data: managerData } = await supabase
+            const { data: managerData } = await db
               .from("profiles")
               .select("full_name")
               .eq("user_id", dept.manager_id)
@@ -82,7 +83,7 @@ export default function DepartmentManagement() {
           // Fetch parent department info if parent_department_id exists
           let parent_department = null;
           if (dept.parent_department_id) {
-            const { data: parentData } = await supabase
+            const { data: parentData } = await db
               .from("departments")
               .select("name")
               .eq("id", dept.parent_department_id)
@@ -126,7 +127,7 @@ export default function DepartmentManagement() {
     if (!selectedDepartment) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("departments")
         .update({ is_active: false })
         .eq("id", selectedDepartment.id);

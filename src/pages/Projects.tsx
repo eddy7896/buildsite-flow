@@ -43,7 +43,7 @@ const Projects = () => {
   const fetchProjects = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('projects')
         .select('*')
         .order('created_at', { ascending: false });

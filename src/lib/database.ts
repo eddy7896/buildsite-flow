@@ -2,6 +2,7 @@
 // This provides a familiar API for components migrating from Supabase
 
 import { selectRecords, selectOne, insertRecord, updateRecord, deleteRecord } from '@/services/api/postgresql-service';
+import { generateUUID } from './uuid';
 
 type FilterOperator = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'like' | 'ilike' | 'in' | 'is' | 'not';
 
@@ -378,7 +379,7 @@ async function handleRpcCall(functionName: string, params: Record<string, any>):
       }
       case 'create_notification': {
         const notification = await insertRecord('notifications', {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           user_id: params.p_user_id,
           title: params.p_title,
           message: params.p_message,
@@ -461,7 +462,7 @@ const auth = {
     options?: { data?: Record<string, any> };
   }): Promise<{ data: { user: any; session: any } | null; error: Error | null }> {
     try {
-      const userId = crypto.randomUUID();
+      const userId = generateUUID();
       
       // Create user in users table
       await insertRecord('users', {
@@ -604,7 +605,7 @@ const auth = {
       // Handle common functions
       if (functionName === 'create-agency-user') {
         const { fullName, email, role } = options?.body || {};
-        const userId = crypto.randomUUID();
+        const userId = generateUUID();
         const tempPassword = generatePassword();
         
         try {

@@ -45,7 +45,7 @@ const Users = () => {
       setError(null);
       
       // Fetch profiles
-      const { data: profilesData, error: profilesError } = await supabase
+      const { data: profilesData, error: profilesError } = await db
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
@@ -53,14 +53,14 @@ const Users = () => {
       if (profilesError) throw profilesError;
 
       // Fetch user roles
-      const { data: rolesData, error: rolesError } = await supabase
+      const { data: rolesData, error: rolesError } = await db
         .from('user_roles')
         .select('user_id, role');
 
       if (rolesError) throw rolesError;
 
       // Fetch users for email
-      const { data: usersData, error: usersError } = await supabase
+      const { data: usersData, error: usersError } = await db
         .from('users')
         .select('id, email');
 

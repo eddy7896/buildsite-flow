@@ -3,52 +3,175 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Calendar, Clock, CheckCircle, XCircle, Plane, Heart, User } from "lucide-react";
+import { Plus, Calendar, Clock, CheckCircle, XCircle, Plane, Heart, User, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useAuth } from '@/hooks/useAuth';
+import { db } from '@/lib/database';
+import { useToast } from "@/hooks/use-toast";
+
+interface LeaveRequest {
+  id: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  reason: string;
+  status: string;
+  submittedDate: string;
+  approver: string | null;
+}
+
+interface LeaveBalance {
+  total: number;
+  used: number;
+  remaining: number;
+}
 
 const MyLeave = () => {
-  // Mock data - replace with actual user leave data
-  const leaveBalance = {
-    annual: { total: 25, used: 8, remaining: 17 },
-    sick: { total: 10, used: 2, remaining: 8 },
-    personal: { total: 5, used: 1, remaining: 4 },
-    maternity: { total: 90, used: 0, remaining: 90 }
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [selectedTab, setSelectedTab] = useState('all');
+  const [leaveBalance, setLeaveBalance] = useState<Record<string, LeaveBalance>>({
+    annual: { total: 0, used: 0, remaining: 0 },
+    sick: { total: 0, used: 0, remaining: 0 },
+    personal: { total: 0, used: 0, remaining: 0 },
+    maternity: { total: 0, used: 0, remaining: 0 }
+  });
+  const [myLeaveRequests, setMyLeaveRequests] = useState<LeaveRequest[]>([]);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchMyLeaveData();
+    }
+  }, [user?.id]);
+
+  const fetchMyLeaveData = async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoading(true);
+
+      // Fetch leave types
+      const { data: leaveTypes, error: typesError } = await db
+        .from('leave_types')
+        .select('id, name, max_days_per_year');
+
+      if (typesError) throw typesError;
+
+      // Fetch user's leave requests
+      const { data: leaveRequests, error: requestsError } = await db
+        .from('leave_requests')
+        .select('*')
+        .eq('employee_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (requestsError) throw requestsError;
+
+      // Fetch approver names for approved requests
+      const approverIds = (leaveRequests || [])
+        .filter(lr => lr.approved_by)
+        .map(lr => lr.approved_by)
+        .filter(Boolean) as string[];
+
+      let approvers: any[] = [];
+      if (approverIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await db
+          .from('profiles')
+          .select('user_id, full_name')
+          .in('user_id', approverIds);
+
+        if (profilesError) throw profilesError;
+        approvers = profilesData || [];
+      }
+
+      const approverMap = new Map(approvers.map((p: any) => [p.user_id, p.full_name]));
+
+      // Calculate leave balances
+      const balances: Record<string, LeaveBalance> = {};
+      const leaveTypeMap = new Map((leaveTypes || []).map((lt: any) => [lt.id, lt]));
+
+      (leaveTypes || []).forEach((leaveType: any) => {
+        const typeName = leaveType.name.toLowerCase();
+        const total = leaveType.max_days_per_year || 0;
+        
+        // Calculate used days (only approved requests)
+        const approvedRequests = (leaveRequests || []).filter(
+          lr => lr.leave_type_id === leaveType.id && lr.status === 'approved'
+        );
+        const used = approvedRequests.reduce((sum, lr) => sum + (lr.total_days || 0), 0);
+        const remaining = Math.max(0, total - used);
+
+        // Map to common leave types
+        let key = 'annual';
+        if (typeName.includes('sick')) key = 'sick';
+        else if (typeName.includes('personal')) key = 'personal';
+        else if (typeName.includes('maternity') || typeName.includes('paternity')) key = 'maternity';
+
+        if (!balances[key] || balances[key].total < total) {
+          balances[key] = { total, used, remaining };
+        } else {
+          // Merge if multiple leave types map to same key
+          balances[key].used += used;
+          balances[key].remaining = Math.max(0, balances[key].total - balances[key].used);
+        }
+      });
+
+      // Ensure all keys exist
+      ['annual', 'sick', 'personal', 'maternity'].forEach(key => {
+        if (!balances[key]) {
+          balances[key] = { total: 0, used: 0, remaining: 0 };
+        }
+      });
+
+      setLeaveBalance(balances);
+
+      // Transform leave requests
+      const transformedRequests: LeaveRequest[] = (leaveRequests || []).map((request: any) => {
+        const leaveType = leaveTypeMap.get(request.leave_type_id);
+        const leaveTypeName = leaveType?.name || 'Leave';
+        const approverName = request.approved_by 
+          ? approverMap.get(request.approved_by) || 'Unknown'
+          : null;
+
+        return {
+          id: request.id,
+          type: leaveTypeName,
+          startDate: request.start_date,
+          endDate: request.end_date,
+          days: request.total_days || 0,
+          reason: request.reason || 'No reason provided',
+          status: request.status || 'pending',
+          submittedDate: request.created_at,
+          approver: approverName
+        };
+      });
+
+      setMyLeaveRequests(transformedRequests);
+
+    } catch (error: any) {
+      console.error('Error fetching leave data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load leave data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const myLeaveRequests = [
-    {
-      id: "LR-001",
-      type: "Annual Leave",
-      startDate: "2024-03-15",
-      endDate: "2024-03-20",
-      days: 5,
-      reason: "Family vacation",
-      status: "pending",
-      submittedDate: "2024-01-28",
-      approver: "Jane Smith"
-    },
-    {
-      id: "LR-002",
-      type: "Sick Leave",
-      startDate: "2024-02-05",
-      endDate: "2024-02-07",
-      days: 3,
-      reason: "Medical appointment",
-      status: "approved",
-      submittedDate: "2024-01-30",
-      approver: "Jane Smith"
-    },
-    {
-      id: "LR-003",
-      type: "Personal Leave",
-      startDate: "2024-01-20",
-      endDate: "2024-01-20",
-      days: 1,
-      reason: "Personal matters",
-      status: "rejected",
-      submittedDate: "2024-01-15",
-      approver: "Jane Smith"
-    },
-  ];
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span className="ml-2 text-muted-foreground">Loading leave data...</span>
+        </div>
+      </div>
+    );
+  }
+
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -140,15 +263,15 @@ const MyLeave = () => {
         />
       </div>
 
-      <Tabs defaultValue="all" className="w-full">
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="all">All Requests</TabsTrigger>
-          <TabsTrigger value="pending">Pending</TabsTrigger>
-          <TabsTrigger value="approved">Approved</TabsTrigger>
-          <TabsTrigger value="rejected">Rejected</TabsTrigger>
+          <TabsTrigger value="all">All ({myLeaveRequests.length})</TabsTrigger>
+          <TabsTrigger value="pending">Pending ({myLeaveRequests.filter(r => r.status === 'pending').length})</TabsTrigger>
+          <TabsTrigger value="approved">Approved ({myLeaveRequests.filter(r => r.status === 'approved').length})</TabsTrigger>
+          <TabsTrigger value="rejected">Rejected ({myLeaveRequests.filter(r => r.status === 'rejected').length})</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="all" className="mt-6">
+        <TabsContent value={selectedTab} className="mt-6">
           <Card>
             <CardHeader>
               <CardTitle>Leave Request History</CardTitle>
@@ -156,7 +279,14 @@ const MyLeave = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {myLeaveRequests.map((request) => (
+                {myLeaveRequests.filter(r => selectedTab === 'all' || r.status === selectedTab).length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">
+                      No {selectedTab === 'all' ? '' : selectedTab} leave requests found.
+                    </p>
+                  </div>
+                ) : (
+                  myLeaveRequests.filter(r => selectedTab === 'all' || r.status === selectedTab).map((request) => (
                   <Card key={request.id}>
                     <CardContent className="pt-6">
                       <div className="flex items-center justify-between mb-4">
@@ -196,169 +326,8 @@ const MyLeave = () => {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="pending" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Pending Requests</CardTitle>
-              <CardDescription>Leave requests awaiting approval</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {myLeaveRequests.filter(r => r.status === 'pending').map((request) => (
-                  <Card key={request.id}>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                            {getLeaveIcon(request.type)}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{request.type}</h3>
-                            <p className="text-sm text-muted-foreground">Request ID: {request.id}</p>
-                          </div>
-                        </div>
-                        <Badge variant={getStatusColor(request.status)} className="flex items-center gap-1">
-                          {getStatusIcon(request.status)}
-                          {request.status}
-                        </Badge>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                        <div>
-                          <p className="text-muted-foreground">Duration</p>
-                          <p className="font-medium">
-                            {new Date(request.startDate).toLocaleDateString()} - {new Date(request.endDate).toLocaleDateString()}
-                          </p>
-                          <p className="text-muted-foreground">{request.days} days</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Submitted</p>
-                          <p className="font-medium">{new Date(request.submittedDate).toLocaleDateString()}</p>
-                          <p className="text-muted-foreground">Approver: {request.approver}</p>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <p className="text-muted-foreground text-sm">Reason</p>
-                        <p className="text-sm">{request.reason}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="approved" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Approved Requests</CardTitle>
-              <CardDescription>Your approved leave requests</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {myLeaveRequests.filter(r => r.status === 'approved').map((request) => (
-                  <Card key={request.id}>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                            {getLeaveIcon(request.type)}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{request.type}</h3>
-                            <p className="text-sm text-muted-foreground">Request ID: {request.id}</p>
-                          </div>
-                        </div>
-                        <Badge variant={getStatusColor(request.status)} className="flex items-center gap-1">
-                          {getStatusIcon(request.status)}
-                          {request.status}
-                        </Badge>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                        <div>
-                          <p className="text-muted-foreground">Duration</p>
-                          <p className="font-medium">
-                            {new Date(request.startDate).toLocaleDateString()} - {new Date(request.endDate).toLocaleDateString()}
-                          </p>
-                          <p className="text-muted-foreground">{request.days} days</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Submitted</p>
-                          <p className="font-medium">{new Date(request.submittedDate).toLocaleDateString()}</p>
-                          <p className="text-muted-foreground">Approver: {request.approver}</p>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <p className="text-muted-foreground text-sm">Reason</p>
-                        <p className="text-sm">{request.reason}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="rejected" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Rejected Requests</CardTitle>
-              <CardDescription>Leave requests that were not approved</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {myLeaveRequests.filter(r => r.status === 'rejected').map((request) => (
-                  <Card key={request.id}>
-                    <CardContent className="pt-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                            {getLeaveIcon(request.type)}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{request.type}</h3>
-                            <p className="text-sm text-muted-foreground">Request ID: {request.id}</p>
-                          </div>
-                        </div>
-                        <Badge variant={getStatusColor(request.status)} className="flex items-center gap-1">
-                          {getStatusIcon(request.status)}
-                          {request.status}
-                        </Badge>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                        <div>
-                          <p className="text-muted-foreground">Duration</p>
-                          <p className="font-medium">
-                            {new Date(request.startDate).toLocaleDateString()} - {new Date(request.endDate).toLocaleDateString()}
-                          </p>
-                          <p className="text-muted-foreground">{request.days} days</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Submitted</p>
-                          <p className="font-medium">{new Date(request.submittedDate).toLocaleDateString()}</p>
-                          <p className="text-muted-foreground">Approver: {request.approver}</p>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <p className="text-muted-foreground text-sm">Reason</p>
-                        <p className="text-sm">{request.reason}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>

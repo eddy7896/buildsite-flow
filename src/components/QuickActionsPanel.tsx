@@ -30,6 +30,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/database';
 import { toast } from '@/hooks/use-toast';
+import { generateUUID } from '@/lib/uuid';
 import { format, addHours } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -169,7 +170,7 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
       const { error } = await db
         .from('company_events')
         .insert({
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           title: eventForm.title,
           description: eventForm.description,
           event_type: eventForm.event_type,
@@ -221,7 +222,7 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
       const { error } = await db
         .from('holidays')
         .insert({
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           name: holidayForm.name,
           description: holidayForm.description,
           date: format(holidayForm.date, 'yyyy-MM-dd'),
@@ -277,7 +278,7 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
 
       // Create notifications for all users
       const notifications = users.map(u => ({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         user_id: u.id,
         title: announcementForm.title,
         message: announcementForm.message,

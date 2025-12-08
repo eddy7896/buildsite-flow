@@ -9,10 +9,10 @@ import {
   CheckCircle, AlertTriangle 
 } from 'lucide-react';
 import { format } from 'date-fns';
-import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { HolidayFormDialog } from './HolidayFormDialog';
+import { selectRecords, deleteRecord } from '@/services/api/postgresql-service';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,7 +45,7 @@ export function HolidayManagement() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [yearFilter, setYearFilter] = useState(new Date().getFullYear().toString());
+  const [yearFilter, setYearFilter] = useState('all');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
   const [deletingHoliday, setDeletingHoliday] = useState<Holiday | null>(null);
@@ -55,27 +55,25 @@ export function HolidayManagement() {
       setLoading(true);
       const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
       
-      const { data, error } = await db
-        .from('holidays')
-        .select('*')
-        .eq('agency_id', agencyId)
-        .order('date', { ascending: true });
-
-      if (error) throw error;
+      // Fetch holidays from database using PostgreSQL service
+      const data = await selectRecords<Holiday>('holidays', {
+        where: { agency_id: agencyId },
+        orderBy: 'date ASC'
+      });
       
       // Map database fields to interface fields
-      const mappedHolidays = (data || []).map(holiday => ({
+      const mappedHolidays = data.map(holiday => ({
         ...holiday,
-        type: holiday.is_national_holiday ? 'public' : holiday.is_company_holiday ? 'company' : 'optional',
+        type: (holiday.is_national_holiday ? 'public' : holiday.is_company_holiday ? 'company' : 'optional') as 'public' | 'company' | 'optional',
         is_mandatory: holiday.is_company_holiday || holiday.is_national_holiday
       }));
       
       setHolidays(mappedHolidays);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching holidays:', error);
       toast({
         title: "Error",
-        description: "Failed to load holidays",
+        description: error.message || "Failed to load holidays",
         variant: "destructive"
       });
     } finally {
@@ -88,10 +86,27 @@ export function HolidayManagement() {
   }, [profile?.agency_id]);
 
   const filteredHolidays = holidays.filter(holiday => {
-    const matchesSearch = holiday.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = !searchTerm || holiday.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          holiday.description?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === 'all' || holiday.type === typeFilter;
-    const matchesYear = yearFilter === 'all' || new Date(holiday.date).getFullYear().toString() === yearFilter;
+    
+    // Handle year filter - date can be in format 'YYYY-MM-DD' or Date object
+    let matchesYear = true;
+    if (yearFilter !== 'all') {
+      try {
+        const holidayDate = new Date(holiday.date);
+        if (isNaN(holidayDate.getTime())) {
+          // Invalid date, include it
+          matchesYear = true;
+        } else {
+          const holidayYear = holidayDate.getFullYear().toString();
+          matchesYear = holidayYear === yearFilter;
+        }
+      } catch (e) {
+        // If date parsing fails, include it (better to show than hide)
+        matchesYear = true;
+      }
+    }
     
     return matchesSearch && matchesType && matchesYear;
   });
@@ -100,12 +115,8 @@ export function HolidayManagement() {
     if (!deletingHoliday) return;
     
     try {
-      const { error } = await db
-        .from('holidays')
-        .delete()
-        .eq('id', deletingHoliday.id);
-
-      if (error) throw error;
+      // Delete holiday using PostgreSQL service
+      await deleteRecord('holidays', { id: deletingHoliday.id });
 
       toast({
         title: "✅ Holiday Deleted",

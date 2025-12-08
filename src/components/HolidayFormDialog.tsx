@@ -10,10 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CalendarIcon, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { generateUUID } from '@/lib/uuid';
 import { Checkbox } from '@/components/ui/checkbox';
+import { insertRecord, updateRecord, selectOne } from '@/services/api/postgresql-service';
 
 interface HolidayFormDialogProps {
   open: boolean;
@@ -113,43 +114,74 @@ export function HolidayFormDialog({
 
     setLoading(true);
     try {
+      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
+      const holidayDate = format(formData.date, 'yyyy-MM-dd');
+      
+      // Check for duplicate holiday on the same date (only for new holidays)
+      if (!editHoliday) {
+        const existingHoliday = await selectOne('holidays', {
+          agency_id: agencyId,
+          date: holidayDate
+        });
+        
+        if (existingHoliday) {
+          toast({
+            title: "Duplicate Holiday",
+            description: `A holiday already exists on ${format(formData.date, 'MMMM d, yyyy')}. Please choose a different date.`,
+            variant: "destructive"
+          });
+          setLoading(false);
+          return;
+        }
+      } else {
+        // For updates, check if another holiday exists on this date (excluding current one)
+        const existingHoliday = await selectOne('holidays', {
+          agency_id: agencyId,
+          date: holidayDate
+        });
+        
+        if (existingHoliday && existingHoliday.id !== editHoliday.id) {
+          toast({
+            title: "Duplicate Holiday",
+            description: `Another holiday already exists on ${format(formData.date, 'MMMM d, yyyy')}. Please choose a different date.`,
+            variant: "destructive"
+          });
+          setLoading(false);
+          return;
+        }
+      }
+      
       // Map form fields to database schema
+      // Type determines the flags:
+      // - 'public' -> is_national_holiday = true, is_company_holiday = false
+      // - 'company' -> is_company_holiday = true, is_national_holiday = false
+      // - 'optional' -> both false
       const is_company_holiday = formData.type === 'company';
       const is_national_holiday = formData.type === 'public';
       
       const holidayData = {
         name: formData.name.trim(),
         description: formData.description.trim() || null,
-        date: format(formData.date, 'yyyy-MM-dd'),
+        date: holidayDate,
         is_company_holiday,
         is_national_holiday,
-        agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000'
+        agency_id: agencyId
       };
 
       if (editHoliday) {
-        // Update existing holiday
-        const { error } = await db
-          .from('holidays')
-          .update(holidayData)
-          .eq('id', editHoliday.id);
-
-        if (error) throw error;
+        // Update existing holiday using PostgreSQL service
+        await updateRecord('holidays', holidayData, { id: editHoliday.id });
 
         toast({
           title: "✅ Holiday Updated",
           description: `${formData.name} has been updated.`
         });
       } else {
-        // Create new holiday
-        const { error } = await db
-          .from('holidays')
-          .insert({
-            id: crypto.randomUUID(),
-            ...holidayData,
-            created_at: new Date().toISOString()
-          });
-
-        if (error) throw error;
+        // Create new holiday using PostgreSQL service
+        await insertRecord('holidays', {
+          id: generateUUID(),
+          ...holidayData
+        });
 
         toast({
           title: "✅ Holiday Created",
@@ -263,18 +295,38 @@ export function HolidayFormDialog({
             </Select>
           </div>
 
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="mandatory"
-              checked={formData.is_mandatory}
-              onCheckedChange={(checked) => setFormData({ 
-                ...formData, 
-                is_mandatory: checked as boolean
-              })}
-            />
-            <Label htmlFor="mandatory" className="text-sm">
-              Mandatory holiday (office closed)
-            </Label>
+          <div className="flex items-center space-x-2 p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="mandatory"
+                checked={formData.is_mandatory}
+                onCheckedChange={(checked) => {
+                  const isMandatory = checked as boolean;
+                  // If unchecking mandatory, change type to optional
+                  // If checking mandatory and type is optional, change to company
+                  let newType = formData.type;
+                  if (!isMandatory && formData.type !== 'optional') {
+                    newType = 'optional';
+                  } else if (isMandatory && formData.type === 'optional') {
+                    newType = 'company';
+                  }
+                  setFormData({ 
+                    ...formData, 
+                    is_mandatory: isMandatory,
+                    type: newType as 'public' | 'company' | 'optional'
+                  });
+                }}
+                disabled={formData.type === 'public'} // Public holidays are always mandatory
+              />
+              <Label htmlFor="mandatory" className="text-sm cursor-pointer">
+                Mandatory holiday (office closed)
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground ml-4">
+              {formData.type === 'public' && 'Public holidays are always mandatory'}
+              {formData.type === 'company' && 'Company holidays can be made optional'}
+              {formData.type === 'optional' && 'Optional holidays are not mandatory'}
+            </p>
           </div>
 
           <div className="flex justify-end space-x-2 pt-4">

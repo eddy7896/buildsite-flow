@@ -47,22 +47,54 @@ export function RoleChangeRequests() {
 
   const fetchRequests = async () => {
     try {
-      let query = supabase
+      const { data: requests, error } = await db
         .from('role_change_requests')
-        .select(`
-          *,
-          profiles:user_id(full_name, email),
-          requested_by_profile:requested_by(full_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      const { data, error } = await query;
       if (error) throw error;
-      setRequests((data as any[])?.map(item => ({
+
+      // Fetch profiles for user_id and requested_by
+      const userIds = new Set<string>();
+      (requests || []).forEach(req => {
+        if (req.user_id) userIds.add(req.user_id);
+        if (req.requested_by) userIds.add(req.requested_by);
+      });
+
+      let profileMap = new Map<string, { full_name: string; email?: string }>();
+      if (userIds.size > 0) {
+        const { data: profiles } = await db
+          .from('profiles')
+          .select('user_id, full_name')
+          .in('user_id', Array.from(userIds));
+
+        if (profiles) {
+          profiles.forEach(profile => {
+            profileMap.set(profile.user_id, { full_name: profile.full_name });
+          });
+        }
+
+        // Fetch emails from users table
+        const { data: users } = await db
+          .from('users')
+          .select('id, email')
+          .in('id', Array.from(userIds));
+
+        if (users) {
+          users.forEach(user => {
+            const profile = profileMap.get(user.id);
+            if (profile) {
+              profile.email = user.email;
+            }
+          });
+        }
+      }
+
+      setRequests((requests || []).map(item => ({
         ...item,
-        profiles: item.profiles?.error ? null : item.profiles,
-        requested_by_profile: item.requested_by_profile?.error ? null : item.requested_by_profile
-      })) || []);
+        profiles: profileMap.get(item.user_id) || null,
+        requested_by_profile: item.requested_by ? (profileMap.get(item.requested_by) || null) : null
+      })));
     } catch (error) {
       console.error('Error fetching role change requests:', error);
       toast.error('Failed to load role change requests');
@@ -73,14 +105,34 @@ export function RoleChangeRequests() {
 
   const fetchEmployees = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('profiles')
-        .select('user_id, full_name, email')
+        .select('user_id, full_name')
         .eq('is_active', true)
         .order('full_name');
 
       if (error) throw error;
-      setEmployees(data || []);
+      
+      // Fetch emails from users table
+      const userIds = (data || []).map(p => p.user_id).filter(Boolean);
+      let emailMap = new Map<string, string>();
+      if (userIds.length > 0) {
+        const { data: users } = await db
+          .from('users')
+          .select('id, email')
+          .in('id', userIds);
+        
+        if (users) {
+          users.forEach(user => {
+            emailMap.set(user.id, user.email);
+          });
+        }
+      }
+      
+      setEmployees((data || []).map(profile => ({
+        ...profile,
+        email: emailMap.get(profile.user_id) || ''
+      })));
     } catch (error) {
       console.error('Error fetching employees:', error);
     }
@@ -100,16 +152,15 @@ export function RoleChangeRequests() {
     }
 
     try {
-      const { error } = await supabase
-        .from('role_change_requests')
-        .insert({
-          user_id: newRequest.user_id,
-          requested_role: newRequest.requested_role,
-          reason: newRequest.reason,
-          requested_by: user.id
-        });
-
-      if (error) throw error;
+      const { insertRecord } = await import('@/services/api/postgresql-service');
+      await insertRecord('role_change_requests', {
+        id: (await import('@/lib/uuid')).generateUUID(),
+        user_id: newRequest.user_id,
+        requested_role: newRequest.requested_role,
+        reason: newRequest.reason,
+        requested_by: user.id,
+        status: 'pending'
+      });
 
       toast.success('Role change request created successfully');
       setShowCreateDialog(false);
@@ -125,27 +176,23 @@ export function RoleChangeRequests() {
     if (!user) return;
 
     try {
-      const { error } = await supabase
-        .from('role_change_requests')
-        .update({
-          status: action,
-          approved_by: action === 'approved' ? user.id : null,
-          rejected_by: action === 'rejected' ? user.id : null
-        })
-        .eq('id', requestId);
-
-      if (error) throw error;
+      const { updateRecord } = await import('@/services/api/postgresql-service');
+      await updateRecord('role_change_requests', {
+        status: action,
+        approved_by: action === 'approved' ? user.id : null,
+        rejected_by: action === 'rejected' ? user.id : null
+      }, { id: requestId });
 
       // If approved, update the user's role
       if (action === 'approved') {
         const request = requests.find(r => r.id === requestId);
         if (request) {
-          const { error: roleError } = await supabase
-            .from('user_roles')
-            .update({ role: request.requested_role })
-            .eq('user_id', request.user_id);
-
-          if (roleError) throw roleError;
+          // Find and update the user role
+          const { selectOne } = await import('@/services/api/postgresql-service');
+          const existingRole = await selectOne('user_roles', { user_id: request.user_id });
+          if (existingRole) {
+            await updateRecord('user_roles', { role: request.requested_role }, { id: existingRole.id });
+          }
         }
       }
 

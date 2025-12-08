@@ -59,7 +59,7 @@ export const Reimbursements: React.FC = () => {
   const fetchReimbursements = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("reimbursement_requests")
         .select(`
           *,

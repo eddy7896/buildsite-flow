@@ -37,7 +37,12 @@ export const NotificationCenter: React.FC = () => {
   const { user } = useAuth();
 
   const { execute: fetchNotifications, loading: loadingNotifications } = useAsyncOperation({
-    onError: (error) => toast({ variant: 'destructive', title: 'Failed to load notifications', description: error.message })
+    onError: (error) => {
+      // Don't show error if table doesn't exist - it's expected during initial setup
+      if (!error.message?.includes('does not exist') && !error.message?.includes('42P01')) {
+        toast({ variant: 'destructive', title: 'Failed to load notifications', description: error.message });
+      }
+    }
   });
 
   const { execute: markAsRead, loading: markingRead } = useAsyncOperation({
@@ -51,21 +56,29 @@ export const NotificationCenter: React.FC = () => {
     if (!user) return;
     
     return fetchNotifications(async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(50);
 
-      if (error) throw error;
+      // Handle case where notifications table doesn't exist
+      if (error) {
+        // If table doesn't exist, just return empty array (don't show error to user)
+        if (error.message?.includes('does not exist') || error.message?.includes('42P01')) {
+          setNotifications([]);
+          setUnreadCount(0);
+          return [];
+        }
+        throw error;
+      }
+      
       setNotifications((data || []) as Notification[]);
       
-      // Get unread count
-      const { data: countData } = await db.rpc('get_unread_notification_count', {
-        p_user_id: user.id
-      });
-      setUnreadCount(countData || 0);
+      // Get unread count - count unread notifications
+      const unreadNotifications = (data || []).filter(n => !n.read_at);
+      setUnreadCount(unreadNotifications.length);
       
       return data;
     });
@@ -73,11 +86,21 @@ export const NotificationCenter: React.FC = () => {
 
   const handleMarkAsRead = async (notificationId: string) => {
     return markAsRead(async () => {
-      const { error } = await db.rpc('mark_notification_read', {
-        p_notification_id: notificationId
-      });
+      // Try to use RPC function, but if it doesn't exist, just update locally
+      try {
+        const { error } = await db.rpc('mark_notification_read', {
+          p_notification_id: notificationId
+        });
 
-      if (error) throw error;
+        if (error && !error.message?.includes('does not exist') && !error.message?.includes('42P01')) {
+          throw error;
+        }
+      } catch (error: any) {
+        // If RPC doesn't exist or table doesn't exist, just update locally
+        if (!error.message?.includes('does not exist') && !error.message?.includes('42P01')) {
+          throw error;
+        }
+      }
 
       // Update local state
       setNotifications(prev => 

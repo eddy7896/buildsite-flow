@@ -18,6 +18,7 @@ import { z } from "zod";
 import { cn } from "@/lib/utils";
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
+import { generateUUID, isValidUUID } from '@/lib/uuid';
 import { useAuth } from "@/hooks/useAuth";
 import { insertRecord, updateRecord, selectOne } from '@/services/api/postgresql-service';
 import bcrypt from 'bcryptjs';
@@ -47,7 +48,15 @@ const formSchema = z.object({
   salary: z.string().min(1, "Salary is required"),
   employmentType: z.enum(["full-time", "part-time", "contract", "intern"]),
   workLocation: z.string().min(2, "Work location is required"),
-  supervisor: z.string().optional(),
+  supervisor: z.string().optional().refine(
+    (val) => {
+      if (!val || !val.trim()) return true; // Empty is allowed
+      // UUID v4 format validation
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      return uuidRegex.test(val.trim());
+    },
+    { message: "Supervisor must be a valid UUID format" }
+  ),
   
   // Emergency Contact
   emergencyContactName: z.string().min(2, "Emergency contact name is required"),
@@ -112,7 +121,7 @@ const CreateEmployee = () => {
       }
 
       // Generate a new user ID for the employee
-      const userId = crypto.randomUUID();
+      const userId = generateUUID();
       const tempPassword = 'TempPass' + Math.random().toString(36).substring(2, 10) + '!';
       
       // Hash the password properly
@@ -120,6 +129,18 @@ const CreateEmployee = () => {
       
       // Get agency_id (use default if not available)
       const agencyId = '550e8400-e29b-41d4-a716-446655440000';
+
+      // Check if user with this email already exists
+      const existingUser = await selectOne('users', { email: values.email });
+      if (existingUser) {
+        throw new Error(`A user with email "${values.email}" already exists. Please use a different email address.`);
+      }
+
+      // Check if employee_id already exists
+      const existingEmployee = await selectOne('employee_details', { employee_id: values.employeeId });
+      if (existingEmployee) {
+        throw new Error(`Employee ID "${values.employeeId}" already exists. Please use a different employee ID.`);
+      }
 
       // Create user record with current user context for audit logs
       await insertRecord('users', {
@@ -150,14 +171,27 @@ const CreateEmployee = () => {
       } else {
           // Fallback: if trigger didn't create profile, insert it manually
           await insertRecord('profiles', {
-              id: crypto.randomUUID(),
+              id: generateUUID(),
               user_id: userId,
               ...profileData,
           }, currentUserId);
       }
 
       // Create employee details entry (this triggers audit log)
-      const employeeDetailsId = crypto.randomUUID();
+      const employeeDetailsId = generateUUID();
+      
+      // Validate supervisor_id - must be a valid UUID or null
+      let supervisorId: string | null = null;
+      if (values.supervisor && values.supervisor.trim()) {
+        if (isValidUUID(values.supervisor.trim())) {
+          supervisorId = values.supervisor.trim();
+        } else {
+          // If supervisor is provided but not a valid UUID, log warning and set to null
+          console.warn('Invalid supervisor UUID provided:', values.supervisor);
+          // Could optionally show a toast warning here
+        }
+      }
+      
       await insertRecord('employee_details', {
           id: employeeDetailsId,
           user_id: userId,
@@ -171,7 +205,7 @@ const CreateEmployee = () => {
           address: values.address,
           employment_type: values.employmentType, // Keep as 'full-time', 'part-time', etc.
           work_location: values.workLocation,
-          supervisor_id: values.supervisor || null,
+          supervisor_id: supervisorId,
           emergency_contact_name: values.emergencyContactName,
           emergency_contact_phone: values.emergencyContactPhone,
           emergency_contact_relationship: values.emergencyContactRelationship,
@@ -182,7 +216,7 @@ const CreateEmployee = () => {
 
       // Create employee salary details entry (salary is in separate table)
       await insertRecord('employee_salary_details', {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           employee_id: employeeDetailsId, // Reference to employee_details.id
           salary: parseFloat(values.salary),
           currency: 'USD',
@@ -193,7 +227,7 @@ const CreateEmployee = () => {
 
       // Set user role
       await insertRecord('user_roles', {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           user_id: userId,
           role: values.role,
           agency_id: agencyId,
@@ -212,9 +246,33 @@ const CreateEmployee = () => {
       
     } catch (error) {
       console.error("Error creating employee:", error);
+      
+      // Handle specific database errors
+      let errorMessage = "Error creating employee. Please try again.";
+      
+      if (error instanceof Error) {
+        const errorStr = error.message || error.toString();
+        
+        // Check for duplicate email constraint
+        if (errorStr.includes('duplicate key value violates unique constraint "users_email_key"') ||
+            errorStr.includes('already exists') ||
+            errorStr.includes('23505')) {
+          errorMessage = `A user with email "${values.email}" already exists. Please use a different email address.`;
+        } 
+        // Check for duplicate employee_id constraint
+        else if (errorStr.includes('duplicate key value violates unique constraint') && 
+                 errorStr.includes('employee_id')) {
+          errorMessage = `Employee ID "${values.employeeId}" already exists. Please use a different employee ID.`;
+        }
+        // Use the error message if it's already user-friendly
+        else if (error.message && !error.message.includes('Database API error')) {
+          errorMessage = error.message;
+        }
+      }
+      
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Error creating employee. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -699,9 +757,12 @@ const CreateEmployee = () => {
                       name="supervisor"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Supervisor (Optional)</FormLabel>
+                          <FormLabel>Supervisor ID (Optional)</FormLabel>
                           <FormControl>
-                            <Input placeholder="Jane Smith" {...field} />
+                            <Input 
+                              placeholder="Enter supervisor UUID (or leave empty)" 
+                              {...field} 
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '@/lib/database';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
+import { countRecords } from '@/services/api/postgresql-service';
 
 export interface AgencyMetrics {
   totalUsers: number;
@@ -44,7 +45,7 @@ export const useAgencyAnalytics = () => {
       let agencyId = authProfile?.agency_id;
       
       if (!agencyId && user?.id) {
-        const { data: profile } = await supabase
+        const { data: profile } = await db
           .from('profiles')
           .select('agency_id')
           .eq('user_id', user.id)
@@ -58,47 +59,38 @@ export const useAgencyAnalytics = () => {
       }
 
       // Fetch agency-specific metrics
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      
+      // Fetch counts
       const [
-        usersResult,
-        activeUsersResult,
-        projectsResult,
-        activeProjectsResult,
-        clientsResult,
+        totalUsers,
+        activeUsers,
+        totalProjects,
+        activeProjects,
+        totalClients,
+        attendanceRecords
+      ] = await Promise.all([
+        countRecords('profiles', { agency_id: agencyId }),
+        countRecords('profiles', { agency_id: agencyId, is_active: true }),
+        countRecords('projects', { agency_id: agencyId }),
+        countRecords('projects', { agency_id: agencyId, status: 'active' }),
+        countRecords('clients', { agency_id: agencyId }),
+        countRecords('attendance', { agency_id: agencyId })
+      ]);
+
+      // Fetch data that needs processing
+      const [
         invoicesResult,
-        attendanceResult,
         leaveRequestsResult,
         recentUsersResult,
         recentProjectsResult,
         recentInvoicesResult
       ] = await Promise.all([
-        // Total users in agency
-        db.from('profiles').select('*', { count: 'exact', head: true }).eq('agency_id', agencyId),
-        // Active users in agency
-        db.from('profiles').select('*', { count: 'exact', head: true }).eq('agency_id', agencyId).eq('is_active', true),
-        // Total projects in agency
-        db.from('projects').select('*', { count: 'exact', head: true }).eq('agency_id', agencyId),
-        // Active projects in agency
-        db.from('projects').select('*', { count: 'exact', head: true }).eq('agency_id', agencyId).eq('status', 'active'),
-        // Total clients in agency
-        db.from('clients').select('*', { count: 'exact', head: true }).eq('agency_id', agencyId),
-        // Total invoices and revenue in agency
         db.from('invoices').select('total_amount').eq('agency_id', agencyId),
-        // Attendance records in agency
-        db.from('attendance').select('*', { count: 'exact', head: true }).eq('agency_id', agencyId),
-        // Leave requests in agency
         db.from('leave_requests').select('status').eq('agency_id', agencyId),
-        // Recent users (last 30 days)
-        db.from('profiles').select('*', { count: 'exact', head: true })
-          .eq('agency_id', agencyId)
-          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
-        // Recent projects (last 30 days)
-        db.from('projects').select('*', { count: 'exact', head: true })
-          .eq('agency_id', agencyId)
-          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
-        // Recent invoices (last 30 days)
-        db.from('invoices').select('total_amount')
-          .eq('agency_id', agencyId)
-          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        db.from('profiles').select('id').eq('agency_id', agencyId).gte('created_at', thirtyDaysAgo),
+        db.from('projects').select('id').eq('agency_id', agencyId).gte('created_at', thirtyDaysAgo),
+        db.from('invoices').select('total_amount').eq('agency_id', agencyId).gte('created_at', thirtyDaysAgo)
       ]);
 
       // Calculate revenue metrics
@@ -114,19 +106,19 @@ export const useAgencyAnalytics = () => {
       };
 
       const agencyMetrics: AgencyMetrics = {
-        totalUsers: usersResult.count || 0,
-        activeUsers: activeUsersResult.count || 0,
-        totalProjects: projectsResult.count || 0,
-        activeProjects: activeProjectsResult.count || 0,
-        totalClients: clientsResult.count || 0,
+        totalUsers,
+        activeUsers,
+        totalProjects,
+        activeProjects,
+        totalClients,
         totalInvoices: invoicesResult.data?.length || 0,
         totalRevenue,
         monthlyRevenue,
-        attendanceRecords: attendanceResult.count || 0,
+        attendanceRecords,
         leaveRequests,
         recentActivity: {
-          newUsers: recentUsersResult.count || 0,
-          newProjects: recentProjectsResult.count || 0,
+          newUsers: recentUsersResult.data?.length || 0,
+          newProjects: recentProjectsResult.data?.length || 0,
           newInvoices: recentInvoicesResult.data?.length || 0,
         }
       };

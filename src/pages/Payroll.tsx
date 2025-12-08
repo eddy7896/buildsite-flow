@@ -2,52 +2,181 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Download, Calculator, Users, Calendar } from "lucide-react";
+import { DollarSign, Download, Calculator, Users, Calendar, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { db } from '@/lib/database';
+import { useToast } from "@/hooks/use-toast";
+
+interface PayrollRecord {
+  id: string;
+  employee: string;
+  position: string;
+  baseSalary: number;
+  overtime: number;
+  deductions: number;
+  netPay: number;
+  status: string;
+  payPeriod: string;
+  employee_id?: string;
+}
+
+interface PayrollSummary {
+  totalEmployees: number;
+  totalPayroll: number;
+  averageSalary: number;
+  pendingPayroll: number;
+}
 
 const Payroll = () => {
-  // Mock data - replace with actual API calls
-  const payrollSummary = {
-    totalEmployees: 48,
-    totalPayroll: 245000,
-    averageSalary: 5104,
-    pendingPayroll: 3
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [payrollSummary, setPayrollSummary] = useState<PayrollSummary>({
+    totalEmployees: 0,
+    totalPayroll: 0,
+    averageSalary: 0,
+    pendingPayroll: 0
+  });
+  const [payrollRecords, setPayrollRecords] = useState<PayrollRecord[]>([]);
+
+  useEffect(() => {
+    fetchPayrollData();
+  }, []);
+
+  const fetchPayrollData = async () => {
+    try {
+      setLoading(true);
+      
+      // Get current pay period (most recent)
+      const { data: payPeriods, error: periodsError } = await db
+        .from('payroll_periods')
+        .select('*')
+        .order('end_date', { ascending: false })
+        .limit(1);
+
+      if (periodsError) throw periodsError;
+
+      const currentPeriod = payPeriods?.[0];
+      const periodId = currentPeriod?.id;
+
+      // Fetch payroll records for current period
+      let payrollData: any[] = [];
+      if (periodId) {
+        const { data: payroll, error: payrollError } = await db
+          .from('payroll')
+          .select('*')
+          .eq('payroll_period_id', periodId)
+          .order('created_at', { ascending: false });
+
+        if (payrollError) throw payrollError;
+        payrollData = payroll || [];
+      }
+
+      // Fetch employee details and profiles for names
+      const employeeIds = payrollData.map(p => p.employee_id).filter(Boolean);
+      let employees: any[] = [];
+      let profiles: any[] = [];
+
+      if (employeeIds.length > 0) {
+        const { data: employeesData, error: employeesError } = await db
+          .from('employee_details')
+          .select('user_id, first_name, last_name, emp_position')
+          .in('user_id', employeeIds);
+
+        if (employeesError) throw employeesError;
+        employees = employeesData || [];
+
+        const userIds = employees.map(e => e.user_id).filter(Boolean);
+        if (userIds.length > 0) {
+          const { data: profilesData, error: profilesError } = await db
+            .from('profiles')
+            .select('user_id, full_name')
+            .in('user_id', userIds);
+
+          if (profilesError) throw profilesError;
+          profiles = profilesData || [];
+        }
+      }
+
+      const profileMap = new Map(profiles.map((p: any) => [p.user_id, p.full_name]));
+      const employeeMap = new Map(employees.map((e: any) => [e.user_id, e]));
+
+      // Transform payroll data
+      const transformedRecords: PayrollRecord[] = payrollData.map((record: any) => {
+        const employee = employeeMap.get(record.employee_id);
+        const fullName = profileMap.get(record.employee_id) || 
+          (employee ? `${employee.first_name} ${employee.last_name}`.trim() : 'Unknown Employee');
+        const position = employee?.emp_position || 'N/A';
+
+        const baseSalary = Number(record.base_salary || record.gross_salary || 0);
+        const overtime = Number(record.overtime_pay || 0);
+        const deductions = Number(record.total_deductions || 0);
+        const netPay = Number(record.net_pay || baseSalary + overtime - deductions);
+
+        const periodName = currentPeriod 
+          ? `${new Date(currentPeriod.start_date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`
+          : 'Current Period';
+
+        return {
+          id: record.id,
+          employee: fullName,
+          position,
+          baseSalary,
+          overtime,
+          deductions,
+          netPay,
+          status: record.status || 'pending',
+          payPeriod: periodName,
+          employee_id: record.employee_id
+        };
+      });
+
+      setPayrollRecords(transformedRecords);
+
+      // Calculate summary
+      const totalPayroll = transformedRecords.reduce((sum, r) => sum + r.netPay, 0);
+      const averageSalary = transformedRecords.length > 0 
+        ? totalPayroll / transformedRecords.length 
+        : 0;
+      const pendingPayroll = transformedRecords.filter(r => r.status === 'pending').length;
+
+      // Get total active employees
+      const { data: activeEmployees, error: employeesCountError } = await db
+        .from('employee_details')
+        .select('id')
+        .eq('is_active', true);
+
+      if (employeesCountError) throw employeesCountError;
+
+      setPayrollSummary({
+        totalEmployees: activeEmployees?.length || 0,
+        totalPayroll,
+        averageSalary: Math.round(averageSalary),
+        pendingPayroll
+      });
+
+    } catch (error: any) {
+      console.error('Error fetching payroll data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load payroll data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const payrollRecords = [
-    {
-      id: 1,
-      employee: "John Doe",
-      position: "Senior Developer",
-      baseSalary: 6000,
-      overtime: 450,
-      deductions: 850,
-      netPay: 5600,
-      status: "processed",
-      payPeriod: "January 2024"
-    },
-    {
-      id: 2,
-      employee: "Jane Smith",
-      position: "Marketing Manager",
-      baseSalary: 5500,
-      overtime: 200,
-      deductions: 780,
-      netPay: 4920,
-      status: "pending",
-      payPeriod: "January 2024"
-    },
-    {
-      id: 3,
-      employee: "Mike Johnson",
-      position: "Sales Representative",
-      baseSalary: 4500,
-      overtime: 300,
-      deductions: 650,
-      netPay: 4150,
-      status: "processed",
-      payPeriod: "January 2024"
-    },
-  ];
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span className="ml-2 text-muted-foreground">Loading payroll data...</span>
+        </div>
+      </div>
+    );
+  }
+
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -131,7 +260,12 @@ const Payroll = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {payrollRecords.map((record) => (
+            {payrollRecords.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">No payroll records found for the current period.</p>
+              </div>
+            ) : (
+              payrollRecords.map((record) => (
               <div key={record.id} className="border rounded-lg p-4">
                 <div className="flex items-center justify-between mb-4">
                   <div>
@@ -169,7 +303,8 @@ const Payroll = () => {
                   </div>
                 </div>
               </div>
-            ))}
+              ))
+            )}
           </div>
         </CardContent>
       </Card>

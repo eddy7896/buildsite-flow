@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/database';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { generateUUID } from '@/lib/uuid';
 
 interface AttendanceRecord {
   id: string;
@@ -149,12 +150,23 @@ const getLocation = (): Promise<LocationData> => {
           geolocationRequested = true;
           navigator.geolocation.getCurrentPosition(
             (position) => {
-              if (!resolved) {
-                successCallback(position);
+              if (!resolved && successCallback) {
+                // Handle async callback properly
+                successCallback(position).catch(() => {
+                  // If callback fails, resolve with fallback
+                  if (!resolved) {
+                    resolveOnce({
+                      lat: 0,
+                      lng: 0,
+                      address: 'Location unavailable',
+                      accuracy: 0
+                    });
+                  }
+                });
               }
             },
             (error) => {
-              if (!resolved) {
+              if (!resolved && errorCallback) {
                 errorCallback(error);
               }
             },
@@ -176,13 +188,31 @@ const getLocation = (): Promise<LocationData> => {
         })
         .catch(() => {
           // Permissions API not fully supported or failed, try direct geolocation
-          if (!resolved) {
+          if (!resolved && successCallback && errorCallback) {
             navigator.geolocation.getCurrentPosition(successCallback, errorCallback, options);
+          } else if (!resolved) {
+            // If callbacks are not available, resolve with fallback
+            resolve({
+              lat: 0,
+              lng: 0,
+              address: 'Location unavailable',
+              accuracy: 0
+            });
           }
         });
     } else {
       // Fallback for browsers without Permissions API
-      navigator.geolocation.getCurrentPosition(successCallback, errorCallback, options);
+      if (successCallback && errorCallback) {
+        navigator.geolocation.getCurrentPosition(successCallback, errorCallback, options);
+      } else {
+        // If callbacks are not available, resolve with fallback
+        resolve({
+          lat: 0,
+          lng: 0,
+          address: 'Location unavailable',
+          accuracy: 0
+        });
+      }
     }
   });
 };
@@ -258,7 +288,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
 
   // Fetch today's attendance record
   const fetchTodayAttendance = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id) return;
 
     const today = format(new Date(), 'yyyy-MM-dd');
     
@@ -266,7 +296,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
       const { data, error } = await db
         .from('attendance')
         .select('*')
-        .eq('employee_id', user.id)
+        .eq('employee_id', user?.id || '')
         .eq('date', today)
         .maybeSingle();
 
@@ -279,13 +309,13 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
     } catch (err) {
       console.error('Failed to fetch attendance:', err);
     }
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       fetchTodayAttendance();
     }
-  }, [user, fetchTodayAttendance]);
+  }, [user?.id, fetchTodayAttendance]);
 
   const calculateHours = (checkInTime: string, checkOutTime: string): number => {
     const checkIn = new Date(checkInTime);
@@ -295,7 +325,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
   };
 
   const handleClockIn = async () => {
-    if (!user) {
+    if (!user?.id) {
       toast({
         title: "Error",
         description: "You must be logged in to clock in",
@@ -316,8 +346,8 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
       const today = format(new Date(), 'yyyy-MM-dd');
 
       const attendanceData = {
-        id: crypto.randomUUID(),
-        employee_id: user.id,
+        id: generateUUID(),
+        employee_id: user?.id || '',
         date: today,
         check_in_time: now,
         location: locationData.address,
@@ -353,7 +383,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
   };
 
   const handleClockOut = async () => {
-    if (!user || !todayAttendance) {
+    if (!user?.id || !todayAttendance) {
       toast({
         title: "Error",
         description: "No active session to clock out from",
@@ -484,7 +514,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
               {isCompleted && (
                 <Badge variant="secondary">
                   <CheckCircle className="h-3 w-3 mr-1" />
-                  Completed ({todayAttendance?.total_hours?.toFixed(1)}h)
+                  Completed ({Number(todayAttendance?.total_hours || 0).toFixed(1)}h)
                 </Badge>
               )}
               {canClockIn && (
@@ -658,15 +688,15 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
                   <div className="flex justify-between items-center p-2 bg-green-50 rounded border border-green-200">
                     <span className="text-sm text-green-700 font-medium">Total Hours</span>
                     <Badge variant="secondary" className="bg-green-100 text-green-800 font-mono">
-                      {todayAttendance.total_hours?.toFixed(2) || '0.00'}h
+                      {Number(todayAttendance.total_hours || 0).toFixed(2)}h
                     </Badge>
                   </div>
 
-                  {(todayAttendance.overtime_hours || 0) > 0 && (
+                  {Number(todayAttendance.overtime_hours || 0) > 0 && (
                     <div className="flex justify-between items-center p-2 bg-blue-50 rounded border border-blue-200">
                       <span className="text-sm text-blue-700 font-medium">Overtime</span>
                       <Badge variant="secondary" className="bg-blue-100 text-blue-800 font-mono">
-                        {todayAttendance.overtime_hours?.toFixed(2) || '0.00'}h
+                        {Number(todayAttendance.overtime_hours || 0).toFixed(2)}h
                       </Badge>
                     </div>
                   )}
@@ -744,7 +774,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
               <CheckCircle className="h-8 w-8 mx-auto text-green-600 mb-2" />
               <p className="text-green-800 font-medium">Day Complete!</p>
               <p className="text-sm text-green-600">
-                You worked {todayAttendance?.total_hours?.toFixed(2)} hours today
+                You worked {Number(todayAttendance?.total_hours || 0).toFixed(2)} hours today
               </p>
             </div>
           )}

@@ -205,7 +205,7 @@ const Settings = () => {
   // Fetch Agency Settings
   const fetchAgencySettings = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('agency_settings')
         .select('*')
         .limit(1)
@@ -245,7 +245,7 @@ const Settings = () => {
     if (!user?.id) return;
     
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('profiles')
         .select('*')
         .eq('user_id', user.id)
@@ -289,7 +289,7 @@ const Settings = () => {
     
     try {
       // Try to fetch from user_preferences table
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('user_preferences')
         .select('*')
         .eq('user_id', user.id)
@@ -418,7 +418,7 @@ const Settings = () => {
       };
 
       // Try to update existing settings first
-      const { data: existingData, error: fetchError } = await supabase
+      const { data: existingData, error: fetchError } = await db
         .from('agency_settings')
         .select('id')
         .limit(1)
@@ -428,7 +428,7 @@ const Settings = () => {
 
       if (existingData && existingData.id) {
         console.log('[Settings] Updating existing settings with ID:', existingData.id);
-        const { data: updateData, error: updateError } = await supabase
+        const { data: updateData, error: updateError } = await db
           .from('agency_settings')
           .update(settingsToSave)
           .eq('id', existingData.id);
@@ -441,7 +441,7 @@ const Settings = () => {
       } else {
         // Insert new settings
         console.log('[Settings] No existing settings found, inserting new record');
-        const { data: insertData, error: insertError } = await supabase
+        const { data: insertData, error: insertError } = await db
           .from('agency_settings')
           .insert({
             ...settingsToSave,
@@ -507,21 +507,21 @@ const Settings = () => {
       };
 
       // Check if profile exists
-      const { data: existingProfile } = await supabase
+      const { data: existingProfile } = await db
         .from('profiles')
         .select('id')
         .eq('user_id', user.id)
         .single();
 
       if (existingProfile) {
-        const { error } = await supabase
+        const { error } = await db
           .from('profiles')
           .update(profileToSave)
           .eq('user_id', user.id);
 
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { error } = await db
           .from('profiles')
           .insert({
             ...profileToSave,
@@ -559,19 +559,19 @@ const Settings = () => {
     try {
       // Try to save to database first
       try {
-        const { data: existingPrefs } = await supabase
+        const { data: existingPrefs } = await db
           .from('user_preferences')
           .select('id')
           .eq('user_id', user.id)
           .single();
 
         if (existingPrefs) {
-          await supabase
+          await db
             .from('user_preferences')
             .update(notificationSettings)
             .eq('user_id', user.id);
         } else {
-          await supabase
+          await db
             .from('user_preferences')
             .insert({
               user_id: user.id,
@@ -647,7 +647,7 @@ const Settings = () => {
     try {
       // In a real app, you would call an API to change the password
       // For now, we'll update the users table directly (this is a demo)
-      const { data: userData } = await supabase
+      const { data: userData } = await db
         .from('users')
         .select('password_hash')
         .eq('id', user.id)
@@ -669,7 +669,7 @@ const Settings = () => {
       }
 
       // Update password (in production, this would be hashed server-side)
-      const { error } = await supabase
+      const { error } = await db
         .from('users')
         .update({
           password_hash: `hashed_${securitySettings.new_password}`, // Demo only

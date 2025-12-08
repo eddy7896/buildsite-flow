@@ -2,45 +2,189 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Check, X, Clock, Calendar, User } from "lucide-react";
+import { Check, X, Clock, Calendar, User, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { db } from '@/lib/database';
+import { useToast } from "@/hooks/use-toast";
+
+interface LeaveRequest {
+  id: string;
+  employee: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+  reason: string;
+  status: string;
+  submittedDate: string;
+  employee_id?: string;
+}
 
 const LeaveRequests = () => {
-  // Mock data - replace with actual API calls
-  const leaveRequests = [
-    {
-      id: 1,
-      employee: "John Doe",
-      type: "Annual Leave",
-      startDate: "2024-02-15",
-      endDate: "2024-02-20",
-      days: 5,
-      reason: "Family vacation",
-      status: "pending",
-      submittedDate: "2024-01-28"
-    },
-    {
-      id: 2,
-      employee: "Jane Smith",
-      type: "Sick Leave",
-      startDate: "2024-02-05",
-      endDate: "2024-02-07",
-      days: 3,
-      reason: "Medical appointment",
-      status: "approved",
-      submittedDate: "2024-01-30"
-    },
-    {
-      id: 3,
-      employee: "Mike Johnson",
-      type: "Personal Leave",
-      startDate: "2024-03-01",
-      endDate: "2024-03-02",
-      days: 2,
-      reason: "Personal matters",
-      status: "rejected",
-      submittedDate: "2024-01-25"
-    },
-  ];
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [selectedTab, setSelectedTab] = useState('all');
+
+  useEffect(() => {
+    fetchLeaveRequests();
+  }, []);
+
+  const fetchLeaveRequests = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch leave requests with leave types
+      const { data: leaveData, error: leaveError } = await db
+        .from('leave_requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (leaveError) throw leaveError;
+
+      // Fetch leave types for names
+      const { data: leaveTypes, error: typesError } = await db
+        .from('leave_types')
+        .select('id, name');
+
+      if (typesError) throw typesError;
+
+      const leaveTypeMap = new Map((leaveTypes || []).map((lt: any) => [lt.id, lt.name]));
+
+      // Fetch employee details and profiles
+      const employeeIds = (leaveData || []).map(l => l.employee_id).filter(Boolean);
+      let employees: any[] = [];
+      let profiles: any[] = [];
+
+      if (employeeIds.length > 0) {
+        const { data: employeesData, error: employeesError } = await db
+          .from('employee_details')
+          .select('user_id, first_name, last_name')
+          .in('user_id', employeeIds);
+
+        if (employeesError) throw employeesError;
+        employees = employeesData || [];
+
+        const userIds = employees.map(e => e.user_id).filter(Boolean);
+        if (userIds.length > 0) {
+          const { data: profilesData, error: profilesError } = await db
+            .from('profiles')
+            .select('user_id, full_name')
+            .in('user_id', userIds);
+
+          if (profilesError) throw profilesError;
+          profiles = profilesData || [];
+        }
+      }
+
+      const profileMap = new Map(profiles.map((p: any) => [p.user_id, p.full_name]));
+      const employeeMap = new Map(employees.map((e: any) => [e.user_id, e]));
+
+      // Transform leave requests
+      const transformedRequests: LeaveRequest[] = (leaveData || []).map((request: any) => {
+        const employee = employeeMap.get(request.employee_id);
+        const fullName = profileMap.get(request.employee_id) || 
+          (employee ? `${employee.first_name} ${employee.last_name}`.trim() : 'Unknown Employee');
+        const leaveTypeName = leaveTypeMap.get(request.leave_type_id) || 'Leave';
+
+        // Calculate days between start and end date
+        const start = new Date(request.start_date);
+        const end = new Date(request.end_date);
+        const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+        return {
+          id: request.id,
+          employee: fullName,
+          type: leaveTypeName,
+          startDate: request.start_date,
+          endDate: request.end_date,
+          days: request.total_days || days,
+          reason: request.reason || 'No reason provided',
+          status: request.status || 'pending',
+          submittedDate: request.created_at,
+          employee_id: request.employee_id
+        };
+      });
+
+      setLeaveRequests(transformedRequests);
+
+    } catch (error: any) {
+      console.error('Error fetching leave requests:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load leave requests. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApprove = async (requestId: string) => {
+    try {
+      const { error } = await db
+        .from('leave_requests')
+        .update({ 
+          status: 'approved',
+          approved_at: new Date().toISOString()
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Leave request approved",
+      });
+
+      fetchLeaveRequests();
+    } catch (error: any) {
+      console.error('Error approving leave request:', error);
+      toast({
+        title: "Error",
+        description: "Failed to approve leave request",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleReject = async (requestId: string) => {
+    try {
+      const { error } = await db
+        .from('leave_requests')
+        .update({ 
+          status: 'rejected'
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Leave request rejected",
+      });
+
+      fetchLeaveRequests();
+    } catch (error: any) {
+      console.error('Error rejecting leave request:', error);
+      toast({
+        title: "Error",
+        description: "Failed to reject leave request",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span className="ml-2 text-muted-foreground">Loading leave requests...</span>
+        </div>
+      </div>
+    );
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -60,10 +204,7 @@ const LeaveRequests = () => {
     }
   };
 
-  const filterByStatus = (status: string) => {
-    if (status === 'all') return leaveRequests;
-    return leaveRequests.filter(request => request.status === status);
-  };
+  const filteredRequests = filterByStatus(selectedTab);
 
   const RequestCard = ({ request }: { request: any }) => (
     <Card className="mb-4">
@@ -105,11 +246,19 @@ const LeaveRequests = () => {
         
         {request.status === 'pending' && (
           <div className="flex gap-2 mt-4">
-            <Button size="sm" variant="default">
+            <Button 
+              size="sm" 
+              variant="default"
+              onClick={() => handleApprove(request.id)}
+            >
               <Check className="mr-1 h-3 w-3" />
               Approve
             </Button>
-            <Button size="sm" variant="outline">
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={() => handleReject(request.id)}
+            >
               <X className="mr-1 h-3 w-3" />
               Reject
             </Button>
@@ -134,43 +283,31 @@ const LeaveRequests = () => {
         </div>
       </div>
 
-      <Tabs defaultValue="all" className="w-full">
+      <Tabs value={selectedTab} onValueChange={setSelectedTab} className="w-full">
         <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="all">All Requests</TabsTrigger>
-          <TabsTrigger value="pending">Pending</TabsTrigger>
-          <TabsTrigger value="approved">Approved</TabsTrigger>
-          <TabsTrigger value="rejected">Rejected</TabsTrigger>
+          <TabsTrigger value="all">All Requests ({leaveRequests.length})</TabsTrigger>
+          <TabsTrigger value="pending">Pending ({filterByStatus('pending').length})</TabsTrigger>
+          <TabsTrigger value="approved">Approved ({filterByStatus('approved').length})</TabsTrigger>
+          <TabsTrigger value="rejected">Rejected ({filterByStatus('rejected').length})</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="all" className="mt-6">
+        <TabsContent value={selectedTab} className="mt-6">
           <div className="space-y-4">
-            {filterByStatus('all').map((request) => (
-              <RequestCard key={request.id} request={request} />
-            ))}
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="pending" className="mt-6">
-          <div className="space-y-4">
-            {filterByStatus('pending').map((request) => (
-              <RequestCard key={request.id} request={request} />
-            ))}
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="approved" className="mt-6">
-          <div className="space-y-4">
-            {filterByStatus('approved').map((request) => (
-              <RequestCard key={request.id} request={request} />
-            ))}
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="rejected" className="mt-6">
-          <div className="space-y-4">
-            {filterByStatus('rejected').map((request) => (
-              <RequestCard key={request.id} request={request} />
-            ))}
+            {filteredRequests.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">
+                      No {selectedTab === 'all' ? '' : selectedTab} leave requests found.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              filteredRequests.map((request) => (
+                <RequestCard key={request.id} request={request} />
+              ))
+            )}
           </div>
         </TabsContent>
       </Tabs>

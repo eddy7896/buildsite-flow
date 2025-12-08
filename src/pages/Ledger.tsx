@@ -3,69 +3,184 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, Filter, Download, TrendingUp, TrendingDown, DollarSign, Calendar, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Plus, Search, Filter, Download, TrendingUp, TrendingDown, DollarSign, Calendar, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { db } from '@/lib/database';
+import { useToast } from "@/hooks/use-toast";
+
+interface Transaction {
+  id: string;
+  date: string;
+  description: string;
+  category: string;
+  type: 'credit' | 'debit';
+  amount: number;
+  balance: number;
+  reference: string;
+}
+
+interface LedgerSummary {
+  totalBalance: number;
+  monthlyIncome: number;
+  monthlyExpenses: number;
+  netProfit: number;
+}
 
 const Ledger = () => {
-  // Mock data - replace with actual API calls
-  const ledgerSummary = {
-    totalBalance: 125000,
-    monthlyIncome: 45000,
-    monthlyExpenses: 28000,
-    netProfit: 17000
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [ledgerSummary, setLedgerSummary] = useState<LedgerSummary>({
+    totalBalance: 0,
+    monthlyIncome: 0,
+    monthlyExpenses: 0,
+    netProfit: 0
+  });
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    fetchLedgerData();
+  }, []);
+
+  const fetchLedgerData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch journal entries with their lines
+      const { data: entries, error: entriesError } = await db
+        .from('journal_entries')
+        .select('*')
+        .order('entry_date', { ascending: false })
+        .limit(100);
+
+      if (entriesError) throw entriesError;
+
+      // Fetch journal entry lines to get account details
+      const entryIds = entries?.map(e => e.id) || [];
+      let lines: any[] = [];
+      
+      if (entryIds.length > 0) {
+        const { data: linesData, error: linesError } = await db
+          .from('journal_entry_lines')
+          .select('*')
+          .in('journal_entry_id', entryIds);
+
+        if (linesError) throw linesError;
+        lines = linesData || [];
+      }
+
+      // Fetch chart of accounts for category mapping
+      const { data: accounts, error: accountsError } = await db
+        .from('chart_of_accounts')
+        .select('id, account_name, account_type');
+
+      if (accountsError) throw accountsError;
+
+      const accountMap = new Map((accounts || []).map((acc: any) => [acc.id, acc]));
+
+      // Transform journal entries to transactions
+      const transformedTransactions: Transaction[] = [];
+      let runningBalance = 0;
+
+      (entries || []).forEach((entry: any) => {
+        const entryLines = lines.filter((l: any) => l.journal_entry_id === entry.id);
+        
+        entryLines.forEach((line: any) => {
+          const account = accountMap.get(line.account_id);
+          const isCredit = (line.credit_amount || 0) > 0;
+          const amount = isCredit ? (line.credit_amount || 0) : (line.debit_amount || 0);
+          
+          if (amount > 0) {
+            runningBalance += isCredit ? amount : -amount;
+            
+            // Determine category from account type
+            let category = 'Other';
+            if (account?.account_type) {
+              const accountType = account.account_type.toLowerCase();
+              if (accountType.includes('revenue') || accountType.includes('income')) {
+                category = 'Revenue';
+              } else if (accountType.includes('expense')) {
+                category = 'Operating Expenses';
+              } else if (accountType.includes('payroll') || accountType.includes('salary')) {
+                category = 'Payroll';
+              }
+            }
+
+            transformedTransactions.push({
+              id: line.id,
+              date: entry.entry_date || entry.created_at,
+              description: line.description || entry.description || 'Transaction',
+              category,
+              type: isCredit ? 'credit' : 'debit',
+              amount,
+              balance: runningBalance,
+              reference: entry.reference || entry.entry_number || `JE-${entry.id.substring(0, 8)}`
+            });
+          }
+        });
+      });
+
+      // Sort by date descending
+      transformedTransactions.sort((a, b) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+
+      setTransactions(transformedTransactions);
+
+      // Calculate summary for current month
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+
+      const monthlyTransactions = transformedTransactions.filter(t => {
+        const tDate = new Date(t.date);
+        return tDate.getMonth() === currentMonth && tDate.getFullYear() === currentYear;
+      });
+
+      const monthlyIncome = monthlyTransactions
+        .filter(t => t.type === 'credit')
+        .reduce((sum, t) => sum + t.amount, 0);
+      
+      const monthlyExpenses = monthlyTransactions
+        .filter(t => t.type === 'debit')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      setLedgerSummary({
+        totalBalance: runningBalance,
+        monthlyIncome,
+        monthlyExpenses,
+        netProfit: monthlyIncome - monthlyExpenses
+      });
+
+    } catch (error: any) {
+      console.error('Error fetching ledger data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load ledger data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const transactions = [
-    {
-      id: "TXN-001",
-      date: "2024-01-25",
-      description: "Invoice Payment - ABC Corporation",
-      category: "Revenue",
-      type: "credit",
-      amount: 15000,
-      balance: 125000,
-      reference: "INV-001"
-    },
-    {
-      id: "TXN-002",
-      date: "2024-01-24",
-      description: "Office Rent Payment",
-      category: "Operating Expenses",
-      type: "debit",
-      amount: 3500,
-      balance: 110000,
-      reference: "RENT-JAN"
-    },
-    {
-      id: "TXN-003",
-      date: "2024-01-23",
-      description: "Software License Renewal",
-      category: "Operating Expenses",
-      type: "debit",
-      amount: 1200,
-      balance: 113500,
-      reference: "RCP-002"
-    },
-    {
-      id: "TXN-004",
-      date: "2024-01-22",
-      description: "Client Payment - XYZ Ltd",
-      category: "Revenue",
-      type: "credit",
-      amount: 8500,
-      balance: 114700,
-      reference: "INV-002"
-    },
-    {
-      id: "TXN-005",
-      date: "2024-01-20",
-      description: "Employee Salaries",
-      category: "Payroll",
-      type: "debit",
-      amount: 25000,
-      balance: 106200,
-      reference: "PAY-JAN"
-    },
-  ];
+  const filteredTransactions = transactions.filter(transaction =>
+    transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    transaction.reference.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    transaction.category.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span className="ml-2 text-muted-foreground">Loading ledger data...</span>
+        </div>
+      </div>
+    );
+  }
+
 
   const getTransactionIcon = (type: string) => {
     return type === 'credit' ? (
@@ -159,7 +274,12 @@ const Ledger = () => {
           <div className="flex gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search transactions..." className="pl-10" />
+              <Input 
+                placeholder="Search transactions..." 
+                className="pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
             </div>
             <Button variant="outline">
               <Filter className="mr-2 h-4 w-4" />
@@ -185,7 +305,14 @@ const Ledger = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {transactions.map((transaction) => (
+                {filteredTransactions.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">
+                      {searchTerm ? 'No transactions found matching your search.' : 'No transactions found.'}
+                    </p>
+                  </div>
+                ) : (
+                  filteredTransactions.map((transaction) => (
                   <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center space-x-4">
                       <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
@@ -229,7 +356,12 @@ const Ledger = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {transactions.filter(t => t.type === 'credit').map((transaction) => (
+                {filteredTransactions.filter(t => t.type === 'credit').length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No credit transactions found.</p>
+                  </div>
+                ) : (
+                  filteredTransactions.filter(t => t.type === 'credit').map((transaction) => (
                   <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center space-x-4">
                       <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
@@ -259,7 +391,8 @@ const Ledger = () => {
                       </p>
                     </div>
                   </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -273,7 +406,12 @@ const Ledger = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {transactions.filter(t => t.type === 'debit').map((transaction) => (
+                {filteredTransactions.filter(t => t.type === 'debit').length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No debit transactions found.</p>
+                  </div>
+                ) : (
+                  filteredTransactions.filter(t => t.type === 'debit').map((transaction) => (
                   <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center space-x-4">
                       <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
@@ -303,7 +441,8 @@ const Ledger = () => {
                       </p>
                     </div>
                   </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -320,17 +459,17 @@ const Ledger = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="text-center p-4 border rounded-lg">
                     <h3 className="font-semibold text-lg">Revenue</h3>
-                    <p className="text-3xl font-bold text-green-600">₹23,500</p>
+                    <p className="text-3xl font-bold text-green-600">₹{ledgerSummary.monthlyIncome.toLocaleString()}</p>
                     <p className="text-sm text-muted-foreground">This month</p>
                   </div>
                   <div className="text-center p-4 border rounded-lg">
                     <h3 className="font-semibold text-lg">Expenses</h3>
-                    <p className="text-3xl font-bold text-red-600">₹29,700</p>
+                    <p className="text-3xl font-bold text-red-600">₹{ledgerSummary.monthlyExpenses.toLocaleString()}</p>
                     <p className="text-sm text-muted-foreground">This month</p>
                   </div>
                   <div className="text-center p-4 border rounded-lg">
                     <h3 className="font-semibold text-lg">Net Income</h3>
-                    <p className="text-3xl font-bold text-blue-600">₹17,000</p>
+                    <p className="text-3xl font-bold text-blue-600">₹{ledgerSummary.netProfit.toLocaleString()}</p>
                     <p className="text-sm text-muted-foreground">This month</p>
                   </div>
                 </div>

@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { generateUUID } from '@/lib/uuid';
 
 interface CalendarEventDialogProps {
   open: boolean;
@@ -64,7 +65,7 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated }: Cale
       const { error } = await db
         .from('company_events')
         .insert({
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           title: formData.title,
           description: formData.description,
           event_type: formData.event_type,

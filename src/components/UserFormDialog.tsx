@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
+import { generateUUID } from '@/lib/uuid';
 import { Loader2, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import bcrypt from 'bcryptjs';
@@ -151,7 +152,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           const { error: roleError } = await supabase
             .from('user_roles')
             .insert({
-              id: crypto.randomUUID(),
+              id: generateUUID(),
               user_id: user.id,
               role: formData.role as any,
               agency_id: '550e8400-e29b-41d4-a716-446655440000'
@@ -171,7 +172,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
         onClose();
       } else {
         // Create new user
-        const newUserId = crypto.randomUUID();
+        const newUserId = generateUUID();
         const temporaryPassword = generatePassword();
         
         // Hash the password using bcrypt
@@ -207,7 +208,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
         } else {
           // Fallback: if trigger didn't create profile, insert it manually
           await insertRecord('profiles', {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             user_id: newUserId,
             ...profileData,
           });
@@ -215,7 +216,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
 
         // Assign role
         await insertRecord('user_roles', {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           user_id: newUserId,
           role: formData.role || 'employee',
           agency_id: '550e8400-e29b-41d4-a716-446655440000'

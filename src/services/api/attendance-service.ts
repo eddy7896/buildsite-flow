@@ -8,6 +8,7 @@ import {
   rawQuery,
   rawQueryOne
 } from './postgresql-service';
+import { generateUUID } from '@/lib/uuid';
 
 export interface AttendanceRecord {
   id: string;
@@ -69,7 +70,7 @@ export async function createAttendance(input: AttendanceCreateInput): Promise<At
   const now = new Date().toISOString();
   
   const data = {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     employee_id: input.employee_id,
     date: input.date,
     check_in_time: input.check_in_time || now,
@@ -366,7 +367,7 @@ export async function markAbsentees(
     if (!existing) {
       // Create absent record
       const absent = await insertRecord<AttendanceRecord>('attendance', {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         employee_id: employeeId,
         date: date,
         check_in_time: null,

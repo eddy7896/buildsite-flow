@@ -90,7 +90,7 @@ export default function ProjectManagement() {
 
   const fetchProjects = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('jobs')
         .select(`
           *,

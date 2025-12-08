@@ -48,7 +48,7 @@ const Employees = () => {
       setLoading(true);
       
       // Fetch employee details
-      const { data: employeeData, error: employeeError } = await supabase
+      const { data: employeeData, error: employeeError } = await db
         .from('employee_details')
         .select('*')
         .order('created_at', { ascending: false });
@@ -59,7 +59,7 @@ const Employees = () => {
       }
 
       // Fetch profiles for email
-      const { data: profilesData } = await supabase
+      const { data: profilesData } = await db
         .from('profiles')
         .select('user_id, full_name');
 
@@ -151,7 +151,7 @@ const Employees = () => {
     
     setSaving(true);
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('employee_details')
         .update({
           first_name: editForm.first_name,

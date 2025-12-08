@@ -71,13 +71,9 @@ export function TaskKanbanBoard({ projectId }: TaskKanbanBoardProps) {
   const fetchTasks = async () => {
     setLoading(true);
     try {
-      let query = supabase
+      let query = db
         .from("tasks")
-        .select(`
-          *,
-          projects:project_id(name),
-          profiles:assignee_id(full_name, avatar_url)
-        `)
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (projectId) {
@@ -87,8 +83,47 @@ export function TaskKanbanBoard({ projectId }: TaskKanbanBoardProps) {
       const { data, error } = await query;
 
       if (error) throw error;
+
+      // Fetch projects and profiles separately
+      const projectIds = new Set<string>();
+      const assigneeIds = new Set<string>();
+      (data || []).forEach(task => {
+        if (task.project_id) projectIds.add(task.project_id);
+        if (task.assignee_id) assigneeIds.add(task.assignee_id);
+      });
+
+      let projectMap = new Map<string, { name: string }>();
+      if (projectIds.size > 0) {
+        const { data: projects } = await db
+          .from("projects")
+          .select("id, name")
+          .in("id", Array.from(projectIds));
+
+        if (projects) {
+          projects.forEach(project => {
+            projectMap.set(project.id, { name: project.name });
+          });
+        }
+      }
+
+      let profileMap = new Map<string, { full_name: string; avatar_url?: string }>();
+      if (assigneeIds.size > 0) {
+        const { data: profiles } = await db
+          .from("profiles")
+          .select("user_id, full_name, avatar_url")
+          .in("user_id", Array.from(assigneeIds));
+
+        if (profiles) {
+          profiles.forEach(profile => {
+            profileMap.set(profile.user_id, {
+              full_name: profile.full_name,
+              avatar_url: profile.avatar_url || undefined
+            });
+          });
+        }
+      }
       
-      // Type the response data properly
+      // Type the response data properly with joined data
       const typedTasks: Task[] = (data || []).map((task: any) => ({
         id: task.id,
         title: task.title,
@@ -100,8 +135,8 @@ export function TaskKanbanBoard({ projectId }: TaskKanbanBoardProps) {
         due_date: task.due_date,
         estimated_hours: task.estimated_hours,
         created_at: task.created_at,
-        projects: task.projects,
-        profiles: task.profiles
+        projects: task.project_id ? (projectMap.get(task.project_id) || null) : null,
+        profiles: task.assignee_id ? (profileMap.get(task.assignee_id) || null) : null
       }));
       
       setTasks(typedTasks);
@@ -118,15 +153,11 @@ export function TaskKanbanBoard({ projectId }: TaskKanbanBoardProps) {
 
   const updateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
     try {
-      const { error } = await supabase
-        .from("tasks")
-        .update({ 
-          status: newStatus,
-          completed_at: newStatus === 'completed' ? new Date().toISOString() : null
-        })
-        .eq("id", taskId);
-
-      if (error) throw error;
+      const { updateRecord } = await import('@/services/api/postgresql-service');
+      await updateRecord("tasks", { 
+        status: newStatus,
+        completed_at: newStatus === 'completed' ? new Date().toISOString() : null
+      }, { id: taskId });
 
       setTasks(tasks.map(task => 
         task.id === taskId ? { ...task, status: newStatus } : task
@@ -149,12 +180,8 @@ export function TaskKanbanBoard({ projectId }: TaskKanbanBoardProps) {
     if (!deleteTask) return;
 
     try {
-      const { error } = await supabase
-        .from("tasks")
-        .delete()
-        .eq("id", deleteTask.id);
-
-      if (error) throw error;
+      const { deleteRecord } = await import('@/services/api/postgresql-service');
+      await deleteRecord("tasks", { id: deleteTask.id });
 
       setTasks(tasks.filter(task => task.id !== deleteTask.id));
       setDeleteTask(null);

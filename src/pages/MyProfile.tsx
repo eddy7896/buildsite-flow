@@ -49,17 +49,17 @@ const MyProfile = () => {
       
       // Fetch employee details and profile information separately
       const [employeeResponse, profileResponse, salaryResponse] = await Promise.all([
-        supabase
+        db
           .from('employee_details')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle(),
-        supabase
+        db
           .from('profiles')
           .select('*')
           .eq('user_id', user.id)
           .maybeSingle(),
-        supabase
+        db
           .from('employee_salary_details')
           .select('salary')
           .eq('employee_id', user.id)
@@ -112,7 +112,7 @@ const MyProfile = () => {
 
     try {
       // Update employee details
-      const { error: employeeError } = await supabase
+      const { error: employeeError } = await db
         .from('employee_details')
         .update({
           first_name: formData.first_name,
@@ -132,7 +132,7 @@ const MyProfile = () => {
       }
 
       // Update profile
-      const { error: profileError } = await supabase
+      const { error: profileError } = await db
         .from('profiles')
         .update({
           full_name: `${formData.first_name} ${formData.last_name}`,

@@ -27,7 +27,7 @@ const Quotations = () => {
   const fetchQuotations = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('quotations')
         .select('*')
         .order('created_at', { ascending: false });

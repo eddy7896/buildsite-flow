@@ -43,7 +43,7 @@ const AssignUserRoles = () => {
 
   const fetchAgencySettings = async () => {
     try {
-      const { data: agencyData, error } = await supabase
+      const { data: agencyData, error } = await db
         .from('agency_settings')
         .select('domain')
         .limit(1)
@@ -64,7 +64,7 @@ const AssignUserRoles = () => {
 
   const fetchEmployees = async () => {
     try {
-      const { data: profilesData, error } = await supabase
+      const { data: profilesData, error } = await db
         .from('profiles')
         .select('*')
         .eq('is_active', true);
@@ -76,7 +76,7 @@ const AssignUserRoles = () => {
       let existingRoles: { [key: string]: UserRole[] } = {};
       
       if (employeesWithUserIds.length > 0) {
-        const { data: rolesData, error: rolesError } = await supabase
+        const { data: rolesData, error: rolesError } = await db
           .from('user_roles')
           .select('user_id, role')
           .in('user_id', employeesWithUserIds.map(emp => emp.user_id));
@@ -188,14 +188,14 @@ const AssignUserRoles = () => {
           generatedCredentials = { email, password };
 
           // Update profile with user_id
-          await supabase
+          await db
             .from('profiles')
             .update({ user_id: userId })
             .eq('id', employee.id);
         }
 
         // Assign role
-        const { error: roleError } = await supabase
+        const { error: roleError } = await db
           .from('user_roles')
           .upsert({
             user_id: userId,

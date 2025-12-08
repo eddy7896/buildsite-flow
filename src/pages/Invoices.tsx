@@ -45,7 +45,7 @@ const Invoices = () => {
   const fetchInvoices = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('invoices')
         .select('*')
         .order('created_at', { ascending: false });

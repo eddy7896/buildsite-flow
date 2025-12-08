@@ -90,32 +90,61 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
       // Fetch approved leave requests
       const { data: leaveRequests } = await db
         .from('leave_requests')
-        .select(`
-          *,
-          profiles:employee_id (
-            full_name
-          )
-        `)
+        .select('*')
         .eq('status', 'approved')
         .gte('start_date', format(startDate, 'yyyy-MM-dd'))
         .lte('end_date', format(endDate, 'yyyy-MM-dd'))
         .order('start_date');
+
+      // Fetch employee details and profiles for leave requests
+      let employeeProfileMap = new Map<string, string>();
+      if (leaveRequests && leaveRequests.length > 0) {
+        const employeeIds = leaveRequests.map(lr => lr.employee_id).filter(Boolean);
+        if (employeeIds.length > 0) {
+          // Try to find employee_details by id (UUID) first
+          const { data: employeeDetails } = await db
+            .from('employee_details')
+            .select('id, user_id')
+            .in('id', employeeIds);
+          
+          if (employeeDetails) {
+            const userIds = employeeDetails.map(ed => ed.user_id).filter(Boolean);
+            if (userIds.length > 0) {
+              const { data: profiles } = await db
+                .from('profiles')
+                .select('user_id, full_name')
+                .in('user_id', userIds);
+              
+              if (profiles) {
+                const userToProfileMap = new Map(profiles.map(p => [p.user_id, p.full_name]));
+                employeeDetails.forEach(ed => {
+                  const fullName = userToProfileMap.get(ed.user_id);
+                  if (fullName) {
+                    employeeProfileMap.set(ed.id, fullName);
+                  }
+                });
+              }
+            }
+          }
+        }
+      }
 
       if (leaveRequests) {
         leaveRequests.forEach(leave => {
           const startDate = new Date(leave.start_date);
           const endDate = new Date(leave.end_date);
           const currentDate = new Date(startDate);
+          const employeeName = employeeProfileMap.get(leave.employee_id) || 'Employee';
 
           while (currentDate <= endDate) {
             allEvents.push({
               id: `${leave.id}-${currentDate.toISOString()}`,
-              title: `${(leave.profiles as any)?.full_name || 'Employee'} - Leave`,
+              title: `${employeeName} - Leave`,
               date: new Date(currentDate),
               type: 'leave' as const,
               description: leave.reason,
               color: '#f59e0b',
-              employee_name: (leave.profiles as any)?.full_name
+              employee_name: employeeName
             });
             currentDate.setDate(currentDate.getDate() + 1);
           }
@@ -125,13 +154,26 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
       // Fetch birthdays
       const { data: employees } = await db
         .from('employee_details')
-        .select(`
-          *,
-          profiles:user_id (
-            full_name
-          )
-        `)
+        .select('*')
         .not('date_of_birth', 'is', null);
+
+      // Fetch profiles for employees
+      let employeeNameMap = new Map<string, string>();
+      if (employees && employees.length > 0) {
+        const userIds = employees.map(emp => emp.user_id).filter(Boolean);
+        if (userIds.length > 0) {
+          const { data: profiles } = await db
+            .from('profiles')
+            .select('user_id, full_name')
+            .in('user_id', userIds);
+          
+          if (profiles) {
+            profiles.forEach(profile => {
+              employeeNameMap.set(profile.user_id, profile.full_name);
+            });
+          }
+        }
+      }
 
       if (employees) {
         employees.forEach(employee => {
@@ -139,15 +181,16 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
             const birthday = new Date(employee.date_of_birth);
             const currentYear = selectedDate.getFullYear();
             const birthdayThisYear = new Date(currentYear, birthday.getMonth(), birthday.getDate());
+            const employeeName = employeeNameMap.get(employee.user_id) || 'Employee';
 
             if (birthdayThisYear >= startDate && birthdayThisYear <= endDate) {
               allEvents.push({
                 id: `birthday-${employee.id}`,
-                title: `🎂 ${(employee.profiles as any)?.full_name || 'Employee'}'s Birthday`,
+                title: `🎂 ${employeeName}'s Birthday`,
                 date: birthdayThisYear,
                 type: 'birthday' as const,
                 color: '#8b5cf6',
-                employee_name: (employee.profiles as any)?.full_name
+                employee_name: employeeName
               });
             }
           }

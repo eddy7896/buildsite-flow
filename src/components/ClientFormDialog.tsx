@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/database';
+import { generateUUID } from '@/lib/uuid';
 
 interface Client {
   id?: string;
@@ -176,7 +177,7 @@ const ClientFormDialog: React.FC<ClientFormDialogProps> = ({
         const { error } = await supabase
           .from('clients')
           .insert({
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             ...insertData,
             client_number: clientNumberData || `CLT-${Date.now().toString(36).toUpperCase()}`,
             agency_id: '550e8400-e29b-41d4-a716-446655440000' // Default agency

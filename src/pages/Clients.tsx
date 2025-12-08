@@ -33,7 +33,7 @@ const Clients = () => {
   const fetchClients = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('clients')
         .select('*')
         .order('created_at', { ascending: false });

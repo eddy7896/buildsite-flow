@@ -26,7 +26,7 @@ const EmployeeProjects = () => {
       setLoading(true);
       
       // Fetch projects assigned to the user
-      const { data: projectsData, error: projectsError } = await supabase
+      const { data: projectsData, error: projectsError } = await db
         .from('projects')
         .select('*')
         .or(`assigned_team.ilike.%${user?.id}%,created_by.eq.${user?.id}`)
@@ -35,7 +35,7 @@ const EmployeeProjects = () => {
       if (projectsError) throw projectsError;
 
       // Fetch jobs assigned to the user
-      const { data: jobsData, error: jobsError } = await supabase
+      const { data: jobsData, error: jobsError } = await db
         .from('jobs')
         .select('*')
         .eq('assigned_to', user?.id)

@@ -2,36 +2,218 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
-import { useState } from "react";
-import { Clock, Calendar as CalendarIcon, Play, Square, TrendingUp, Award } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Clock, Calendar as CalendarIcon, Play, Square, TrendingUp, Award, Loader2 } from "lucide-react";
 import ClockInOut from '@/components/ClockInOut';
+import { useAuth } from '@/hooks/useAuth';
+import { db } from '@/lib/database';
+import { useToast } from "@/hooks/use-toast";
+
+interface AttendanceRecord {
+  date: string;
+  checkIn: string;
+  checkOut: string;
+  hours: string;
+  status: string;
+}
+
+interface AttendanceStats {
+  totalHours: number;
+  averageDaily: number;
+  onTimePercentage: number;
+  currentStreak: number;
+}
+
+interface TodayStatus {
+  isCheckedIn: boolean;
+  checkInTime: string | null;
+  checkOutTime: string | null;
+  totalHours: string;
+  status: string;
+}
 
 const MyAttendance = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [date, setDate] = useState<Date | undefined>(new Date());
-
-  // Mock data - replace with actual user attendance data
-  const attendanceStats = {
-    totalHours: 168.5,
-    averageDaily: 8.4,
-    onTimePercentage: 95,
-    currentStreak: 12
-  };
-
-  const todayStatus = {
-    isCheckedIn: true,
-    checkInTime: "09:00 AM",
+  const [loading, setLoading] = useState(true);
+  const [attendanceStats, setAttendanceStats] = useState<AttendanceStats>({
+    totalHours: 0,
+    averageDaily: 0,
+    onTimePercentage: 0,
+    currentStreak: 0
+  });
+  const [todayStatus, setTodayStatus] = useState<TodayStatus>({
+    isCheckedIn: false,
+    checkInTime: null,
     checkOutTime: null,
-    totalHours: "7h 30m",
-    status: "working"
-  };
+    totalHours: "0h 0m",
+    status: "not_checked_in"
+  });
+  const [recentAttendance, setRecentAttendance] = useState<AttendanceRecord[]>([]);
 
-  const recentAttendance = [
-    { date: "2024-01-25", checkIn: "09:00 AM", checkOut: "06:00 PM", hours: "9.0", status: "present" },
-    { date: "2024-01-24", checkIn: "09:15 AM", checkOut: "06:15 PM", hours: "9.0", status: "late" },
-    { date: "2024-01-23", checkIn: "09:00 AM", checkOut: "06:00 PM", hours: "9.0", status: "present" },
-    { date: "2024-01-22", checkIn: "09:00 AM", checkOut: "06:00 PM", hours: "9.0", status: "present" },
-    { date: "2024-01-21", checkIn: "-", checkOut: "-", hours: "0.0", status: "weekend" },
-  ];
+  useEffect(() => {
+    if (user?.id) {
+      fetchMyAttendance();
+    }
+  }, [user?.id]);
+
+  const fetchMyAttendance = async () => {
+    if (!user?.id) return;
+
+    try {
+      setLoading(true);
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Fetch today's attendance
+      const { data: todayData, error: todayError } = await db
+        .from('attendance')
+        .select('*')
+        .eq('employee_id', user.id)
+        .eq('date', today)
+        .single();
+
+      if (todayError && todayError.code !== 'PGRST116') throw todayError; // PGRST116 = not found
+
+      const todayRecord = todayData || null;
+      const isCheckedIn = !!todayRecord?.check_in_time;
+      const checkInTime = todayRecord?.check_in_time 
+        ? new Date(todayRecord.check_in_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        : null;
+      const checkOutTime = todayRecord?.check_out_time 
+        ? new Date(todayRecord.check_out_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        : null;
+      
+      let totalHoursToday = "0h 0m";
+      if (todayRecord?.total_hours) {
+        const hours = Math.floor(todayRecord.total_hours);
+        const minutes = Math.round((todayRecord.total_hours - hours) * 60);
+        totalHoursToday = `${hours}h ${minutes}m`;
+      } else if (todayRecord?.check_in_time && !todayRecord?.check_out_time) {
+        // Calculate hours from check-in to now
+        const checkIn = new Date(todayRecord.check_in_time);
+        const now = new Date();
+        const diffMs = now.getTime() - checkIn.getTime();
+        const diffHours = diffMs / (1000 * 60 * 60);
+        const hours = Math.floor(diffHours);
+        const minutes = Math.round((diffHours - hours) * 60);
+        totalHoursToday = `${hours}h ${minutes}m`;
+      }
+
+      setTodayStatus({
+        isCheckedIn,
+        checkInTime,
+        checkOutTime,
+        totalHours: totalHoursToday,
+        status: todayRecord?.status || 'not_checked_in'
+      });
+
+      // Fetch recent attendance (last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const startDate = thirtyDaysAgo.toISOString().split('T')[0];
+
+      const { data: attendanceData, error: attendanceError } = await db
+        .from('attendance')
+        .select('*')
+        .eq('employee_id', user.id)
+        .gte('date', startDate)
+        .order('date', { ascending: false })
+        .limit(30);
+
+      if (attendanceError) throw attendanceError;
+
+      // Transform attendance records
+      const transformedRecords: AttendanceRecord[] = (attendanceData || []).map((record: any) => {
+        const checkIn = record.check_in_time 
+          ? new Date(record.check_in_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          : '-';
+        const checkOut = record.check_out_time 
+          ? new Date(record.check_out_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          : '-';
+        const hours = record.total_hours ? record.total_hours.toFixed(1) : '0.0';
+        
+        let status = 'present';
+        if (record.check_in_time) {
+          const checkInTime = new Date(record.check_in_time);
+          const hours = checkInTime.getHours();
+          const minutes = checkInTime.getMinutes();
+          if (hours > 9 || (hours === 9 && minutes > 15)) {
+            status = 'late';
+          }
+        } else {
+          status = 'absent';
+        }
+
+        // Check if weekend
+        const recordDate = new Date(record.date);
+        const dayOfWeek = recordDate.getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+          status = 'weekend';
+        }
+
+        return {
+          date: record.date,
+          checkIn,
+          checkOut,
+          hours,
+          status
+        };
+      });
+
+      setRecentAttendance(transformedRecords);
+
+      // Calculate stats for current month
+      const now = new Date();
+      const currentMonth = now.getMonth();
+      const currentYear = now.getFullYear();
+      
+      const monthlyRecords = transformedRecords.filter(r => {
+        const recordDate = new Date(r.date);
+        return recordDate.getMonth() === currentMonth && recordDate.getFullYear() === currentYear;
+      });
+
+      const totalHours = monthlyRecords.reduce((sum, r) => sum + parseFloat(r.hours), 0);
+      const workingDays = monthlyRecords.filter(r => r.status !== 'weekend' && r.status !== 'absent').length;
+      const averageDaily = workingDays > 0 ? totalHours / workingDays : 0;
+      
+      const onTimeCount = monthlyRecords.filter(r => r.status === 'present').length;
+      const onTimePercentage = monthlyRecords.length > 0 
+        ? Math.round((onTimeCount / monthlyRecords.length) * 100) 
+        : 0;
+
+      // Calculate current streak (consecutive days with attendance)
+      let streak = 0;
+      const sortedByDate = [...transformedRecords].sort((a, b) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      
+      for (const record of sortedByDate) {
+        if (record.status === 'present' || record.status === 'late') {
+          streak++;
+        } else if (record.status !== 'weekend') {
+          break;
+        }
+      }
+
+      setAttendanceStats({
+        totalHours: Math.round(totalHours * 10) / 10,
+        averageDaily: Math.round(averageDaily * 10) / 10,
+        onTimePercentage,
+        currentStreak: streak
+      });
+
+    } catch (error: any) {
+      console.error('Error fetching attendance data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load attendance data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -42,6 +224,17 @@ const MyAttendance = () => {
       default: return 'secondary';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <span className="ml-2 text-muted-foreground">Loading attendance data...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6">
@@ -141,7 +334,12 @@ const MyAttendance = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {recentAttendance.map((record, index) => (
+                {recentAttendance.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">No attendance records found.</p>
+                  </div>
+                ) : (
+                  recentAttendance.map((record, index) => (
                   <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                     <div className="flex items-center space-x-3">
                       <div>
@@ -160,7 +358,8 @@ const MyAttendance = () => {
                       </Badge>
                     </div>
                   </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
