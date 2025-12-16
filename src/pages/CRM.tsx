@@ -13,6 +13,7 @@ import LeadFormDialog from '@/components/LeadFormDialog';
 import ActivityFormDialog from '@/components/ActivityFormDialog';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import ConvertLeadToClientDialog from '@/components/ConvertLeadToClientDialog';
+import { PipelineBoard } from '@/components/crm/PipelineBoard';
 import { useNavigate } from 'react-router-dom';
 
 const CRM = () => {
@@ -51,7 +52,16 @@ const CRM = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setLeads(data || []);
+      // Normalize field names for backward compatibility
+      const normalizedLeads = (data || []).map(lead => ({
+        ...lead,
+        estimated_value: lead.estimated_value || lead.value || 0,
+        contact_name: lead.contact_name || lead.name || '',
+        company_name: lead.company_name || lead.name || '',
+        lead_source_id: lead.lead_source_id || lead.source_id,
+        notes: lead.notes || lead.description || '',
+      }));
+      setLeads(normalizedLeads);
     } catch (error: any) {
       console.error('Error fetching leads:', error);
       toast({
@@ -90,11 +100,34 @@ const CRM = () => {
   const fetchActivities = async () => {
     try {
       setActivitiesLoading(true);
-      // Fetch activities - order by due_date (nulls last), then by created_at
-      const { data: activitiesData, error: activitiesError } = await db
-        .from('crm_activities')
-        .select('*')
-        .order('due_date', { ascending: true });
+      // Fetch activities - order by created_at first, then by due_date if it exists
+      let activitiesData: any[] = [];
+      let activitiesError: any = null;
+
+      try {
+        const result = await db
+          .from('crm_activities')
+          .select('*')
+          .order('created_at', { ascending: false });
+        activitiesData = result.data || [];
+      } catch (error: any) {
+        activitiesError = error;
+        // If due_date column doesn't exist, try without ordering by it
+        if (error.message?.includes('due_date') || error.message?.includes('does not exist')) {
+          try {
+            const retryResult = await db
+              .from('crm_activities')
+              .select('*')
+              .order('created_at', { ascending: false });
+            activitiesData = retryResult.data || [];
+            activitiesError = null;
+          } catch (retryError: any) {
+            throw retryError;
+          }
+        } else {
+          throw error;
+        }
+      }
 
       if (activitiesError) throw activitiesError;
 
@@ -122,7 +155,7 @@ const CRM = () => {
         leads: activity.lead_id ? leadsMap[activity.lead_id] : null
       })) || [];
 
-      // Sort: pending first, then by due_date
+      // Sort: pending first, then by due_date (if it exists), then by created_at
       activitiesWithLeads.sort((a, b) => {
         if (a.status === 'pending' && b.status !== 'pending') return -1;
         if (a.status !== 'pending' && b.status === 'pending') return 1;
@@ -131,7 +164,8 @@ const CRM = () => {
         }
         if (a.due_date) return -1;
         if (b.due_date) return 1;
-        return 0;
+        // Fallback to created_at
+        return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
       });
 
       setActivities(activitiesWithLeads);
@@ -216,7 +250,7 @@ const CRM = () => {
     pipelineValue: leads
       .filter(lead => ['new', 'contacted', 'qualified', 'proposal', 'negotiation'].includes(lead.status))
       .reduce((sum, lead) => {
-        const value = lead.estimated_value ? parseFloat(lead.estimated_value.toString()) : 0;
+        const value = (lead.estimated_value || lead.value) ? parseFloat((lead.estimated_value || lead.value || 0).toString()) : 0;
         return sum + value;
       }, 0),
   };
@@ -264,13 +298,17 @@ const CRM = () => {
   };
 
   const filteredLeads = leads.filter(lead => {
+    const companyName = lead.company_name || lead.name || '';
+    const contactName = lead.contact_name || lead.name || '';
     const matchesSearch = 
-    lead.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    lead.contact_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.lead_number?.toLowerCase().includes(searchTerm.toLowerCase());
+      companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      contactName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.lead_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      lead.phone?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter;
-    const matchesPriority = priorityFilter === 'all' || lead.priority === priorityFilter;
+    const matchesPriority = priorityFilter === 'all' || (lead.priority || 'medium') === priorityFilter;
     
     return matchesSearch && matchesStatus && matchesPriority;
   });
@@ -508,21 +546,21 @@ const CRM = () => {
                 </div>
               ) : (
                 filteredLeads.map((lead) => (
-                  <Card key={lead.id} className="hover:shadow-md transition-shadow">
+                  <Card key={lead.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/crm/leads/${lead.id}`)}>
                     <CardHeader className="pb-3">
                       <div className="flex flex-col space-y-3 sm:flex-row sm:justify-between sm:items-start sm:space-y-0">
                         <div className="flex-1">
-                          <CardTitle className="text-lg">{lead.company_name}</CardTitle>
+                          <CardTitle className="text-lg">{lead.company_name || lead.name}</CardTitle>
                           <p className="text-sm text-muted-foreground">
-                            {lead.lead_number} • {lead.contact_name}
+                            {lead.lead_number} • {lead.contact_name || lead.name}
                           </p>
                         </div>
                         <div className="flex gap-2 self-start">
                           <Badge className={getStatusColor(lead.status)}>
                             {lead.status}
                           </Badge>
-                          <Badge className={getPriorityColor(lead.priority)}>
-                            {lead.priority}
+                          <Badge className={getPriorityColor(lead.priority || 'medium')}>
+                            {lead.priority || 'medium'}
                           </Badge>
                         </div>
                       </div>
@@ -537,8 +575,8 @@ const CRM = () => {
                         <div>
                           <p className="text-sm text-muted-foreground">Estimated Value</p>
                           <p className="font-semibold">
-                            {lead.estimated_value 
-                              ? `₹${parseFloat(lead.estimated_value.toString()).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+                            {(lead.estimated_value || lead.value)
+                              ? `₹${parseFloat((lead.estimated_value || lead.value || 0).toString()).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
                               : '₹0'
                             }
                           </p>
@@ -558,7 +596,7 @@ const CRM = () => {
                         <div className="text-sm text-muted-foreground">
                           Created: {new Date(lead.created_at).toLocaleDateString()}
                         </div>
-                        <div className="flex flex-col space-y-2 sm:flex-row sm:gap-2 sm:space-y-0">
+                        <div className="flex flex-col space-y-2 sm:flex-row sm:gap-2 sm:space-y-0" onClick={(e) => e.stopPropagation()}>
                           <Button variant="outline" size="sm" onClick={() => handleEditLead(lead)} className="w-full sm:w-auto">
                             <Edit className="h-4 w-4 mr-1" />
                             Edit
@@ -615,20 +653,20 @@ const CRM = () => {
                   const ActivityIcon = getActivityIcon(activity.activity_type);
                   const lead = activity.leads || (typeof activity.lead_id === 'object' ? activity.lead_id : null);
               return (
-                <Card key={activity.id} className="hover:shadow-md transition-shadow">
+                <Card key={activity.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/crm/activities/${activity.id}`)}>
                   <CardContent className="p-4">
                     <div className="flex items-center gap-4">
                       <ActivityIcon className="h-8 w-8 text-blue-600" />
                       <div className="flex-1">
                         <h4 className="font-semibold">{activity.subject}</h4>
                             <p className="text-sm text-muted-foreground">
-                              {lead ? `${lead.lead_number} - ${lead.company_name}` : 'No lead assigned'}
+                              {lead ? `${lead.lead_number} - ${lead.company_name || lead.name}` : 'No lead assigned'}
                             </p>
                             {activity.description && (
-                              <p className="text-sm text-muted-foreground mt-1">{activity.description}</p>
+                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{activity.description}</p>
                             )}
                           </div>
-                          <div className="text-right flex flex-col gap-2">
+                          <div className="text-right flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
                             {activity.due_date && (
                               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                                 <Calendar className="h-4 w-4" />
@@ -657,90 +695,27 @@ const CRM = () => {
           )}
         </TabsContent>
         
-        <TabsContent value="pipeline">
-          <Card>
-            <CardHeader>
-              <CardTitle>Sales Pipeline</CardTitle>
-              <p className="text-muted-foreground">Visual representation of leads through the sales process. Click on a lead to change its status.</p>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 gap-4">
-                {pipelineStages.map((stage) => {
-                  const stageLeads = leadsByStatus[stage.status] || [];
-                  const stageValue = stageLeads.reduce((sum, lead) => {
-                    const value = lead.estimated_value ? parseFloat(lead.estimated_value.toString()) : 0;
-                    return sum + value;
-                  }, 0);
-                  return (
-                    <div 
-                      key={stage.status} 
-                      className="w-full"
-                      onDragOver={onDragOver}
-                      onDragLeave={onDragLeave}
-                      onDrop={(e) => onDrop(e, stage.status)}
-                    >
-                      <div className="bg-gray-50 rounded-lg p-4 h-full border-2 border-gray-200 transition-colors flex flex-col">
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="font-semibold text-sm">{stage.name}</h3>
-                          <Badge className={getStatusColor(stage.status)}>{stageLeads.length}</Badge>
-                        </div>
-                        <div className="text-xs text-muted-foreground mb-3 pb-3 border-b">
-                          Value: {stageValue > 0 ? `₹${stageValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '₹0'}
-                        </div>
-                        <div className="space-y-2 flex-1 overflow-y-auto min-h-[150px] max-h-[500px]">
-                          {stageLeads.length === 0 ? (
-                            <div className="text-center py-8 text-muted-foreground text-xs border-2 border-dashed border-gray-300 rounded-lg">
-                              Drop leads here
-                            </div>
-                          ) : (
-                            stageLeads.map((lead) => {
-                              const leadValue = lead.estimated_value ? parseFloat(lead.estimated_value.toString()) : 0;
-                              const isDragging = draggedLead === lead.id;
-                              return (
-                                <Card 
-                                  key={lead.id} 
-                                  draggable
-                                  onDragStart={(e) => onDragStart(e, lead.id)}
-                                  onDragEnd={onDragEnd}
-                                  className={`p-3 hover:shadow-md transition-all cursor-move bg-white ${
-                                    isDragging ? 'opacity-50' : ''
-                                  }`}
-                                >
-                                  <div className="space-y-2">
-                                    <div className="font-medium text-sm truncate" title={lead.company_name}>
-                                      {lead.company_name}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground truncate">{lead.lead_number}</div>
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-xs font-semibold truncate">
-                                        {leadValue > 0 ? `₹${leadValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : '₹0'}
-                                      </span>
-                                      <Badge className={getPriorityColor(lead.priority)} variant="outline" style={{ fontSize: '10px' }}>
-                                        {lead.priority}
-                                      </Badge>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Progress value={lead.probability || 0} className="flex-1 h-1" />
-                                      <span className="text-xs whitespace-nowrap">{lead.probability || 0}%</span>
-                                    </div>
-                                    {lead.contact_name && (
-                                      <div className="text-xs text-muted-foreground truncate">
-                                        Contact: {lead.contact_name}
-                                      </div>
-                                    )}
-                                  </div>
-                                </Card>
-                              );
-                            })
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="pipeline" className="space-y-4">
+          <PipelineBoard
+            onLeadClick={(lead) => navigate(`/crm/leads/${lead.id}`)}
+            onLeadEdit={(lead) => {
+              setSelectedLead(lead);
+              setLeadFormOpen(true);
+            }}
+            onLeadDelete={(lead) => {
+              setLeadToDelete(lead);
+              setDeleteDialogOpen(true);
+            }}
+            onLeadConvert={(lead) => {
+              setLeadToConvert(lead);
+              setConvertDialogOpen(true);
+            }}
+            onScheduleActivity={(lead) => {
+              setSelectedActivity({ lead_id: lead.id });
+              setActivityFormOpen(true);
+            }}
+            onAddLead={handleNewLead}
+          />
         </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
@@ -764,12 +739,12 @@ const CRM = () => {
                         {(() => {
                           const sourceStats: Record<string, { count: number; value: number }> = {};
                           leads.forEach(lead => {
-                            const sourceId = lead.lead_source_id || 'unknown';
+                            const sourceId = lead.lead_source_id || lead.source_id || 'unknown';
                             if (!sourceStats[sourceId]) {
                               sourceStats[sourceId] = { count: 0, value: 0 };
                             }
                             sourceStats[sourceId].count++;
-                            sourceStats[sourceId].value += lead.estimated_value || 0;
+                            sourceStats[sourceId].value += (lead.estimated_value || lead.value || 0);
                           });
                           return Object.entries(sourceStats).map(([sourceId, stats]) => (
                             <div key={sourceId} className="flex justify-between items-center p-2 border rounded">
@@ -866,18 +841,18 @@ const CRM = () => {
                     ) : (
                       <div className="space-y-2">
                         {leads
-                          .filter(l => l.estimated_value && l.estimated_value > 0)
-                          .sort((a, b) => (b.estimated_value || 0) - (a.estimated_value || 0))
+                          .filter(l => (l.estimated_value || l.value) && (l.estimated_value || l.value || 0) > 0)
+                          .sort((a, b) => ((b.estimated_value || b.value || 0) - (a.estimated_value || a.value || 0)))
                           .slice(0, 5)
                           .map(lead => (
                             <div key={lead.id} className="flex justify-between items-center p-2 border rounded">
                               <div>
-                                <div className="text-sm font-medium">{lead.company_name}</div>
+                                <div className="text-sm font-medium">{lead.company_name || lead.name}</div>
                                 <div className="text-xs text-muted-foreground">{lead.lead_number}</div>
                               </div>
                               <div className="text-right">
                                 <div className="text-sm font-semibold">
-                                  ₹{(lead.estimated_value || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                  ₹{((lead.estimated_value || lead.value || 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                                 </div>
                                 <Badge className={getStatusColor(lead.status)} variant="outline" style={{ fontSize: '10px' }}>
                                   {lead.status}
@@ -885,7 +860,7 @@ const CRM = () => {
                               </div>
                             </div>
                           ))}
-                        {leads.filter(l => l.estimated_value && l.estimated_value > 0).length === 0 && (
+                        {leads.filter(l => (l.estimated_value || l.value) && (l.estimated_value || l.value || 0) > 0).length === 0 && (
                           <div className="text-center py-4 text-muted-foreground text-sm">
                             No leads with estimated value
                           </div>
