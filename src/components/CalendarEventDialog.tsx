@@ -15,6 +15,7 @@ import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { generateUUID } from '@/lib/uuid';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface CalendarEventDialogProps {
   open: boolean;
@@ -140,7 +141,7 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated, editEv
             location: formData.location,
             color: formData.color,
             created_by: user.id,
-            agency_id: '550e8400-e29b-41d4-a716-446655440000' // Default agency
+            agency_id: await getAgencyId(profile, user?.id) || undefined
           });
 
         if (error) throw error;

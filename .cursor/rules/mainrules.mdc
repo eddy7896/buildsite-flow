@@ -1,8 +1,6 @@
 ---
 alwaysApply: true
 ---
-# CRUD Development Rules for Cursor AI
-
 ## Database Connection (CRITICAL - Use These Exactly)
 - Database: buildflow_db
 - User: postgres

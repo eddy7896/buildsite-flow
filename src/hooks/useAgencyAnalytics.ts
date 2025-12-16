@@ -54,8 +54,9 @@ export const useAgencyAnalytics = () => {
       }
 
       if (!agencyId) {
-        // Use default agency for development
-        agencyId = '550e8400-e29b-41d4-a716-446655440000';
+        console.warn('No agency_id available for analytics');
+        setLoading(false);
+        return;
       }
 
       // Fetch agency-specific metrics

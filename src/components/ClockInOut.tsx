@@ -9,6 +9,7 @@ import { db } from '@/lib/database';
 import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { generateUUID } from '@/lib/uuid';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface AttendanceRecord {
   id: string;
@@ -352,7 +353,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
         check_in_time: now,
         location: locationData.address,
         status: 'present',
-        agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000',
+        agency_id: await getAgencyId(profile, user?.id) || undefined,
         created_at: now
       };
 

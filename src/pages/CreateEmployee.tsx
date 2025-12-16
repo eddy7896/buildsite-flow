@@ -10,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Badge } from "@/components/ui/badge";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
 import { ArrowLeft, CalendarIcon, Save, User, Mail, Phone, Building, MapPin, Upload, FileText, X, Eye } from "lucide-react";
@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { generateUUID, isValidUUID } from '@/lib/uuid';
 import { useAuth } from "@/hooks/useAuth";
 import { insertRecord, updateRecord, selectOne } from '@/services/api/postgresql-service';
+import { getAgencyId } from '@/utils/agencyUtils';
 import bcrypt from 'bcryptjs';
 
 const formSchema = z.object({
@@ -38,7 +39,7 @@ const formSchema = z.object({
   maritalStatus: z.enum(["single", "married", "divorced", "widowed"]),
   
   // Employment Details
-  employeeId: z.string().min(3, "Employee ID must be at least 3 characters"),
+  employeeId: z.string().optional(), // Auto-generated, optional in form
   position: z.string().min(2, "Position is required"),
   department: z.string().min(1, "Department is required"),
   role: z.enum(["admin", "hr", "finance_manager", "employee"]),
@@ -79,11 +80,16 @@ interface UploadedFile {
 
 const CreateEmployee = () => {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [profileImage, setProfileImage] = useState<File | null>(null);
   const [profileImagePreview, setProfileImagePreview] = useState<string | null>(null);
+  const [generatedEmployeeId, setGeneratedEmployeeId] = useState<string>('');
+  const [dateOfBirthOpen, setDateOfBirthOpen] = useState(false);
+  const [hireDateOpen, setHireDateOpen] = useState(false);
+  const [dateOfBirthInput, setDateOfBirthInput] = useState<string>('');
+  const [hireDateInput, setHireDateInput] = useState<string>('');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -96,7 +102,7 @@ const CreateEmployee = () => {
       panCardNumber: "",
       nationality: "",
       maritalStatus: "single",
-      employeeId: "",
+      employeeId: "", // Will be auto-generated
       position: "",
       department: "",
       role: "employee",
@@ -127,8 +133,11 @@ const CreateEmployee = () => {
       // Hash the password properly
       const passwordHash = await bcrypt.hash(tempPassword, 10);
       
-      // Get agency_id (use default if not available)
-      const agencyId = '550e8400-e29b-41d4-a716-446655440000';
+      // Get agency_id from profile or fetch from database
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        throw new Error('Agency ID not found. Please ensure you are logged in to an agency account.');
+      }
 
       // Check if user with this email already exists
       const existingUser = await selectOne('users', { email: values.email });
@@ -136,10 +145,47 @@ const CreateEmployee = () => {
         throw new Error(`A user with email "${values.email}" already exists. Please use a different email address.`);
       }
 
-      // Check if employee_id already exists
-      const existingEmployee = await selectOne('employee_details', { employee_id: values.employeeId });
+      // Generate unique employee ID automatically
+      let employeeId = values.employeeId?.trim() || '';
+      
+      // If no employee ID provided, generate one automatically
+      if (!employeeId) {
+        // Get the latest employee ID to generate next sequential ID
+        const latestEmployees = await selectRecords('employee_details', {
+          select: 'employee_id',
+          orderBy: 'created_at DESC',
+          limit: 1
+        });
+        
+        if (latestEmployees.length > 0 && latestEmployees[0].employee_id) {
+          // Extract number from existing ID (e.g., EMP-001 -> 1)
+          const match = latestEmployees[0].employee_id.match(/(\d+)$/);
+          if (match) {
+            const nextNum = parseInt(match[1]) + 1;
+            employeeId = `EMP-${String(nextNum).padStart(4, '0')}`;
+          } else {
+            // If format doesn't match, start from 1
+            employeeId = 'EMP-0001';
+          }
+        } else {
+          // First employee
+          employeeId = 'EMP-0001';
+        }
+      }
+      
+      // Check if generated employee_id already exists (in case of manual entry)
+      const existingEmployee = await selectOne('employee_details', { employee_id: employeeId });
       if (existingEmployee) {
-        throw new Error(`Employee ID "${values.employeeId}" already exists. Please use a different employee ID.`);
+        // If exists, try to generate a new one by appending timestamp
+        const timestamp = Date.now().toString().slice(-4);
+        employeeId = `EMP-${timestamp}`;
+        
+        // Double-check this one doesn't exist either
+        const checkAgain = await selectOne('employee_details', { employee_id: employeeId });
+        if (checkAgain) {
+          // Last resort: use UUID short version
+          employeeId = `EMP-${generateUUID().substring(0, 8).toUpperCase()}`;
+        }
       }
 
       // Create user record with current user context for audit logs
@@ -195,7 +241,8 @@ const CreateEmployee = () => {
       await insertRecord('employee_details', {
           id: employeeDetailsId,
           user_id: userId,
-          employee_id: values.employeeId,
+          employee_id: employeeId, // Use auto-generated ID
+          created_by: currentUserId, // Track who created this employee
           first_name: values.firstName,
           last_name: values.lastName,
           date_of_birth: values.dateOfBirth.toISOString().split('T')[0],
@@ -325,6 +372,98 @@ const CreateEmployee = () => {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
+
+  // Helper function to format date input with auto-formatting (DD/MM/YYYY - Indian Standard)
+  const formatDateInput = (value: string): string => {
+    // Remove all non-digit characters
+    const digits = value.replace(/\D/g, '');
+    
+    // Limit to 8 digits (DDMMYYYY)
+    const limitedDigits = digits.slice(0, 8);
+    
+    // Format with slashes
+    if (limitedDigits.length <= 2) {
+      return limitedDigits;
+    } else if (limitedDigits.length <= 4) {
+      return `${limitedDigits.slice(0, 2)}/${limitedDigits.slice(2)}`;
+    } else {
+      return `${limitedDigits.slice(0, 2)}/${limitedDigits.slice(2, 4)}/${limitedDigits.slice(4)}`;
+    }
+  };
+
+  // Helper function to parse DD/MM/YYYY format (Indian Standard)
+  const parseIndianDate = (dateStr: string): Date | null => {
+    if (!dateStr.trim()) return null;
+    
+    // Remove slashes and get only digits
+    const digits = dateStr.replace(/\D/g, '');
+    
+    // Need at least 6 digits (DDMMYY) or 8 digits (DDMMYYYY)
+    if (digits.length < 6) return null;
+    
+    // Extract day, month, year
+    const day = parseInt(digits.slice(0, 2));
+    const month = parseInt(digits.slice(2, 4));
+    let year = parseInt(digits.slice(4));
+    
+    // Handle 2-digit year (assume 2000s if < 50, 1900s if >= 50)
+    if (year < 100) {
+      year = year < 50 ? 2000 + year : 1900 + year;
+    }
+    
+    // Validate day, month, year
+    if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > 2100) {
+      return null;
+    }
+    
+    // Create date object (month is 0-indexed in JavaScript Date)
+    const date = new Date(year, month - 1, day);
+    
+    // Validate the date (check if it's a valid date)
+    if (date.getDate() !== day || date.getMonth() !== month - 1 || date.getFullYear() !== year) {
+      return null;
+    }
+    
+    return date;
+  };
+
+  // Generate employee ID on component mount
+  useEffect(() => {
+    const generateInitialEmployeeId = async () => {
+      try {
+        const { selectRecords } = await import('@/services/api/postgresql-service');
+        const latestEmployees = await selectRecords('employee_details', {
+          select: 'employee_id',
+          orderBy: 'created_at DESC',
+          limit: 1
+        });
+        
+        if (latestEmployees.length > 0 && latestEmployees[0].employee_id) {
+          const match = latestEmployees[0].employee_id.match(/(\d+)$/);
+          if (match) {
+            const nextNum = parseInt(match[1]) + 1;
+            const newId = `EMP-${String(nextNum).padStart(4, '0')}`;
+            setGeneratedEmployeeId(newId);
+            form.setValue('employeeId', newId);
+          } else {
+            setGeneratedEmployeeId('EMP-0001');
+            form.setValue('employeeId', 'EMP-0001');
+          }
+        } else {
+          setGeneratedEmployeeId('EMP-0001');
+          form.setValue('employeeId', 'EMP-0001');
+        }
+      } catch (error) {
+        console.error('Error generating employee ID:', error);
+        // Fallback to default
+        setGeneratedEmployeeId('EMP-0001');
+        form.setValue('employeeId', 'EMP-0001');
+      }
+    };
+    
+    generateInitialEmployeeId();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="p-4 lg:p-6">
@@ -477,41 +616,92 @@ const CreateEmployee = () => {
                       render={({ field }) => (
                         <FormItem className="flex flex-col">
                           <FormLabel>Date of Birth</FormLabel>
-                          <Popover>
-                            <PopoverTrigger asChild>
+                          <Popover open={dateOfBirthOpen} onOpenChange={setDateOfBirthOpen}>
                               <FormControl>
-                                <Button
-                                  variant="outline"
-                                  className={cn(
-                                    "w-full pl-3 text-left font-normal",
-                                    !field.value && "text-muted-foreground"
-                                  )}
-                                >
-                                  {field.value ? (
-                                    format(field.value, "PPP")
-                                  ) : (
-                                    <span>Pick a date</span>
-                                  )}
-                                  <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                </Button>
+                                <div className="relative">
+                                  <Input
+                                    placeholder="DD/MM/YYYY (e.g., 09/05/2007)"
+                                    value={dateOfBirthInput || (field.value ? format(field.value, "dd/MM/yyyy") : "")}
+                                    onChange={(e) => {
+                                      const inputValue = e.target.value;
+                                      
+                                      // Format the input with auto-slash insertion
+                                      const formatted = formatDateInput(inputValue);
+                                      
+                                      // Update local state for display
+                                      setDateOfBirthInput(formatted);
+                                      
+                                      // Try to parse the date (DD/MM/YYYY format - Indian Standard)
+                                      const parsedDate = parseIndianDate(formatted);
+                                      
+                                      if (parsedDate && !isNaN(parsedDate.getTime())) {
+                                        const today = new Date();
+                                        today.setHours(23, 59, 59, 999);
+                                        const minDate = new Date("1900-01-01");
+                                        
+                                        if (parsedDate <= today && parsedDate >= minDate) {
+                                          field.onChange(parsedDate);
+                                        }
+                                      } else if (formatted.length === 0) {
+                                        field.onChange(undefined);
+                                      }
+                                    }}
+                                    onBlur={() => {
+                                      // Clear local input when field loses focus if date is valid
+                                      if (field.value) {
+                                        setDateOfBirthInput('');
+                                      }
+                                    }}
+                                    onKeyDown={(e) => {
+                                      // Allow backspace, delete, arrow keys, tab
+                                      if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                                        return;
+                                      }
+                                      // Only allow digits
+                                      if (!/^\d$/.test(e.key)) {
+                                        e.preventDefault();
+                                      }
+                                    }}
+                                    maxLength={10}
+                                    className="pr-10"
+                                  />
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        setDateOfBirthOpen(true);
+                                      }}
+                                    >
+                                      <CalendarIcon className="h-4 w-4 opacity-50" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                </div>
                               </FormControl>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                disabled={(date) =>
-                                  date > new Date() || date < new Date("1900-01-01")
-                                }
-                                initialFocus
-                                className={cn("p-3 pointer-events-auto")}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                          <FormMessage />
-                        </FormItem>
-                      )}
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <Calendar
+                                  mode="single"
+                                  selected={field.value}
+                                  onSelect={(date) => {
+                                    field.onChange(date);
+                                    setDateOfBirthInput(''); // Clear local input, will show formatted date from field.value
+                                    setDateOfBirthOpen(false);
+                                  }}
+                                  disabled={(date) =>
+                                    date > new Date() || date < new Date("1900-01-01")
+                                  }
+                                  initialFocus
+                                  className={cn("p-3 pointer-events-auto")}
+                                />
+                              </PopoverContent>
+                            </Popover>
+                            <FormMessage />
+                            <p className="text-xs text-muted-foreground">Enter date as DD/MM/YYYY (e.g., 09/05/2007) or click calendar icon</p>
+                          </FormItem>
+                        )}
                     />
                     <FormField
                       control={form.control}
@@ -619,17 +809,71 @@ const CreateEmployee = () => {
                   <CardDescription>Job role and organizational information</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Created By Field - Read Only */}
+                  <div className="p-3 bg-muted/50 rounded-lg border border-dashed">
+                    <Label className="text-sm font-medium text-muted-foreground">Created By</Label>
+                    <p className="text-sm font-semibold mt-1">
+                      {profile?.full_name || user?.email || 'Current User'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      This employee record will be associated with your account
+                    </p>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
                       name="employeeId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Employee ID</FormLabel>
+                          <FormLabel>Employee ID {generatedEmployeeId && <span className="text-muted-foreground text-xs">(Auto-generated: {generatedEmployeeId})</span>}</FormLabel>
                           <FormControl>
-                            <Input placeholder="EMP-001" {...field} />
+                            <div className="relative">
+                              <Input 
+                                placeholder={generatedEmployeeId || "EMP-0001"} 
+                                {...field}
+                                readOnly
+                                className="bg-muted cursor-not-allowed"
+                                title="Employee ID is automatically generated"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="absolute right-1 top-1 h-7 px-2 text-xs"
+                                onClick={async () => {
+                                  try {
+                                    const { selectRecords } = await import('@/services/api/postgresql-service');
+                                    const latestEmployees = await selectRecords('employee_details', {
+                                      select: 'employee_id',
+                                      orderBy: 'created_at DESC',
+                                      limit: 1
+                                    });
+                                    
+                                    let newId = 'EMP-0001';
+                                    if (latestEmployees.length > 0 && latestEmployees[0].employee_id) {
+                                      const match = latestEmployees[0].employee_id.match(/(\d+)$/);
+                                      if (match) {
+                                        const nextNum = parseInt(match[1]) + 1;
+                                        newId = `EMP-${String(nextNum).padStart(4, '0')}`;
+                                      }
+                                    }
+                                    setGeneratedEmployeeId(newId);
+                                    form.setValue('employeeId', newId);
+                                    toast({
+                                      title: "Employee ID Regenerated",
+                                      description: `New ID: ${newId}`,
+                                    });
+                                  } catch (error) {
+                                    console.error('Error regenerating ID:', error);
+                                  }
+                                }}
+                              >
+                                Regenerate
+                              </Button>
+                            </div>
                           </FormControl>
                           <FormMessage />
+                          <p className="text-xs text-muted-foreground">Employee ID is automatically generated. Click "Regenerate" to get a new one.</p>
                         </FormItem>
                       )}
                     />
@@ -776,41 +1020,92 @@ const CreateEmployee = () => {
                     render={({ field }) => (
                       <FormItem className="flex flex-col">
                         <FormLabel>Hire Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
+                        <Popover open={hireDateOpen} onOpenChange={setHireDateOpen}>
                             <FormControl>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                              >
-                                {field.value ? (
-                                  format(field.value, "PPP")
-                                ) : (
-                                  <span>Pick a date</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
+                              <div className="relative">
+                                <Input
+                                  placeholder="DD/MM/YYYY (e.g., 09/05/2007)"
+                                  value={hireDateInput || (field.value ? format(field.value, "dd/MM/yyyy") : "")}
+                                  onChange={(e) => {
+                                    const inputValue = e.target.value;
+                                    
+                                    // Format the input with auto-slash insertion
+                                    const formatted = formatDateInput(inputValue);
+                                    
+                                    // Update local state for display
+                                    setHireDateInput(formatted);
+                                    
+                                    // Try to parse the date (DD/MM/YYYY format - Indian Standard)
+                                    const parsedDate = parseIndianDate(formatted);
+                                    
+                                    if (parsedDate && !isNaN(parsedDate.getTime())) {
+                                      const today = new Date();
+                                      today.setHours(23, 59, 59, 999);
+                                      const minDate = new Date("1900-01-01");
+                                      
+                                      if (parsedDate <= today && parsedDate >= minDate) {
+                                        field.onChange(parsedDate);
+                                      }
+                                    } else if (formatted.length === 0) {
+                                      field.onChange(undefined);
+                                    }
+                                  }}
+                                  onBlur={() => {
+                                    // Clear local input when field loses focus if date is valid
+                                    if (field.value) {
+                                      setHireDateInput('');
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    // Allow backspace, delete, arrow keys, tab
+                                    if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                                      return;
+                                    }
+                                    // Only allow digits
+                                    if (!/^\d$/.test(e.key)) {
+                                      e.preventDefault();
+                                    }
+                                  }}
+                                  maxLength={10}
+                                  className="pr-10"
+                                />
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setDateOfBirthOpen(true);
+                                    }}
+                                  >
+                                    <CalendarIcon className="h-4 w-4 opacity-50" />
+                                  </Button>
+                                </PopoverTrigger>
+                              </div>
                             </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              disabled={(date) =>
-                                date > new Date() || date < new Date("1900-01-01")
-                              }
-                              initialFocus
-                              className={cn("p-3 pointer-events-auto")}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value}
+                                onSelect={(date) => {
+                                  field.onChange(date);
+                                  setHireDateInput(''); // Clear local input, will show formatted date from field.value
+                                  setHireDateOpen(false);
+                                }}
+                                disabled={(date) =>
+                                  date > new Date() || date < new Date("1900-01-01")
+                                }
+                                initialFocus
+                                className={cn("p-3 pointer-events-auto")}
+                              />
+                            </PopoverContent>
+                          </Popover>
+                          <FormMessage />
+                          <p className="text-xs text-muted-foreground">Enter date as DD/MM/YYYY (e.g., 09/05/2007) or click calendar icon</p>
+                        </FormItem>
+                      )}
                   />
                 </CardContent>
               </Card>

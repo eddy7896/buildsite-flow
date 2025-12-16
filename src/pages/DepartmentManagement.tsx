@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +28,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
+import { 
   Building2,
   Users,
   Plus,
@@ -48,13 +49,20 @@ import {
   RefreshCw,
   MoreVertical,
   UserCheck,
+  ExternalLink,
+  Briefcase,
+  Clock,
+  Calculator,
+  FileText,
 } from "lucide-react";
 import { db } from '@/lib/database';
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { getAgencyId } from '@/utils/agencyUtils';
 import { DepartmentFormDialog } from "@/components/DepartmentFormDialog";
 import { TeamAssignmentPanel } from "@/components/TeamAssignmentPanel";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
+import { DepartmentHierarchyView } from "@/components/DepartmentHierarchy";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -121,9 +129,17 @@ export default function DepartmentManagement() {
     full_name: string;
   }>>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(new Set());
+  const [departmentMembers, setDepartmentMembers] = useState<Record<string, Array<{
+    id: string;
+    full_name: string;
+    position_title?: string;
+    role_in_department: string;
+  }>>>({});
   
   const { userRole, profile } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const isAdmin = userRole === 'admin' || userRole === 'super_admin';
   const isHR = userRole === 'hr';
@@ -136,11 +152,18 @@ export default function DepartmentManagement() {
 
   const fetchManagers = async () => {
     try {
-      const { data, error } = await db
+      const agencyId = profile?.agency_id;
+      
+      let query = db
         .from("profiles")
         .select("user_id, full_name")
-        .eq("is_active", true)
-        .order("full_name");
+        .eq("is_active", true);
+      
+      if (agencyId) {
+        query = query.eq("agency_id", agencyId);
+      }
+      
+      const { data, error } = await query.order("full_name");
       
       if (error) throw error;
       if (data) setManagers(data);
@@ -151,11 +174,18 @@ export default function DepartmentManagement() {
 
   const fetchParentDepartments = async () => {
     try {
-      const { data, error } = await db
+      const agencyId = profile?.agency_id;
+      
+      let query = db
         .from("departments")
         .select("id, name")
-        .eq("is_active", true)
-        .order("name");
+        .eq("is_active", true);
+      
+      if (agencyId) {
+        query = query.eq("agency_id", agencyId);
+      }
+      
+      const { data, error } = await query.order("name");
       
       if (error) throw error;
       if (data) setParentDepartments(data);
@@ -167,43 +197,66 @@ export default function DepartmentManagement() {
   const fetchDepartments = async () => {
     setLoading(true);
     try {
-      const { data, error } = await db
-        .from("departments")
-        .select("*")
-        .order("name");
+      // Get agency_id from profile for filtering
+      const agencyId = profile?.agency_id;
+      
+      // Build query with agency_id filter if available
+      let query = db.from("departments").select("*");
+      
+      if (agencyId) {
+        query = query.eq("agency_id", agencyId);
+      }
+      
+      const { data, error } = await query.order("name");
 
       if (error) throw error;
 
       // Get team assignment counts and related data for each department
       const departmentsWithCounts = await Promise.all(
         (data || []).map(async (dept) => {
-          const { data: countData } = await db
+          // Count team assignments
+          const { data: countData, error: countError } = await db
             .from("team_assignments")
             .select("*")
             .eq("department_id", dept.id)
             .eq("is_active", true);
+          
+          if (countError) {
+            console.error("Error fetching team assignments count:", countError);
+          }
+          
           const count = countData?.length || 0;
 
           // Fetch manager info if manager_id exists
           let manager = null;
           if (dept.manager_id) {
-            const { data: managerData } = await db
+            const { data: managerData, error: managerError } = await db
               .from("profiles")
               .select("full_name")
               .eq("user_id", dept.manager_id)
               .single();
-            manager = managerData;
+            
+            if (managerError) {
+              console.error("Error fetching manager:", managerError);
+            } else {
+              manager = managerData;
+            }
           }
 
           // Fetch parent department info if parent_department_id exists
           let parent_department = null;
           if (dept.parent_department_id) {
-            const { data: parentData } = await db
+            const { data: parentData, error: parentError } = await db
               .from("departments")
               .select("name")
               .eq("id", dept.parent_department_id)
               .single();
-            parent_department = parentData;
+            
+            if (parentError) {
+              console.error("Error fetching parent department:", parentError);
+            } else {
+              parent_department = parentData;
+            }
           }
 
           return {
@@ -216,11 +269,11 @@ export default function DepartmentManagement() {
       );
 
       setDepartments(departmentsWithCounts);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching departments:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch departments",
+        description: error?.message || "Failed to fetch departments. Please check your database connection.",
         variant: "destructive",
       });
     } finally {
@@ -228,9 +281,10 @@ export default function DepartmentManagement() {
     }
   };
 
-  // Filter and sort departments
+  // Filter and sort departments - for active departments tab
   const filteredAndSortedDepartments = useMemo(() => {
-    let filtered = [...departments];
+    // Only show active departments in the main tab
+    let filtered = departments.filter(d => d.is_active);
 
     // Search filter
     if (searchTerm) {
@@ -240,11 +294,12 @@ export default function DepartmentManagement() {
       );
     }
 
-    // Status filter
+    // Status filter (only applies to active departments)
     if (filterStatus === "active") {
       filtered = filtered.filter(d => d.is_active);
     } else if (filterStatus === "inactive") {
-      filtered = filtered.filter(d => !d.is_active);
+      // This shouldn't happen in active tab, but handle it
+      filtered = [];
     }
 
     // Manager filter
@@ -301,7 +356,74 @@ export default function DepartmentManagement() {
     return filtered;
   }, [departments, searchTerm, filterStatus, filterManager, filterParent, minBudget, maxBudget, sortField, sortDirection]);
 
-  // Pagination
+  // Filter and sort deactivated departments - for deactivated tab
+  const filteredAndSortedDeactivatedDepartments = useMemo(() => {
+    // Only show inactive departments
+    let filtered = departments.filter(d => !d.is_active);
+
+    // Search filter
+    if (searchTerm) {
+      filtered = filtered.filter(dept =>
+        dept.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        dept.description?.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+
+    // Manager filter
+    if (filterManager !== "all") {
+      filtered = filtered.filter(d => d.manager_id === filterManager);
+    }
+
+    // Parent department filter
+    if (filterParent !== "all") {
+      filtered = filtered.filter(d => d.parent_department_id === filterParent);
+    }
+
+    // Budget range filter
+    if (minBudget) {
+      const min = parseFloat(minBudget);
+      filtered = filtered.filter(d => (d.budget || 0) >= min);
+    }
+    if (maxBudget) {
+      const max = parseFloat(maxBudget);
+      filtered = filtered.filter(d => (d.budget || 0) <= max);
+    }
+
+    // Sort
+    filtered.sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+
+      switch (sortField) {
+        case "name":
+          aVal = a.name.toLowerCase();
+          bVal = b.name.toLowerCase();
+          break;
+        case "budget":
+          aVal = a.budget || 0;
+          bVal = b.budget || 0;
+          break;
+        case "employees":
+          aVal = a._count?.team_assignments || 0;
+          bVal = b._count?.team_assignments || 0;
+          break;
+        case "created_at":
+          aVal = new Date(a.created_at).getTime();
+          bVal = new Date(b.created_at).getTime();
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+
+    return filtered;
+  }, [departments, searchTerm, filterManager, filterParent, minBudget, maxBudget, sortField, sortDirection]);
+
+  // Pagination for active departments
   const paginatedDepartments = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     const end = start + pageSize;
@@ -309,6 +431,15 @@ export default function DepartmentManagement() {
   }, [filteredAndSortedDepartments, currentPage, pageSize]);
 
   const totalPages = Math.ceil(filteredAndSortedDepartments.length / pageSize);
+
+  // Pagination for deactivated departments
+  const paginatedDeactivatedDepartments = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    return filteredAndSortedDeactivatedDepartments.slice(start, end);
+  }, [filteredAndSortedDeactivatedDepartments, currentPage, pageSize]);
+
+  const totalDeactivatedPages = Math.ceil(filteredAndSortedDeactivatedDepartments.length / pageSize);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -379,9 +510,34 @@ export default function DepartmentManagement() {
     }
   };
 
+  // Navigation handlers to related pages
+  const handleViewEmployees = (departmentId: string, departmentName: string) => {
+    navigate(`/employee-management?department=${departmentId}&name=${encodeURIComponent(departmentName)}`);
+  };
+
+  const handleViewProjects = (departmentId: string, departmentName: string) => {
+    navigate(`/projects?department=${departmentId}&name=${encodeURIComponent(departmentName)}`);
+  };
+
+  const handleViewAttendance = (departmentId: string, departmentName: string) => {
+    navigate(`/attendance?department=${departmentId}&name=${encodeURIComponent(departmentName)}`);
+  };
+
+  const handleViewPayroll = (departmentId: string, departmentName: string) => {
+    navigate(`/payroll?department=${departmentId}&name=${encodeURIComponent(departmentName)}`);
+  };
+
   const handleDuplicate = async (department: Department) => {
     try {
-      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        toast({
+          title: 'Error',
+          description: 'Agency ID not found. Please ensure you are logged in to an agency account.',
+          variant: 'destructive',
+        });
+        return;
+      }
       const { error } = await db
         .from("departments")
         .insert([{
@@ -751,6 +907,11 @@ export default function DepartmentManagement() {
       <Tabs defaultValue="departments" className="space-y-4">
         <TabsList>
           <TabsTrigger value="departments">Departments</TabsTrigger>
+          {isAdmin && (
+            <TabsTrigger value="deactivated">
+              Deactivated ({stats.inactive})
+            </TabsTrigger>
+          )}
           {(isAdmin || isHR) && (
             <TabsTrigger value="assignments">Team Assignments</TabsTrigger>
           )}
@@ -758,6 +919,7 @@ export default function DepartmentManagement() {
         </TabsList>
 
         <TabsContent value="departments" className="space-y-4">
+          {/* Active Departments Tab */}
           {/* Search and Filters */}
           <div className="flex items-center gap-4 flex-wrap">
             <div className="relative flex-1 min-w-[200px]">
@@ -991,8 +1153,30 @@ export default function DepartmentManagement() {
                                   <Eye className="h-4 w-4 mr-2" />
                                   View Details
                                 </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleViewEmployees(department.id, department.name)}>
+                                  <Users className="h-4 w-4 mr-2" />
+                                  View Employees
+                                  <ExternalLink className="h-3 w-3 ml-auto" />
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleViewProjects(department.id, department.name)}>
+                                  <Briefcase className="h-4 w-4 mr-2" />
+                                  View Projects
+                                  <ExternalLink className="h-3 w-3 ml-auto" />
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleViewAttendance(department.id, department.name)}>
+                                  <Clock className="h-4 w-4 mr-2" />
+                                  View Attendance
+                                  <ExternalLink className="h-3 w-3 ml-auto" />
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleViewPayroll(department.id, department.name)}>
+                                  <Calculator className="h-4 w-4 mr-2" />
+                                  View Payroll
+                                  <ExternalLink className="h-3 w-3 ml-auto" />
+                                </DropdownMenuItem>
                                 {isAdmin && (
                                   <>
+                                    <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={() => handleEdit(department)}>
                                       <Edit className="h-4 w-4 mr-2" />
                                       Edit
@@ -1130,8 +1314,30 @@ export default function DepartmentManagement() {
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleViewEmployees(department.id, department.name)}>
+                              <Users className="h-4 w-4 mr-2" />
+                              View Employees
+                              <ExternalLink className="h-3 w-3 ml-auto" />
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleViewProjects(department.id, department.name)}>
+                              <Briefcase className="h-4 w-4 mr-2" />
+                              View Projects
+                              <ExternalLink className="h-3 w-3 ml-auto" />
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleViewAttendance(department.id, department.name)}>
+                              <Clock className="h-4 w-4 mr-2" />
+                              View Attendance
+                              <ExternalLink className="h-3 w-3 ml-auto" />
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleViewPayroll(department.id, department.name)}>
+                              <Calculator className="h-4 w-4 mr-2" />
+                              View Payroll
+                              <ExternalLink className="h-3 w-3 ml-auto" />
+                            </DropdownMenuItem>
                             {isAdmin && (
                               <>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => handleEdit(department)}>
                                   <Edit className="h-4 w-4 mr-2" />
                                   Edit
@@ -1216,8 +1422,30 @@ export default function DepartmentManagement() {
                             <Eye className="h-4 w-4 mr-2" />
                             View Details
                           </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleViewEmployees(department.id, department.name)}>
+                            <Users className="h-4 w-4 mr-2" />
+                            View Employees
+                            <ExternalLink className="h-3 w-3 ml-auto" />
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewProjects(department.id, department.name)}>
+                            <Briefcase className="h-4 w-4 mr-2" />
+                            View Projects
+                            <ExternalLink className="h-3 w-3 ml-auto" />
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewAttendance(department.id, department.name)}>
+                            <Clock className="h-4 w-4 mr-2" />
+                            View Attendance
+                            <ExternalLink className="h-3 w-3 ml-auto" />
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewPayroll(department.id, department.name)}>
+                            <Calculator className="h-4 w-4 mr-2" />
+                            View Payroll
+                            <ExternalLink className="h-3 w-3 ml-auto" />
+                          </DropdownMenuItem>
                           {isAdmin && (
                             <>
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => handleEdit(department)}>
                                 <Edit className="h-4 w-4 mr-2" />
                                 Edit
@@ -1315,6 +1543,391 @@ export default function DepartmentManagement() {
           )}
         </TabsContent>
 
+        <TabsContent value="deactivated" className="space-y-4">
+          {/* Deactivated Departments Tab */}
+          {/* Search and Filters */}
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                placeholder="Search deactivated departments..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filters
+            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={viewMode === "cards" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("cards")}
+              >
+                <Grid3x3 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+              >
+                <Table2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("list")}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Advanced Filters */}
+          {showFilters && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Manager</label>
+                    <Select value={filterManager} onValueChange={setFilterManager}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Managers</SelectItem>
+                        {managers.map(m => (
+                          <SelectItem key={m.user_id} value={m.user_id}>
+                            {m.full_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Parent Department</label>
+                    <Select value={filterParent} onValueChange={setFilterParent}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        {parentDepartments.map(d => (
+                          <SelectItem key={d.id} value={d.id}>
+                            {d.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Min Budget</label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={minBudget}
+                      onChange={(e) => setMinBudget(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">Max Budget</label>
+                    <Input
+                      type="number"
+                      placeholder="No limit"
+                      value={maxBudget}
+                      onChange={(e) => setMaxBudget(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Deactivated Departments Display */}
+          {loading ? (
+            <Card>
+              <CardContent className="flex items-center justify-center h-32">
+                <p>Loading deactivated departments...</p>
+              </CardContent>
+            </Card>
+          ) : filteredAndSortedDeactivatedDepartments.length === 0 ? (
+            <Card>
+              <CardContent className="flex items-center justify-center h-32">
+                <p className="text-muted-foreground">No deactivated departments found</p>
+              </CardContent>
+            </Card>
+          ) : viewMode === "table" ? (
+            <Card>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {isAdmin && (
+                          <TableHead className="w-12">
+                            <Checkbox
+                              checked={selectedDepartments.size === paginatedDeactivatedDepartments.length && paginatedDeactivatedDepartments.length > 0}
+                              onCheckedChange={() => {
+                                if (selectedDepartments.size === paginatedDeactivatedDepartments.length) {
+                                  setSelectedDepartments(new Set());
+                                } else {
+                                  setSelectedDepartments(new Set(paginatedDeactivatedDepartments.map(d => d.id)));
+                                }
+                              }}
+                            />
+                          </TableHead>
+                        )}
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort("name")}
+                        >
+                          <div className="flex items-center">
+                            Name
+                            <SortIcon field="name" />
+                          </div>
+                        </TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Manager</TableHead>
+                        <TableHead>Parent</TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort("budget")}
+                        >
+                          <div className="flex items-center">
+                            Budget
+                            <SortIcon field="budget" />
+                          </div>
+                        </TableHead>
+                        <TableHead 
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => handleSort("employees")}
+                        >
+                          <div className="flex items-center">
+                            Employees
+                            <SortIcon field="employees" />
+                          </div>
+                        </TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedDeactivatedDepartments.map((department) => (
+                        <TableRow key={department.id}>
+                          {isAdmin && (
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedDepartments.has(department.id)}
+                                onCheckedChange={() => handleSelectDepartment(department.id)}
+                              />
+                            </TableCell>
+                          )}
+                          <TableCell className="font-medium">{department.name}</TableCell>
+                          <TableCell className="max-w-xs truncate">
+                            {department.description || "-"}
+                          </TableCell>
+                          <TableCell>
+                            {department.manager ? (
+                              <Badge variant="outline">{department.manager.full_name}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {department.parent_department ? (
+                              <Badge variant="secondary">{department.parent_department.name}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {department.budget ? `₹${department.budget.toLocaleString()}` : "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">
+                              {department._count?.team_assignments || 0}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleViewDetails(department)}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Details
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleRestore(department)}>
+                                  <RefreshCw className="h-4 w-4 mr-2" />
+                                  Restore
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => handleDelete(department)}
+                                  className="text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete Permanently
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                {/* Pagination */}
+                {totalDeactivatedPages > 1 && (
+                  <div className="flex items-center justify-between p-4 border-t">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {(currentPage - 1) * pageSize + 1} to {Math.min(currentPage * pageSize, filteredAndSortedDeactivatedDepartments.length)} of {filteredAndSortedDeactivatedDepartments.length} deactivated departments
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        Previous
+                      </Button>
+                      <div className="text-sm">
+                        Page {currentPage} of {totalDeactivatedPages}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(p => Math.min(totalDeactivatedPages, p + 1))}
+                        disabled={currentPage === totalDeactivatedPages}
+                      >
+                        Next
+                      </Button>
+                      <Select
+                        value={pageSize.toString()}
+                        onValueChange={(v) => {
+                          setPageSize(parseInt(v));
+                          setCurrentPage(1);
+                        }}
+                      >
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="25">25</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                          <SelectItem value="100">100</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {paginatedDeactivatedDepartments.map((department) => (
+                <Card key={department.id}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{department.name}</CardTitle>
+                      <Badge variant="secondary">Deactivated</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {department.description && (
+                      <p className="text-sm text-muted-foreground">
+                        {department.description}
+                      </p>
+                    )}
+                    
+                    <div className="space-y-2">
+                      {department.manager && (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">Manager</Badge>
+                          <span className="text-sm">{department.manager.full_name}</span>
+                        </div>
+                      )}
+                      
+                      {department.parent_department && (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">Parent</Badge>
+                          <span className="text-sm">{department.parent_department.name}</span>
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">
+                          {department._count?.team_assignments || 0} Members
+                        </Badge>
+                        {department.budget && department.budget > 0 && (
+                          <Badge variant="outline">
+                            ₹{department.budget.toLocaleString()} Budget
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRestore(department)}
+                        className="flex-1"
+                      >
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        Restore
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete(department)}
+                        className="flex-1"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {/* Pagination for cards view */}
+              {totalDeactivatedPages > 1 && (
+                <div className="col-span-full flex items-center justify-center gap-2 pt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <div className="text-sm">
+                    Page {currentPage} of {totalDeactivatedPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(totalDeactivatedPages, p + 1))}
+                    disabled={currentPage === totalDeactivatedPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
         <TabsContent value="assignments">
           <TeamAssignmentPanel />
         </TabsContent>
@@ -1322,77 +1935,39 @@ export default function DepartmentManagement() {
         <TabsContent value="hierarchy">
           <Card>
             <CardHeader>
-              <CardTitle>Department Hierarchy</CardTitle>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Department Hierarchy</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Visual representation of your organizational structure
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={fetchDepartments}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              {(() => {
-                // Build hierarchy tree recursively
-                const buildHierarchy = (parentId: string | null, level: number = 0): JSX.Element[] => {
-                  const children = departments.filter(
-                    d => d.is_active && 
-                    (parentId === null 
-                      ? (!d.parent_department_id || d.parent_department_id.trim() === "") 
-                      : d.parent_department_id === parentId)
-                  );
-
-                  if (children.length === 0) return [];
-
-                  return children.map(dept => {
-                    const hasChildren = departments.some(
-                      d => d.is_active && d.parent_department_id === dept.id
-                    );
-                    
-                    return (
-                      <div key={dept.id} className={level > 0 ? "mt-3" : "mt-2"}>
-                        <div 
-                          className={`flex items-center gap-2 flex-wrap ${
-                            level === 0 ? "font-semibold text-base" : 
-                            level === 1 ? "font-medium text-sm" : "text-sm"
-                          }`}
-                          style={{ paddingLeft: `${level * 20}px` }}
-                        >
-                          {level > 0 && (
-                            <>
-                              <div className="w-3 h-px bg-border" />
-                              <div className="w-px h-4 bg-border -ml-3" style={{ marginTop: '-8px' }} />
-                            </>
-                          )}
-                          <Building2 className={`h-4 w-4 text-primary flex-shrink-0`} />
-                          <span className="font-medium">{dept.name}</span>
-                          {dept.manager && (
-                            <Badge variant="outline" className="text-xs">
-                              {dept.manager.full_name}
-                            </Badge>
-                          )}
-                          <Badge variant="secondary" className="text-xs">
-                            {dept._count?.team_assignments || 0} members
-                          </Badge>
-                          {dept.budget && dept.budget > 0 && (
-                            <Badge variant="outline" className="text-xs">
-                              ₹{(dept.budget / 1000).toFixed(0)}K
-                            </Badge>
-                          )}
-                        </div>
-                        {hasChildren && (
-                          <div className="mt-2" style={{ paddingLeft: `${(level + 1) * 20}px` }}>
-                            <div className="border-l-2 border-muted pl-4">
-                              {buildHierarchy(dept.id, level + 1)}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  });
-                };
-
-                const rootDepartments = buildHierarchy(null);
-                
-                return rootDepartments.length > 0 ? (
-                  <div className="space-y-2">{rootDepartments}</div>
-                ) : (
-                  <p className="text-muted-foreground">No department hierarchy available. Create departments and set parent departments to build the hierarchy.</p>
-                );
-              })()}
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <DepartmentHierarchyView 
+                  departments={departments}
+                  expandedDepartments={expandedDepartments}
+                  setExpandedDepartments={setExpandedDepartments}
+                  departmentMembers={departmentMembers}
+                  setDepartmentMembers={setDepartmentMembers}
+                  onDepartmentClick={(dept) => {
+                    setSelectedDepartment(dept);
+                    setShowDetailsDialog(true);
+                  }}
+                  db={db}
+                  onRefresh={fetchDepartments}
+                />
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1463,6 +2038,63 @@ export default function DepartmentManagement() {
                 </div>
               </div>
 
+              {/* Quick Actions */}
+              <div className="border-t pt-4">
+                <label className="text-sm font-medium text-muted-foreground mb-3 block">
+                  Quick Actions
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowDetailsDialog(false);
+                      handleViewEmployees(selectedDepartment.id, selectedDepartment.name);
+                    }}
+                    className="w-full"
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    View Employees
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowDetailsDialog(false);
+                      handleViewProjects(selectedDepartment.id, selectedDepartment.name);
+                    }}
+                    className="w-full"
+                  >
+                    <Briefcase className="h-4 w-4 mr-2" />
+                    View Projects
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowDetailsDialog(false);
+                      handleViewAttendance(selectedDepartment.id, selectedDepartment.name);
+                    }}
+                    className="w-full"
+                  >
+                    <Clock className="h-4 w-4 mr-2" />
+                    View Attendance
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowDetailsDialog(false);
+                      handleViewPayroll(selectedDepartment.id, selectedDepartment.name);
+                    }}
+                    className="w-full"
+                  >
+                    <Calculator className="h-4 w-4 mr-2" />
+                    View Payroll
+                  </Button>
+                </div>
+              </div>
+
               {/* Employees List */}
               <div className="border-t pt-4">
                 <label className="text-sm font-medium text-muted-foreground mb-3 block">
@@ -1528,7 +2160,7 @@ export default function DepartmentManagement() {
         itemName={selectedDepartment?.name || ""}
         itemId={selectedDepartment?.id || ""}
         tableName="departments"
-        softDelete={true}
+        softDelete={selectedDepartment?.is_active !== false}
       />
     </div>
   );

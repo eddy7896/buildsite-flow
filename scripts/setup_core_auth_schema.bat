@@ -11,7 +11,7 @@ REM   -h HOST           PostgreSQL host (default: localhost)
 REM   -p PORT           PostgreSQL port (default: 5432)
 REM   -u USER           PostgreSQL user (default: postgres)
 REM   -d DATABASE       Database name (default: buildflow_db)
-REM   -f FILE           Migration file path (default: supabase\migrations\00_core_auth_schema.sql)
+REM   -f FILE           Migration file path (default: database\migrations\01_core_schema.sql)
 REM   --verify-only     Only verify schema, don't create
 REM   --help            Show this help message
 REM ============================================================================
@@ -23,7 +23,7 @@ set "PG_HOST=localhost"
 set "PG_PORT=5432"
 set "PG_USER=postgres"
 set "PG_DATABASE=buildflow_db"
-set "MIGRATION_FILE=supabase\migrations\00_core_auth_schema.sql"
+set "MIGRATION_FILE=database\migrations\01_core_schema.sql"
 set "VERIFY_ONLY=false"
 
 REM Parse command line arguments
@@ -127,7 +127,7 @@ echo.
 echo Next steps:
 echo 1. Review the schema documentation: CORE_AUTH_SCHEMA_DOCUMENTATION.md
 echo 2. Create remaining tables from the migration plan
-echo 3. Migrate data from Supabase
+echo 3. Set up remaining database tables
 echo 4. Update application configuration
 echo 5. Test thoroughly before production deployment
 echo.
@@ -148,7 +148,7 @@ echo   -h HOST           PostgreSQL host (default: localhost)
 echo   -p PORT           PostgreSQL port (default: 5432)
 echo   -u USER           PostgreSQL user (default: postgres)
 echo   -d DATABASE       Database name (default: buildflow_db)
-echo   -f FILE           Migration file path (default: supabase\migrations\00_core_auth_schema.sql)
+echo   -f FILE           Migration file path (default: database\migrations\01_core_schema.sql)
 echo   --verify-only     Only verify schema, don't create
 echo   --help            Show this help message
 echo.

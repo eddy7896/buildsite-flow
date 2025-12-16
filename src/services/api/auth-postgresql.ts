@@ -110,14 +110,14 @@ export async function registerUser(data: SignUpData): Promise<AuthResponse> {
        agency_id = EXCLUDED.agency_id,
        updated_at = NOW()
      RETURNING *`,
-    [user.id, fullName, agencyId || '550e8400-e29b-41d4-a716-446655440000']
+    [user.id, fullName, agencyId || null]
   );
 
   // Assign default role
   await execute(
     `INSERT INTO public.user_roles (user_id, role, agency_id)
      VALUES ($1, 'employee', $2)`,
-    [user.id, agencyId || '550e8400-e29b-41d4-a716-446655440000']
+    [user.id, agencyId || null]
   );
 
   // Generate token
@@ -133,54 +133,48 @@ export async function registerUser(data: SignUpData): Promise<AuthResponse> {
 }
 
 /**
- * Login user
+ * Login user - Searches across all agency databases
  */
 export async function loginUser(data: SignInData): Promise<AuthResponse> {
   const { email, password } = data;
 
-  // Find user
-  const user = await queryOne<User>(
-    'SELECT * FROM public.users WHERE email = $1 AND is_active = true',
-    [email]
-  );
+  // Use the new server endpoint that searches all agency databases
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+  const apiBaseUrl = API_URL.replace(/\/api\/?$/, '');
+  
+  const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ email, password }),
+  });
 
-  if (!user) {
-    throw new Error('Invalid email or password');
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ error: 'Login failed' }));
+    throw new Error(errorData.error || 'Invalid email or password');
   }
 
-  // Verify password
-  const passwordMatch = await comparePassword(password, user.password_hash);
-  if (!passwordMatch) {
-    throw new Error('Invalid email or password');
+  const result = await response.json();
+
+  if (!result.success) {
+    throw new Error(result.error || 'Login failed');
   }
 
-  // Update last sign in
-  await execute(
-    'UPDATE public.users SET last_sign_in_at = NOW() WHERE id = $1',
-    [user.id]
-  );
+  // Store the agency database and id for future queries
+  if (result.user?.agency?.databaseName) {
+    localStorage.setItem('agency_database', result.user.agency.databaseName);
+    localStorage.setItem('agency_id', result.user.agency.id);
+  }
 
-  // Get profile
-  const profile = await queryOne<Profile>(
-    'SELECT * FROM public.profiles WHERE user_id = $1',
-    [user.id]
-  );
-
-  // Get roles
-  const roles = await queryMany<UserRole>(
-    'SELECT * FROM public.user_roles WHERE user_id = $1',
-    [user.id]
-  );
-
-  // Generate token
-  const token = generateToken(user.id, user.email);
-
+  // Format response to match AuthResponse interface
   return {
-    token,
+    token: result.token,
     user: {
-      ...user,
-      profile: profile || undefined,
-      roles: roles || undefined,
+      ...result.user,
+      // Ensure profile and roles are properly formatted
+      profile: result.user.profile || undefined,
+      roles: result.user.roles || [],
     },
   };
 }

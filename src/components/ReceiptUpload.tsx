@@ -149,7 +149,7 @@ export const ReceiptUpload: React.FC<ReceiptUploadProps> = ({
           const fileName = `${reimbursementId}_${Date.now()}_${index}.${fileExt}`;
           const filePath = `receipts/${fileName}`;
 
-          // Upload to Supabase Storage
+          // Upload to file storage
           const { data: uploadData, error: uploadError } = await db.storage
             .from('receipts')
             .upload(filePath, fileItem.file);
@@ -162,7 +162,7 @@ export const ReceiptUpload: React.FC<ReceiptUploadProps> = ({
           ));
 
           // Save attachment record
-          const { data: attachmentData, error: attachmentError } = await supabase
+          const { data: attachmentData, error: attachmentError } = await db
             .from('reimbursement_attachments')
             .insert({
               reimbursement_id: reimbursementId,

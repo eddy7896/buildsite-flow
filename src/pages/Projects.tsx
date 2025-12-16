@@ -5,11 +5,22 @@ import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Calendar, Users, Search, Filter, Edit, Trash2, Eye, Loader2, DollarSign, TrendingUp, CheckCircle, Clock, AlertCircle, GanttChart, List, MoreVertical, GripVertical } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Plus, Calendar, Users, Search, Filter, Edit, Trash2, Eye, Loader2, DollarSign, TrendingUp, CheckCircle, Clock, AlertCircle, GanttChart, List, MoreVertical, GripVertical, Building2, ExternalLink, Calculator } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { getAgencyId } from '@/utils/agencyUtils';
+import { DepartmentBreadcrumb } from "@/components/DepartmentBreadcrumb";
+import { useDepartmentNavigation } from "@/hooks/useDepartmentNavigation";
 import ProjectFormDialog from "@/components/ProjectFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
 import ProjectDetailsDialog from "@/components/ProjectDetailsDialog";
@@ -38,6 +49,23 @@ interface Project {
 const Projects = () => {
   const { toast } = useToast();
   const { user, profile } = useAuth();
+  const {
+    departmentId: urlDepartmentId,
+    departmentName: urlDepartmentName,
+    employeeId: urlEmployeeId,
+    employeeName: urlEmployeeName,
+    projectId: urlProjectId,
+    navigateToDepartment,
+    navigateToEmployees,
+    navigateToAttendance,
+    navigateToPayroll,
+  } = useDepartmentNavigation();
+  
+  // Legacy support for old URL params
+  const [searchParams] = useSearchParams();
+  const legacyDepartmentId = searchParams.get('department');
+  const legacyDepartmentName = searchParams.get('name');
+  
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -60,14 +88,19 @@ const Projects = () => {
 
   useEffect(() => {
     fetchProjects();
-  }, []);
+  }, [urlDepartmentId, urlEmployeeId, legacyDepartmentId]);
 
   const fetchProjects = async () => {
     try {
       setLoading(true);
       
-      // Get agency_id from profile or use default for development
-      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
+      // Get agency_id from profile or fetch from database
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        console.warn('No agency_id available, cannot fetch projects');
+        setLoading(false);
+        return;
+      }
       
       // Fetch projects and clients separately
       const [projectsResult, clientsResult] = await Promise.all([
@@ -83,13 +116,39 @@ const Projects = () => {
       if (projectsResult.error) throw projectsResult.error;
       if (clientsResult.error) throw clientsResult.error;
 
+      // If filtering by department, fetch team assignments to map users to departments
+      const deptId = urlDepartmentId || legacyDepartmentId;
+      let userDepartmentMap = new Map<string, string>();
+      let targetEmployeeIds: string[] = [];
+      
+      if (deptId) {
+        const { data: assignments } = await db
+          .from('team_assignments')
+          .select('user_id, department_id')
+          .eq('department_id', deptId)
+          .eq('is_active', true);
+        
+        if (assignments) {
+          assignments.forEach((ta: any) => {
+            if (ta.user_id) {
+              userDepartmentMap.set(ta.user_id, ta.department_id);
+            }
+          });
+        }
+      }
+      
+      // If filtering by employee, get that employee's user_id
+      if (urlEmployeeId) {
+        targetEmployeeIds = [urlEmployeeId];
+      }
+
       // Create a map of clients by ID for quick lookup
       const clientsMap = new Map(
         (clientsResult.data || []).map((client: any) => [client.id, client])
       );
       
-      // Join projects with clients
-      const projectsData = (projectsResult.data || []).map((project: any) => {
+      // Join projects with clients and filter by department if needed
+      let projectsData = (projectsResult.data || []).map((project: any) => {
         const client = project.client_id ? clientsMap.get(project.client_id) : null;
         return {
           ...project,
@@ -99,6 +158,41 @@ const Projects = () => {
           } : null
         };
       });
+
+      // Filter by department or employee if URL parameters are provided
+      if ((deptId && userDepartmentMap.size > 0) || (urlEmployeeId && targetEmployeeIds.length > 0)) {
+        projectsData = projectsData.filter((project: Project) => {
+          if (!project.assigned_team) return false;
+          
+          // Parse assigned_team JSONB
+          let teamMembers: any[] = [];
+          try {
+            teamMembers = typeof project.assigned_team === 'string' 
+              ? JSON.parse(project.assigned_team) 
+              : project.assigned_team;
+          } catch {
+            return false;
+          }
+          
+          // Filter by employee if specified
+          if (urlEmployeeId && targetEmployeeIds.length > 0) {
+            return teamMembers.some((member: any) => {
+              const userId = member.user_id || member.id;
+              return userId && targetEmployeeIds.includes(userId);
+            });
+          }
+          
+          // Filter by department if specified
+          if (deptId && userDepartmentMap.size > 0) {
+            return teamMembers.some((member: any) => {
+              const userId = member.user_id || member.id;
+              return userId && userDepartmentMap.has(userId);
+            });
+          }
+          
+          return false;
+        });
+      }
       
       setProjects(projectsData);
       
@@ -391,12 +485,46 @@ const Projects = () => {
     );
   }
 
+  const displayDepartmentName = urlDepartmentName || (legacyDepartmentName ? decodeURIComponent(legacyDepartmentName) : null);
+  const displayEmployeeName = urlEmployeeName;
+
   return (
     <div className="p-4 lg:p-6 space-y-6">
+      {/* Breadcrumb */}
+      <DepartmentBreadcrumb currentPage="projects" />
+      
       <div className="flex flex-col space-y-4 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold">Projects</h1>
-          <p className="text-sm lg:text-base text-muted-foreground mt-1">Manage and track project progress</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl lg:text-3xl font-bold">Projects</h1>
+            {displayDepartmentName && (
+              <Badge 
+                variant="secondary" 
+                className="text-sm cursor-pointer hover:bg-secondary/80 transition-colors"
+                onClick={() => navigateToDepartment(urlDepartmentId || legacyDepartmentId || undefined, displayDepartmentName || undefined)}
+              >
+                <Building2 className="h-3 w-3 mr-1" />
+                {displayDepartmentName}
+              </Badge>
+            )}
+            {displayEmployeeName && (
+              <Badge 
+                variant="outline" 
+                className="text-sm cursor-pointer hover:bg-accent transition-colors"
+                onClick={() => navigateToEmployees({ employeeId: urlEmployeeId || undefined, employeeName: displayEmployeeName || undefined })}
+              >
+                <Users className="h-3 w-3 mr-1" />
+                {displayEmployeeName}
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm lg:text-base text-muted-foreground mt-1">
+            {displayEmployeeName 
+              ? `Projects for ${displayEmployeeName}`
+              : displayDepartmentName 
+              ? `Projects for ${displayDepartmentName} department`
+              : "Manage and track project progress"}
+          </p>
         </div>
         <Button onClick={handleNewProject} className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
@@ -603,14 +731,97 @@ const Projects = () => {
                         <Eye className="h-4 w-4 mr-2 lg:mr-1" />
                         View
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleEditProject(project)} className="w-full lg:w-auto h-9">
-                        <Edit className="h-4 w-4 mr-2 lg:mr-1" />
-                        Edit
-                      </Button>
-                      <Button variant="outline" size="sm" onClick={() => handleDeleteProject(project)} className="w-full lg:w-auto h-9 text-destructive hover:text-destructive">
-                        <Trash2 className="h-4 w-4 mr-2 lg:mr-1" />
-                        Delete
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="outline" size="sm" className="w-full lg:w-auto h-9">
+                            <MoreVertical className="h-4 w-4 mr-2 lg:mr-1" />
+                            More
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewProject(project)}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleEditProject(project)}>
+                            <Edit className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {(() => {
+                            // Parse assigned_team to check if it has team members
+                            if (!project.assigned_team) return false;
+                            try {
+                              const teamMembers = typeof project.assigned_team === 'string' 
+                                ? JSON.parse(project.assigned_team) 
+                                : project.assigned_team;
+                              return Array.isArray(teamMembers) && teamMembers.length > 0;
+                            } catch {
+                              return false;
+                            }
+                          })() && (
+                            <>
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  navigateToEmployees({ 
+                                    departmentId: urlDepartmentId || legacyDepartmentId || undefined,
+                                    departmentName: displayDepartmentName || undefined
+                                  });
+                                }}
+                              >
+                                <Users className="h-4 w-4 mr-2" />
+                                View Team Members
+                                <ExternalLink className="h-3 w-3 ml-auto" />
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  navigateToAttendance({ 
+                                    projectId: project.id,
+                                    projectName: project.name,
+                                    departmentId: urlDepartmentId || legacyDepartmentId || undefined,
+                                    departmentName: displayDepartmentName || undefined
+                                  });
+                                }}
+                              >
+                                <Clock className="h-4 w-4 mr-2" />
+                                View Team Attendance
+                                <ExternalLink className="h-3 w-3 ml-auto" />
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  navigateToPayroll({ 
+                                    projectId: project.id,
+                                    projectName: project.name,
+                                    departmentId: urlDepartmentId || legacyDepartmentId || undefined,
+                                    departmentName: displayDepartmentName || undefined
+                                  });
+                                }}
+                              >
+                                <Calculator className="h-4 w-4 mr-2" />
+                                View Team Payroll
+                                <ExternalLink className="h-3 w-3 ml-auto" />
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          {displayDepartmentName && (urlDepartmentId || legacyDepartmentId) && (
+                            <DropdownMenuItem 
+                              onClick={() => navigateToDepartment(urlDepartmentId || legacyDepartmentId || undefined, displayDepartmentName || undefined)}
+                            >
+                              <Building2 className="h-4 w-4 mr-2" />
+                              View Department
+                              <ExternalLink className="h-3 w-3 ml-auto" />
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteProject(project)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 </div>

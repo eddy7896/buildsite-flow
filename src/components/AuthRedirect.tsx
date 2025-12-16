@@ -7,24 +7,79 @@ export function AuthRedirect() {
   const navigate = useNavigate();
   const location = useLocation();
   const [hasRedirected, setHasRedirected] = useState(false);
+  const [setupChecked, setSetupChecked] = useState(false);
 
   useEffect(() => {
     // Reset redirection flag when user logs out
     if (!user) {
       setHasRedirected(false);
+      setSetupChecked(false);
     }
   }, [user]);
 
   useEffect(() => {
+    // Check setup status for new agency admins
+    const checkSetupStatus = async () => {
+      if (user && userRole === 'admin' && !setupChecked && location.pathname === '/auth') {
+        try {
+          const agencyDatabase = localStorage.getItem('agency_database');
+          if (!agencyDatabase) {
+            // No agency database, go to dashboard
+            setHasRedirected(true);
+            navigate('/dashboard');
+            return;
+          }
+
+          const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+          const apiBaseUrl = API_URL.replace(/\/api\/?$/, '');
+          
+          const response = await fetch(`${apiBaseUrl}/api/agencies/check-setup`, {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+            },
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            setSetupChecked(true);
+            setHasRedirected(true);
+            
+            if (!result.setupComplete) {
+              // Setup not complete, redirect to setup page
+              navigate('/agency-setup');
+            } else {
+              // Setup complete, go to dashboard
+              navigate('/dashboard');
+            }
+          } else {
+            // If check fails, assume setup needed
+            setSetupChecked(true);
+            setHasRedirected(true);
+            navigate('/agency-setup');
+          }
+        } catch (error) {
+          console.error('Error checking setup status:', error);
+          // On error, assume setup needed
+          setSetupChecked(true);
+          setHasRedirected(true);
+          navigate('/agency-setup');
+        }
+      }
+    };
+
+    checkSetupStatus();
+  }, [user, userRole, loading, setupChecked, location.pathname, navigate]);
+
+  useEffect(() => {
     // Only redirect if user is authenticated, role is determined, not loading, 
     // haven't redirected yet, and currently on auth page
-    if (user && userRole && !loading && !hasRedirected && location.pathname === '/auth') {
+    // Skip for admin users (handled by setup check above)
+    if (user && userRole && !loading && !hasRedirected && location.pathname === '/auth' && userRole !== 'admin') {
       setHasRedirected(true);
       
       if (userRole === 'super_admin') {
         navigate('/system');
-      } else if (userRole === 'admin') {
-        navigate('/agency');
       } else {
         navigate('/dashboard');
       }

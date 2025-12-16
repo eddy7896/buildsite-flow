@@ -72,4 +72,48 @@ export class NotificationService extends BaseApiService {
       p_expires_at: data.expiresAt
     }, options);
   }
+
+  static async deleteNotification(
+    notificationId: string,
+    options: ApiOptions = {}
+  ): Promise<ApiResponse<any>> {
+    return this.delete('notifications', { id: notificationId }, options);
+  }
+
+  static async bulkDeleteNotifications(
+    notificationIds: string[],
+    options: ApiOptions = {}
+  ): Promise<ApiResponse<any>> {
+    // Delete notifications one by one using the base delete method
+    // This ensures proper error handling and transaction safety
+    const results = await Promise.all(
+      notificationIds.map(id => this.deleteNotification(id, { ...options, showErrorToast: false }))
+    );
+    
+    const errors = results.filter(r => !r.success);
+    if (errors.length > 0) {
+      return {
+        data: null,
+        error: `Failed to delete ${errors.length} notification(s)`,
+        success: false
+      };
+    }
+    
+    return {
+      data: null,
+      error: null,
+      success: true
+    };
+  }
+
+  static async markAllAsRead(
+    userId: string,
+    options: ApiOptions = {}
+  ): Promise<ApiResponse<any>> {
+    return this.update('notifications', 
+      { read_at: new Date().toISOString() },
+      { user_id: userId },
+      options
+    );
+  }
 }

@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/database';
 import { generateUUID } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 import { Plus, Trash2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -442,8 +443,17 @@ const QuotationFormDialog: React.FC<QuotationFormDialogProps> = ({ isOpen, onClo
         const { tax_amount, total_amount, ...quotationData } = formData;
         const quoteNumber = `Q-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}`;
         // Get user ID and agency ID from auth context, or use defaults
-        const userId = user?.id || '550e8400-e29b-41d4-a716-446655440010'; // Default system user UUID
-        const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000'; // Default agency UUID
+        const agencyId = await getAgencyId(profile, user?.id);
+        if (!agencyId || !user?.id) {
+          toast({
+            title: 'Error',
+            description: 'Agency ID or User ID not found. Please ensure you are logged in.',
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
+        const userId = user.id;
 
         const newQuotation = {
           id: generateUUID(),

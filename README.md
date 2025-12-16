@@ -101,27 +101,22 @@ The following tables are fully functional with CRUD operations:
 
 ## 🔧 Database Management
 
-### Reset Database to Fresh Seed Data
+### Database Connection
 
-Open browser console (F12) and run:
-```javascript
-resetDatabase()
+- **Database:** `buildflow_db`
+- **User:** `postgres`
+- **Password:** `admin`
+- **Connection:** `postgresql://postgres:admin@localhost:5432/buildflow_db`
+
+### Verify Database
+
+```bash
+psql -U postgres -d buildflow_db -c "\dt"
 ```
 
-This will:
-1. Clear all existing data
-2. Re-seed with fresh comprehensive data
-3. Reload the page
+### Run Migrations
 
-### Clear Database Completely
-```javascript
-clearDatabase()
-```
-
-### View Current Data
-```javascript
-JSON.parse(localStorage.getItem('buildflow_db'))
-```
+Check `database/migrations/` for SQL migration files to set up the database schema.
 
 ## 📦 Technology Stack
 
@@ -130,7 +125,7 @@ JSON.parse(localStorage.getItem('buildflow_db'))
 - **State:** Zustand, React Query
 - **Forms:** React Hook Form, Zod
 - **Charts:** Recharts
-- **Database:** Browser localStorage (development)
+- **Database:** PostgreSQL (buildflow_db)
 
 ## 📁 Project Structure
 
@@ -147,12 +142,11 @@ src/
 │   └── api/       # PostgreSQL service layer
 ├── stores/        # Zustand stores
 ├── lib/           # Utilities
-│   ├── database.ts    # Supabase-compatible query builder
+│   ├── database.ts    # PostgreSQL query builder
 │   ├── seedDatabase.ts # Comprehensive data seeder
 │   └── utils.ts       # Helper functions
 ├── integrations/
-│   ├── postgresql/    # Database client
-│   └── supabase/      # Compatibility layer
+│   └── postgresql/    # PostgreSQL database client
 ├── config/        # App configuration
 └── constants/     # App constants
 ```
@@ -222,11 +216,11 @@ npm run lint
 
 ### Database Layer
 
-The application uses a Supabase-compatible API interface that stores data in localStorage:
+The application uses PostgreSQL with a query builder API:
 
 ```typescript
-// Query builder (Supabase-style)
-const { data, error } = await supabase
+// Query builder (PostgreSQL)
+const { data, error } = await db
   .from('clients')
   .select('*')
   .eq('status', 'active')
@@ -237,12 +231,11 @@ import { selectRecords, insertRecord } from '@/services/api/postgresql-service';
 const clients = await selectRecords('clients', { where: { status: 'active' } });
 ```
 
-### Future Backend Integration
+### Multi-Tenancy
 
-To connect a real PostgreSQL backend:
-1. Set up an API server (Express/FastAPI)
-2. Update `src/integrations/postgresql/client.ts` to make HTTP calls
-3. The rest of the application works unchanged
+- Each agency has isolated data via `agency_id` column
+- Backend routes requests to agency-specific databases
+- Frontend automatically includes `agency_id` in all operations
 
 ## 🔧 Configuration
 
@@ -275,12 +268,21 @@ VITE_API_URL=your-api-url
 | Attendance Records | 150+ |
 | Leave Types | 6 |
 
+## 📚 Documentation
+
+For detailed documentation, see the `docs/` folder:
+
+- **[Architecture](docs/architecture.md)** - System architecture and design
+- **[Database](docs/database.md)** - Database structure and schema
+- **[API](docs/api.md)** - API documentation and usage
+- **[Development](docs/development.md)** - Development guide and best practices
+
 ## 📄 License
 
 Private - All rights reserved.
 
 ---
 
-**Status:** Fully Functional with Comprehensive Data  
-**Last Updated:** November 2025  
-**Seed Version:** 2.0.0
+**Status:** Production Ready - PostgreSQL Multi-Tenant ERP  
+**Last Updated:** January 2025  
+**Version:** 1.0.0

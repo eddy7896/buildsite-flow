@@ -12,6 +12,7 @@ import { Plus, Settings, Download, Trash2, Edit, BarChart3, PieChart, Calendar, 
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/database';
 import { toast } from 'sonner';
+import { getAgencyId } from '@/utils/agencyUtils';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 interface DashboardWidget {
@@ -49,10 +50,11 @@ interface CustomReport {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
 export function AdvancedDashboard() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [widgets, setWidgets] = useState<DashboardWidget[]>([]);
   const [reports, setReports] = useState<CustomReport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [agencyId, setAgencyId] = useState<string | null>(null);
   const [showWidgetDialog, setShowWidgetDialog] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
@@ -73,10 +75,13 @@ export function AdvancedDashboard() {
 
   const fetchWidgets = async () => {
     try {
-      const { data, error } = await supabase
+      if (!agencyId) return;
+      
+      const { data, error } = await db
         .from('dashboard_widgets')
         .select('*')
         .eq('is_active', true)
+        .eq('agency_id', agencyId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -89,9 +94,12 @@ export function AdvancedDashboard() {
 
   const fetchReports = async () => {
     try {
-      const { data, error } = await supabase
+      if (!agencyId) return;
+      
+      const { data, error } = await db
         .from('custom_reports')
         .select('*')
+        .eq('agency_id', agencyId)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -103,26 +111,32 @@ export function AdvancedDashboard() {
   };
 
   useEffect(() => {
-    const loadData = async () => {
-      await Promise.all([fetchWidgets(), fetchReports()]);
+    const initializeAgency = async () => {
+      const id = await getAgencyId(profile, user?.id);
+      setAgencyId(id);
+      if (id) {
+        await Promise.all([fetchWidgets(), fetchReports()]);
+      }
       setLoading(false);
     };
-    loadData();
-  }, []);
+    if (user?.id) {
+      initializeAgency();
+    }
+  }, [user?.id, profile?.agency_id]);
 
   const handleCreateWidget = async () => {
-    if (!user || !widgetForm.title || !widgetForm.data_source) {
+    if (!user || !widgetForm.title || !widgetForm.data_source || !agencyId) {
       toast.error('Please fill in all required fields');
       return;
     }
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('dashboard_widgets')
         .insert({
           ...widgetForm,
           user_id: user.id,
-          agency_id: 'temp-agency-id' // Will be set by trigger
+          agency_id: agencyId
         });
 
       if (error) throw error;
@@ -138,18 +152,18 @@ export function AdvancedDashboard() {
   };
 
   const handleCreateReport = async () => {
-    if (!user || !reportForm.name || reportForm.data_sources.length === 0) {
+    if (!user || !reportForm.name || reportForm.data_sources.length === 0 || !agencyId) {
       toast.error('Please fill in all required fields');
       return;
     }
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('custom_reports')
         .insert({
           ...reportForm,
           user_id: user.id,
-          agency_id: 'temp-agency-id' // Will be set by trigger
+          agency_id: agencyId
         });
 
       if (error) throw error;
@@ -166,7 +180,7 @@ export function AdvancedDashboard() {
 
   const handleDeleteWidget = async (widgetId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('dashboard_widgets')
         .update({ is_active: false })
         .eq('id', widgetId);

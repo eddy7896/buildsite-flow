@@ -4,9 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, Filter, Download, TrendingUp, TrendingDown, DollarSign, Calendar, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { selectRecords } from '@/services/api/postgresql-service';
 
 interface Transaction {
   id: string;
@@ -27,7 +30,9 @@ interface LedgerSummary {
 }
 
 const Ledger = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [ledgerSummary, setLedgerSummary] = useState<LedgerSummary>({
     totalBalance: 0,
@@ -37,29 +42,65 @@ const Ledger = () => {
   });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchLedgerData();
-  }, []);
-
-  const fetchLedgerData = async () => {
+  const fetchLedgerData = useCallback(async () => {
+    
     try {
       setLoading(true);
+      setError(null);
       
-      // Fetch journal entries with their lines
-      const { data: entries, error: entriesError } = await db
+      // Get agency_id - try profile first, then try to fetch from database
+      let agencyId = profile?.agency_id;
+      
+      if (!agencyId && user?.id) {
+        try {
+          const { selectOne } = await import('@/services/api/postgresql-service');
+          const userProfile = await selectOne('profiles', { user_id: user.id });
+          agencyId = userProfile?.agency_id;
+        } catch (err) {
+          console.warn('Could not fetch profile:', err);
+        }
+      }
+
+      // Fetch all posted journal entries
+      let query = db
         .from('journal_entries')
         .select('*')
+        .eq('status', 'posted')
         .order('entry_date', { ascending: false })
-        .limit(100);
+        .limit(500);
+
+      const { data: entries, error: entriesError } = await query;
+
+      console.log('Fetched journal entries:', entries?.length || 0, 'entries');
 
       if (entriesError) {
         console.error('Error fetching journal entries:', entriesError);
         throw entriesError;
       }
 
+      // If no entries, still show the page with empty state
+      if (!entries || entries.length === 0) {
+        console.log('No journal entries found');
+        setTransactions([]);
+        setLedgerSummary({
+          totalBalance: 0,
+          monthlyIncome: 0,
+          monthlyExpenses: 0,
+          netProfit: 0
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Filter by agency_id if available
+      const agencyEntries = (entries || []).filter((e: any) => 
+        !agencyId || !e.agency_id || e.agency_id === agencyId
+      );
+
       // Fetch journal entry lines to get account details
-      const entryIds = entries?.map((e: any) => e.id) || [];
+      const entryIds = agencyEntries.map((e: any) => e.id) || [];
       let lines: any[] = [];
       
       if (entryIds.length > 0) {
@@ -76,22 +117,76 @@ const Ledger = () => {
       }
 
       // Fetch chart of accounts for category mapping
-      const { data: accounts, error: accountsError } = await db
-        .from('chart_of_accounts')
-        .select('id, account_name, account_type');
-
-      if (accountsError) {
-        console.error('Error fetching chart of accounts:', accountsError);
-        throw accountsError;
+      let accounts: any[] = [];
+      try {
+        const where: Record<string, any> = { is_active: true };
+        if (agencyId) {
+          // Prefer agency scoped data when column exists
+          where.agency_id = agencyId;
+        }
+        accounts = await selectRecords('chart_of_accounts', {
+          where,
+          orderBy: 'account_code ASC'
+        });
+      } catch (err: any) {
+        // Fallback if agency_id column does not exist in current schema
+        if (err?.code === '42703' || String(err?.message || '').includes('agency_id')) {
+          console.warn('chart_of_accounts has no agency_id column, falling back to global accounts');
+          accounts = await selectRecords('chart_of_accounts', {
+            where: { is_active: true },
+            orderBy: 'account_code ASC'
+          });
+        } else {
+          throw err;
+        }
       }
 
       const accountMap = new Map((accounts || []).map((acc: any) => [acc.id, acc]));
 
-      // Transform journal entries to transactions
+      // Calculate total balance from all posted entries
+      let totalBalance = 0;
+      const accountBalances: Record<string, number> = {};
+
+      // Calculate balances per account
+      lines.forEach((line: any) => {
+        if (!line || !line.account_id) return;
+        
+        const account = accountMap.get(line.account_id);
+        if (!account) return;
+
+        const accountType = String(account.account_type || '').toLowerCase();
+        const debit = parseFloat(line.debit_amount || 0);
+        const credit = parseFloat(line.credit_amount || 0);
+
+        if (!accountBalances[line.account_id]) {
+          accountBalances[line.account_id] = 0;
+        }
+
+        // For asset and expense: balance = debits - credits
+        // For liability, equity, revenue: balance = credits - debits
+        if (accountType === 'asset' || accountType === 'expense') {
+          accountBalances[line.account_id] += (debit - credit);
+        } else {
+          accountBalances[line.account_id] += (credit - debit);
+        }
+      });
+
+      // Sum all asset account balances (excluding expenses)
+      Object.entries(accountBalances).forEach(([accountId, balance]) => {
+        const account = accountMap.get(accountId);
+        if (account) {
+          const accountType = String(account.account_type || '').toLowerCase();
+          if (accountType === 'asset') {
+            totalBalance += balance;
+          }
+        }
+      });
+
+      // Transform journal entries to transactions for display
       const transformedTransactions: Transaction[] = [];
       let runningBalance = 0;
 
-      (entries || []).forEach((entry: any) => {
+      agencyEntries.forEach((entry: any) => {
         if (!entry || !entry.id) return;
         
         const entryLines = lines.filter((l: any) => l && l.journal_entry_id === entry.id);
@@ -173,7 +268,7 @@ const Ledger = () => {
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
       setLedgerSummary({
-        totalBalance: runningBalance || 0,
+        totalBalance: totalBalance || 0,
         monthlyIncome: monthlyIncome || 0,
         monthlyExpenses: monthlyExpenses || 0,
         netProfit: (monthlyIncome || 0) - (monthlyExpenses || 0)
@@ -181,14 +276,81 @@ const Ledger = () => {
 
     } catch (error: any) {
       console.error('Error fetching ledger data:', error);
+      const errorMessage = error?.message || 'Failed to load ledger data. Please try again.';
+      setError(errorMessage);
       toast({
         title: "Error",
-        description: "Failed to load ledger data. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
+  }, [profile?.agency_id, user?.id, toast]);
+
+  useEffect(() => {
+    // Try to fetch data - don't wait indefinitely for profile
+    const timer = setTimeout(() => {
+      fetchLedgerData();
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [fetchLedgerData]);
+
+  const handleExportLedger = () => {
+    try {
+      const headers = [
+        'Date',
+        'Reference',
+        'Description',
+        'Category',
+        'Type',
+        'Amount',
+        'Balance'
+      ];
+
+      const rows = transactions.map(t => [
+        new Date(t.date).toLocaleDateString(),
+        t.reference,
+        t.description,
+        t.category,
+        t.type.toUpperCase(),
+        (typeof t.amount === 'number' ? t.amount : parseFloat(t.amount) || 0).toFixed(2),
+        (typeof t.balance === 'number' ? t.balance : parseFloat(t.balance) || 0).toFixed(2)
+      ]);
+
+      const csvContent = [
+        headers.map(h => `"${h}"`).join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `ledger_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Success",
+        description: "Ledger exported successfully",
+      });
+    } catch (error: any) {
+      console.error('Error exporting ledger:', error);
+      toast({
+        title: "Error",
+        description: "Failed to export ledger. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddTransaction = () => {
+    navigate('/ledger/create-entry');
   };
 
   const filteredTransactions = transactions.filter(transaction => {
@@ -204,14 +366,30 @@ const Ledger = () => {
   if (loading) {
     return (
       <div className="p-6">
-        <div className="flex justify-center items-center min-h-[400px]">
+        <div className="flex flex-col justify-center items-center min-h-[400px]">
           <Loader2 className="h-8 w-8 animate-spin" />
-          <span className="ml-2 text-muted-foreground">Loading ledger data...</span>
+          <span className="ml-2 text-muted-foreground mt-4">Loading ledger data...</span>
+          {!profile?.agency_id && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Waiting for user profile...
+            </p>
+          )}
         </div>
       </div>
     );
   }
 
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="flex flex-col justify-center items-center min-h-[400px]">
+          <p className="text-lg font-semibold text-destructive mb-2">Error Loading Ledger</p>
+          <p className="text-sm text-muted-foreground mb-4">{error}</p>
+          <Button onClick={fetchLedgerData}>Retry</Button>
+        </div>
+      </div>
+    );
+  }
 
   const getTransactionIcon = (type: string) => {
     return type === 'credit' ? (
@@ -234,67 +412,105 @@ const Ledger = () => {
     }
   };
 
+  const formatCurrency = (amount: number) => {
+    return `₹${Math.abs(amount).toLocaleString('en-IN', { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    })}`;
+  };
+
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-4 lg:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-3xl font-bold">General Ledger</h1>
-          <p className="text-muted-foreground">Track all financial transactions and account balances</p>
+          <h1 className="text-2xl sm:text-3xl font-bold">General Ledger</h1>
+          <p className="text-sm sm:text-base text-muted-foreground mt-1">
+            Track all financial transactions and account balances
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <Button 
+            variant="outline" 
+            onClick={handleExportLedger}
+            className="w-full sm:w-auto"
+          >
             <Download className="mr-2 h-4 w-4" />
             Export Ledger
           </Button>
-          <Button>
+          <Button 
+            onClick={handleAddTransaction}
+            className="w-full sm:w-auto"
+          >
             <Plus className="mr-2 h-4 w-4" />
             Add Transaction
           </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <DollarSign className="h-8 w-8 text-blue-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Total Balance</p>
-                <p className="text-2xl font-bold">₹{ledgerSummary.totalBalance.toLocaleString()}</p>
+      {/* Summary Cards - Improved Layout */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <Card className="overflow-hidden">
+          <CardContent className="pt-4 pb-4 px-4">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 truncate">
+                  Total Balance
+                </p>
+                <p className="text-xl sm:text-2xl font-bold truncate" title={formatCurrency(ledgerSummary.totalBalance)}>
+                  {formatCurrency(ledgerSummary.totalBalance)}
+                </p>
               </div>
+              <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 flex-shrink-0 ml-2" />
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <TrendingUp className="h-8 w-8 text-green-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Monthly Income</p>
-                <p className="text-2xl font-bold text-green-600">₹{ledgerSummary.monthlyIncome.toLocaleString()}</p>
+
+        <Card className="overflow-hidden">
+          <CardContent className="pt-4 pb-4 px-4">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 truncate">
+                  Monthly Income
+                </p>
+                <p className="text-xl sm:text-2xl font-bold text-green-600 truncate" title={formatCurrency(ledgerSummary.monthlyIncome)}>
+                  {formatCurrency(ledgerSummary.monthlyIncome)}
+                </p>
               </div>
+              <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 flex-shrink-0 ml-2" />
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <TrendingDown className="h-8 w-8 text-red-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Monthly Expenses</p>
-                <p className="text-2xl font-bold text-red-600">₹{ledgerSummary.monthlyExpenses.toLocaleString()}</p>
+
+        <Card className="overflow-hidden">
+          <CardContent className="pt-4 pb-4 px-4">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 truncate">
+                  Monthly Expenses
+                </p>
+                <p className="text-xl sm:text-2xl font-bold text-red-600 truncate" title={formatCurrency(ledgerSummary.monthlyExpenses)}>
+                  {formatCurrency(ledgerSummary.monthlyExpenses)}
+                </p>
               </div>
+              <TrendingDown className="h-6 w-6 sm:h-8 sm:w-8 text-red-600 flex-shrink-0 ml-2" />
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center">
-              <Calendar className="h-8 w-8 text-purple-600" />
-              <div className="ml-4">
-                <p className="text-sm font-medium text-muted-foreground">Net Profit</p>
-                <p className="text-2xl font-bold text-purple-600">₹{ledgerSummary.netProfit.toLocaleString()}</p>
+
+        <Card className="overflow-hidden">
+          <CardContent className="pt-4 pb-4 px-4">
+            <div className="flex items-start justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-muted-foreground mb-1 truncate">
+                  Net Profit
+                </p>
+                <p className={`text-xl sm:text-2xl font-bold truncate ${
+                  ledgerSummary.netProfit >= 0 ? 'text-purple-600' : 'text-red-600'
+                }`} title={formatCurrency(ledgerSummary.netProfit)}>
+                  {formatCurrency(ledgerSummary.netProfit)}
+                </p>
               </div>
+              <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 flex-shrink-0 ml-2" />
             </div>
           </CardContent>
         </Card>
@@ -302,7 +518,7 @@ const Ledger = () => {
 
       <Card className="mb-6">
         <CardContent className="pt-6">
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input 
@@ -312,7 +528,7 @@ const Ledger = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <Button variant="outline">
+            <Button variant="outline" className="w-full sm:w-auto">
               <Filter className="mr-2 h-4 w-4" />
               Filter
             </Button>
@@ -321,11 +537,11 @@ const Ledger = () => {
       </Card>
 
       <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="all">All Transactions</TabsTrigger>
-          <TabsTrigger value="credits">Credits</TabsTrigger>
-          <TabsTrigger value="debits">Debits</TabsTrigger>
-          <TabsTrigger value="summary">Account Summary</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4">
+          <TabsTrigger value="all" className="text-xs sm:text-sm">All Transactions</TabsTrigger>
+          <TabsTrigger value="credits" className="text-xs sm:text-sm">Credits</TabsTrigger>
+          <TabsTrigger value="debits" className="text-xs sm:text-sm">Debits</TabsTrigger>
+          <TabsTrigger value="summary" className="text-xs sm:text-sm">Account Summary</TabsTrigger>
         </TabsList>
         
         <TabsContent value="all" className="mt-6">
@@ -346,29 +562,29 @@ const Ledger = () => {
                   filteredTransactions
                     .filter(transaction => transaction != null)
                     .map((transaction) => (
-                      <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                      <div key={transaction.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border rounded-lg gap-4">
+                        <div className="flex items-center space-x-4 flex-1 min-w-0">
+                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
                             {getTransactionIcon(transaction.type)}
                           </div>
-                          <div>
-                            <h3 className="font-semibold">{transaction.description}</h3>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>{transaction.id}</span>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold truncate">{transaction.description}</h3>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                              <span className="truncate">{transaction.id.substring(0, 8)}</span>
                               <span>•</span>
-                              <span>Ref: {transaction.reference}</span>
+                              <span className="truncate">Ref: {transaction.reference}</span>
                             </div>
-                            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
+                            <span className={`inline-block text-xs px-2 py-1 rounded-full mt-1 ${getCategoryColor(transaction.category)}`}>
                               {transaction.category}
                             </span>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-left sm:text-right flex-shrink-0">
                           <p className={`font-bold text-lg ${getTransactionColor(transaction.type)}`}>
-                            {transaction.type === 'credit' ? '+' : '-'}₹{transaction.amount.toLocaleString()}
+                            {transaction.type === 'credit' ? '+' : '-'}{formatCurrency(transaction.amount)}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            Balance: ₹{transaction.balance.toLocaleString()}
+                            Balance: {formatCurrency(transaction.balance)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {(() => {
@@ -396,7 +612,7 @@ const Ledger = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {filteredTransactions.filter(t => t.type === 'credit').length === 0 ? (
+                {filteredTransactions.filter(t => t && t.type === 'credit').length === 0 ? (
                   <div className="text-center py-8">
                     <p className="text-muted-foreground">No credit transactions found.</p>
                   </div>
@@ -404,29 +620,29 @@ const Ledger = () => {
                   filteredTransactions
                     .filter(t => t != null && t.type === 'credit')
                     .map((transaction) => (
-                      <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                      <div key={transaction.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border rounded-lg gap-4">
+                        <div className="flex items-center space-x-4 flex-1 min-w-0">
+                          <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
                             {getTransactionIcon(transaction.type)}
                           </div>
-                          <div>
-                            <h3 className="font-semibold">{transaction.description}</h3>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>{transaction.id}</span>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold truncate">{transaction.description}</h3>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                              <span className="truncate">{transaction.id.substring(0, 8)}</span>
                               <span>•</span>
-                              <span>Ref: {transaction.reference}</span>
+                              <span className="truncate">Ref: {transaction.reference}</span>
                             </div>
-                            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
+                            <span className={`inline-block text-xs px-2 py-1 rounded-full mt-1 ${getCategoryColor(transaction.category)}`}>
                               {transaction.category}
                             </span>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-left sm:text-right flex-shrink-0">
                           <p className="font-bold text-lg text-green-600">
-                            +₹{transaction.amount.toLocaleString()}
+                            +{formatCurrency(transaction.amount)}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            Balance: ₹{transaction.balance.toLocaleString()}
+                            Balance: {formatCurrency(transaction.balance)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {(() => {
@@ -454,7 +670,7 @@ const Ledger = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {filteredTransactions.filter(t => t.type === 'debit').length === 0 ? (
+                {filteredTransactions.filter(t => t && t.type === 'debit').length === 0 ? (
                   <div className="text-center py-8">
                     <p className="text-muted-foreground">No debit transactions found.</p>
                   </div>
@@ -462,29 +678,29 @@ const Ledger = () => {
                   filteredTransactions
                     .filter(t => t != null && t.type === 'debit')
                     .map((transaction) => (
-                      <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                      <div key={transaction.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border rounded-lg gap-4">
+                        <div className="flex items-center space-x-4 flex-1 min-w-0">
+                          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
                             {getTransactionIcon(transaction.type)}
                           </div>
-                          <div>
-                            <h3 className="font-semibold">{transaction.description}</h3>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <span>{transaction.id}</span>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold truncate">{transaction.description}</h3>
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
+                              <span className="truncate">{transaction.id.substring(0, 8)}</span>
                               <span>•</span>
-                              <span>Ref: {transaction.reference}</span>
+                              <span className="truncate">Ref: {transaction.reference}</span>
                             </div>
-                            <span className={`text-xs px-2 py-1 rounded-full ${getCategoryColor(transaction.category)}`}>
+                            <span className={`inline-block text-xs px-2 py-1 rounded-full mt-1 ${getCategoryColor(transaction.category)}`}>
                               {transaction.category}
                             </span>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-left sm:text-right flex-shrink-0">
                           <p className="font-bold text-lg text-red-600">
-                            -₹{transaction.amount.toLocaleString()}
+                            -{formatCurrency(transaction.amount)}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            Balance: ₹{transaction.balance.toLocaleString()}
+                            Balance: {formatCurrency(transaction.balance)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {(() => {
@@ -515,17 +731,25 @@ const Ledger = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="text-center p-4 border rounded-lg">
                     <h3 className="font-semibold text-lg">Revenue</h3>
-                    <p className="text-3xl font-bold text-green-600">₹{ledgerSummary.monthlyIncome.toLocaleString()}</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-green-600">
+                      {formatCurrency(ledgerSummary.monthlyIncome)}
+                    </p>
                     <p className="text-sm text-muted-foreground">This month</p>
                   </div>
                   <div className="text-center p-4 border rounded-lg">
                     <h3 className="font-semibold text-lg">Expenses</h3>
-                    <p className="text-3xl font-bold text-red-600">₹{ledgerSummary.monthlyExpenses.toLocaleString()}</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-red-600">
+                      {formatCurrency(ledgerSummary.monthlyExpenses)}
+                    </p>
                     <p className="text-sm text-muted-foreground">This month</p>
                   </div>
                   <div className="text-center p-4 border rounded-lg">
                     <h3 className="font-semibold text-lg">Net Income</h3>
-                    <p className="text-3xl font-bold text-blue-600">₹{ledgerSummary.netProfit.toLocaleString()}</p>
+                    <p className={`text-2xl sm:text-3xl font-bold ${
+                      ledgerSummary.netProfit >= 0 ? 'text-blue-600' : 'text-red-600'
+                    }`}>
+                      {formatCurrency(ledgerSummary.netProfit)}
+                    </p>
                     <p className="text-sm text-muted-foreground">This month</p>
                   </div>
                 </div>
@@ -534,6 +758,7 @@ const Ledger = () => {
           </div>
         </TabsContent>
       </Tabs>
+
     </div>
   );
 };

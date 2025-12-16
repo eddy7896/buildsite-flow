@@ -2,12 +2,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DollarSign, Download, Calculator, Users, Calendar, Loader2, Plus, Edit, Trash2, Search } from "lucide-react";
+import { DollarSign, Download, Calculator, Users, Calendar, Loader2, Plus, Edit, Trash2, Search, Building2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { selectRecords, deleteRecord } from '@/services/api/postgresql-service';
 import { useToast } from "@/hooks/use-toast";
+import { db } from '@/lib/database';
 import PayrollFormDialog from "@/components/PayrollFormDialog";
 import PayrollPeriodFormDialog from "@/components/PayrollPeriodFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
@@ -34,6 +36,12 @@ interface PayrollSummary {
 
 const Payroll = () => {
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  
+  // Get department filter from URL
+  const urlDepartmentId = searchParams.get('department');
+  const urlDepartmentName = searchParams.get('name');
+  
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');
@@ -61,7 +69,7 @@ const Payroll = () => {
     if (selectedPeriod) {
       fetchPayrollData();
     }
-  }, [selectedPeriod]);
+  }, [selectedPeriod, urlDepartmentId]);
 
   const fetchPayrollPeriods = async () => {
     try {
@@ -81,6 +89,20 @@ const Payroll = () => {
     try {
       setLoading(true);
       
+      // If filtering by department, get user IDs in that department
+      let departmentUserIds: string[] = [];
+      if (urlDepartmentId) {
+        const { data: assignments } = await db
+          .from('team_assignments')
+          .select('user_id')
+          .eq('department_id', urlDepartmentId)
+          .eq('is_active', true);
+        
+        if (assignments) {
+          departmentUserIds = assignments.map((ta: any) => ta.user_id).filter(Boolean);
+        }
+      }
+      
       // Get selected or most recent pay period
       let periodId = selectedPeriod;
       if (!periodId && payrollPeriods.length > 0) {
@@ -95,6 +117,13 @@ const Payroll = () => {
           where: { payroll_period_id: periodId },
           orderBy: 'created_at DESC',
         });
+      }
+
+      // Filter by department if specified
+      if (urlDepartmentId && departmentUserIds.length > 0) {
+        payrollData = payrollData.filter((p: any) => 
+          p.employee_id && departmentUserIds.includes(p.employee_id)
+        );
       }
 
       // Fetch employee details and profiles for names
@@ -316,8 +345,20 @@ const Payroll = () => {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold">Payroll</h1>
-          <p className="text-muted-foreground">Manage employee compensation and payroll processing</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-bold">Payroll</h1>
+            {urlDepartmentName && (
+              <Badge variant="secondary" className="text-sm">
+                <Building2 className="h-3 w-3 mr-1" />
+                {decodeURIComponent(urlDepartmentName)}
+              </Badge>
+            )}
+          </div>
+          <p className="text-muted-foreground">
+            {urlDepartmentName 
+              ? `Payroll for ${decodeURIComponent(urlDepartmentName)} department`
+              : "Manage employee compensation and payroll processing"}
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={handleNewPeriod}>

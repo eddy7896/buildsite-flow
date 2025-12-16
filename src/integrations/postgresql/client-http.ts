@@ -27,12 +27,29 @@ class HttpDatabaseClient {
   ): Promise<QueryResult<T>> {
     try {
       const url = `${this.baseUrl}/database${endpoint}`;
-      
+
+      // Build headers with optional auth + agency context so backend
+      // can route queries to the correct per-agency database
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      if (typeof window !== 'undefined') {
+        const token = window.localStorage.getItem('auth_token') || '';
+        const agencyDatabase = window.localStorage.getItem('agency_database') || '';
+
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        if (agencyDatabase) {
+          headers['X-Agency-Database'] = agencyDatabase;
+        }
+      }
+
       const response = await fetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
       });
 

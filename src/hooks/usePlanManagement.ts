@@ -37,7 +37,7 @@ export const usePlanManagement = () => {
       setLoading(true);
 
       // Fetch plans with their features
-      const { data: plansData, error: plansError } = await supabase
+      const { data: plansData, error: plansError } = await db
         .from('subscription_plans')
         .select(`
           *,
@@ -94,7 +94,7 @@ export const usePlanManagement = () => {
 
   const fetchAvailableFeatures = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('plan_features')
         .select('*')
         .eq('is_active', true)
@@ -123,7 +123,7 @@ export const usePlanManagement = () => {
 
   const updatePlan = async (planId: string, updates: Partial<SubscriptionPlan>) => {
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('subscription_plans')
         .update({
           name: updates.name,
@@ -145,7 +145,7 @@ export const usePlanManagement = () => {
       // Update features if provided
       if (updates.features) {
         for (const feature of updates.features) {
-          await supabase
+          await db
             .from('plan_feature_mappings')
             .upsert({
               plan_id: planId,
@@ -173,7 +173,7 @@ export const usePlanManagement = () => {
 
   const createPlan = async (planData: Omit<SubscriptionPlan, 'id'>) => {
     try {
-      const { data: newPlan, error: planError } = await supabase
+      const { data: newPlan, error: planError } = await db
         .from('subscription_plans')
         .insert({
           name: planData.name,
@@ -201,7 +201,7 @@ export const usePlanManagement = () => {
           enabled: feature.enabled
         }));
 
-        const { error: mappingsError } = await supabase
+        const { error: mappingsError } = await db
           .from('plan_feature_mappings')
           .insert(featureMappings);
 
@@ -226,7 +226,7 @@ export const usePlanManagement = () => {
 
   const deletePlan = async (planId: string) => {
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('subscription_plans')
         .update({ is_active: false })
         .eq('id', planId);

@@ -15,6 +15,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { generateUUID } from '@/lib/uuid';
 import { Checkbox } from '@/components/ui/checkbox';
 import { insertRecord, updateRecord, selectOne } from '@/services/api/postgresql-service';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface HolidayFormDialogProps {
   open: boolean;
@@ -114,7 +115,16 @@ export function HolidayFormDialog({
 
     setLoading(true);
     try {
-      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        toast({
+          title: 'Error',
+          description: 'Agency ID not found. Please ensure you are logged in to an agency account.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
       const holidayDate = format(formData.date, 'yyyy-MM-dd');
       
       // Check for duplicate holiday on the same date (only for new holidays)

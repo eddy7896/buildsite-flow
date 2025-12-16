@@ -70,7 +70,7 @@ async function verifySchema() {
       console.error('❌ Missing columns:');
       missingColumns.forEach(col => console.error(`  - ${col}`));
       console.log('\n⚠️  Please run the migration:');
-      console.log('   psql -U postgres -d buildflow_db -f supabase/migrations/02_add_agency_settings_columns.sql');
+      console.log('   psql -U postgres -d buildflow_db -f database/migrations/08_system_schema.sql');
       client.release();
       await pool.end();
       process.exit(1);

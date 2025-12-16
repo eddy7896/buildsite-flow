@@ -26,7 +26,8 @@ import {
   FolderKanban,
   CalendarDays,
   UserCog,
-  Settings2
+  Settings2,
+  UserPlus
 } from 'lucide-react';
 import {
   Sidebar,
@@ -41,225 +42,43 @@ import {
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { getPagesForRole, type PageConfig } from '@/utils/rolePages';
+import { AppRole } from '@/utils/roleUtils';
 
-
-const navigationItems = {
-  // Executive Level
-  super_admin: [
-    { title: 'System Dashboard', url: '/system', icon: Monitor },
-    { title: 'Employee Management', url: '/employee-management', icon: Users },
-    { title: 'Role Requests', url: '/role-requests', icon: UserCog },
-    { title: 'Permissions', url: '/permissions', icon: Settings2 },
-  ],
-  ceo: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Strategic Reports', url: '/reports', icon: ChartLine },
-    { title: 'Financial Management', url: '/financial-management', icon: Calculator },
-    { title: 'CRM', url: '/crm', icon: Users2 },
-    { title: 'Projects', url: '/projects', icon: Building },
-  ],
-  cto: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-  ],
-  cfo: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Financial Management', url: '/financial-management', icon: Calculator },
-    { title: 'Payroll', url: '/payroll', icon: Calculator },
-    { title: 'Invoices', url: '/invoices', icon: FileText },
-    { title: 'Payments', url: '/payments', icon: CreditCard },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-  ],
-  coo: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Attendance', url: '/attendance', icon: Clock },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-  ],
-  
-  // Management Level - Admin (Restricted financial access)
-  admin: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Calendar', url: '/calendar', icon: Calendar },
-    { title: 'Holiday Management', url: '/holiday-management', icon: CalendarDays },
-    { title: 'Department Management', url: '/department-management', icon: Building2 },
-    { title: 'CRM', url: '/crm', icon: Users2 },
-    { title: 'Clients', url: '/clients', icon: Building2 },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'Attendance', url: '/attendance', icon: Clock },
-    { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
-    { title: 'Quotations', url: '/quotations', icon: FileCheck },
-    { title: 'Financial Management', url: '/financial-management', icon: Calculator },
-    { title: 'Payroll', url: '/payroll', icon: Calculator },
-    { title: 'Invoices', url: '/invoices', icon: FileText },
-    { title: 'Payments', url: '/payments', icon: CreditCard },
-    { title: 'Receipts', url: '/receipts', icon: Receipt },
-    { title: 'Reimbursements', url: '/reimbursements', icon: DollarSign },
-    { title: 'Ledger', url: '/ledger', icon: BookOpen },
-    { title: 'GST Compliance', url: '/gst-compliance', icon: FileText },
-    { title: 'Job Costing', url: '/jobs', icon: Briefcase },
-    { title: 'Centralized Reports', url: '/centralized-reports', icon: ChartLine },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'Analytics', url: '/analytics', icon: BarChart3 },
-  ],
-  operations_manager: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
-    { title: 'Attendance', url: '/attendance', icon: Clock },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-  ],
-  department_head: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'Attendance', url: '/attendance', icon: Clock },
-    { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-  ],
-  team_lead: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
-    { title: 'My Leave', url: '/my-leave', icon: Calendar },
-  ],
-  project_manager: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'Clients', url: '/clients', icon: Building2 },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
-    { title: 'My Leave', url: '/my-leave', icon: Calendar },
-  ],
-
-  // Specialized Roles
-  hr: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Calendar', url: '/calendar', icon: Calendar },
-    { title: 'Holiday Management', url: '/holiday-management', icon: CalendarDays },
-    { title: 'Department Management', url: '/department-management', icon: Building2 },
-    { title: 'CRM', url: '/crm', icon: Users2 },
-    { title: 'Attendance', url: '/attendance', icon: Clock },
-    { title: 'Leave Requests', url: '/leave-requests', icon: ClipboardList },
-    { title: 'Role Requests', url: '/role-requests', icon: UserCog },
-    { title: 'Reimbursements', url: '/reimbursements', icon: DollarSign },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'Permissions', url: '/permissions', icon: Settings2 },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
-    { title: 'My Leave', url: '/my-leave', icon: Calendar },
-  ],
-  finance_manager: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Clients', url: '/clients', icon: Building2 },
-    { title: 'Payroll', url: '/payroll', icon: Calculator },
-    { title: 'Invoices', url: '/invoices', icon: FileText },
-    { title: 'Payments', url: '/payments', icon: CreditCard },
-    { title: 'Receipts', url: '/receipts', icon: Receipt },
-    { title: 'Quotations', url: '/quotations', icon: FileCheck },
-    { title: 'Reimbursements', url: '/reimbursements', icon: DollarSign },
-    { title: 'Financial Management', url: '/financial-management', icon: Calculator },
-    { title: 'GST Compliance', url: '/gst-compliance', icon: FileText },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
-    { title: 'My Leave', url: '/my-leave', icon: Calendar },
-  ],
-  sales_manager: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'My Team', url: '/my-team', icon: Users2 },
-    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
-    { title: 'CRM', url: '/crm', icon: Users2 },
-    { title: 'Clients', url: '/clients', icon: Building2 },
-    { title: 'Quotations', url: '/quotations', icon: FileCheck },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-  ],
-  marketing_manager: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Project Management', url: '/project-management', icon: FolderKanban },
-    { title: 'CRM', url: '/crm', icon: Users2 },
-    { title: 'Clients', url: '/clients', icon: Building2 },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-  ],
-  quality_assurance: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-  ],
-  it_support: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-  ],
-  legal_counsel: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Clients', url: '/clients', icon: Building2 },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-  ],
-  business_analyst: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Reports', url: '/reports', icon: ChartLine },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-  ],
-  customer_success: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'Employee Management', url: '/employee-management', icon: Users2 },
-    { title: 'Clients', url: '/clients', icon: Building2 },
-    { title: 'Projects', url: '/projects', icon: Building },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-  ],
-
-  // General Staff
-  employee: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'My Team', url: '/my-team', icon: Users2 },
-    { title: 'My Projects', url: '/my-projects', icon: Briefcase },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
-    { title: 'My Leave', url: '/my-leave', icon: Calendar },
-    { title: 'My Reimbursements', url: '/reimbursements', icon: DollarSign },
-  ],
-  contractor: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'My Team', url: '/my-team', icon: Users2 },
-    { title: 'My Projects', url: '/my-projects', icon: Briefcase },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
-  ],
-  intern: [
-    { title: 'Dashboard', url: '/dashboard', icon: BarChart3 },
-    { title: 'My Team', url: '/my-team', icon: Users2 },
-    { title: 'My Projects', url: '/my-projects', icon: Briefcase },
-    { title: 'My Profile', url: '/my-profile', icon: User },
-    { title: 'My Attendance', url: '/my-attendance', icon: Clock },
-  ],
+// Icon mapping from string names to icon components
+const iconMap: Record<string, any> = {
+  Monitor,
+  BarChart3,
+  Users,
+  Users2,
+  User,
+  Building,
+  Building2,
+  Calculator,
+  DollarSign,
+  Calendar,
+  Clock,
+  TrendingUp: ChartLine,
+  AlertCircle: Clock,
+  CalendarDays,
+  Shield: Monitor,
+  ChevronRight: Clock,
+  Bell: Clock,
+  Briefcase,
+  FileText,
+  Settings,
+  BookOpen,
+  ChartLine,
+  CreditCard,
+  Receipt,
+  ClipboardList,
+  FolderKanban,
+  UserCog,
+  Settings2,
+  UserPlus,
+  FileCheck
 };
+
 
 export function AppSidebar() {
   const { state, setOpenMobile } = useSidebar();
@@ -292,7 +111,34 @@ export function AppSidebar() {
     );
   }
   
-  const items = navigationItems[userRole as keyof typeof navigationItems] || navigationItems.employee;
+  // Get pages for the current role from rolePages mapping
+  const role = userRole as AppRole;
+  const rolePages = getPagesForRole(role);
+  
+  // Filter to only show pages that exist and are not settings (settings goes at bottom)
+  // Sort by category for better organization
+  const mainPages = rolePages
+    .filter(page => page.exists && page.category !== 'settings')
+    .sort((a, b) => {
+      // Define category order
+      const categoryOrder: Record<string, number> = {
+        'dashboard': 1,
+        'system': 2,
+        'management': 3,
+        'hr': 4,
+        'finance': 5,
+        'projects': 6,
+        'reports': 7,
+        'personal': 8
+      };
+      const orderA = categoryOrder[a.category] || 99;
+      const orderB = categoryOrder[b.category] || 99;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.title.localeCompare(b.title);
+    });
+  
+  const settingsPage = rolePages.find(page => page.path === '/settings' && page.exists);
+  
   const collapsed = state === 'collapsed';
 
   const isActive = (path: string) => {
@@ -336,42 +182,47 @@ export function AppSidebar() {
           
           <SidebarGroupContent className="mt-8">
             <SidebarMenu>
-              {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
-                    <NavLink 
-                      to={item.url} 
-                      end={item.url === '/'}
-                      className={({ isActive }) => getNavCls({ isActive })}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      {(!collapsed || isMobile) && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {mainPages.map((page) => {
+                const IconComponent = iconMap[page.icon] || User;
+                return (
+                  <SidebarMenuItem key={page.path}>
+                    <SidebarMenuButton asChild>
+                      <NavLink 
+                        to={page.path} 
+                        end={page.path === '/'}
+                        className={({ isActive }) => getNavCls({ isActive })}
+                      >
+                        <IconComponent className="h-4 w-4" />
+                        {(!collapsed || isMobile) && <span>{page.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
         
         {/* Settings at bottom */}
-        <SidebarGroup className="mt-auto">
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <NavLink 
-                    to="/settings" 
-                    className={({ isActive }) => getNavCls({ isActive })}
+        {settingsPage && (
+          <SidebarGroup className="mt-auto">
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink 
+                      to={settingsPage.path} 
+                      className={({ isActive }) => getNavCls({ isActive })}
                     >
                       <Settings className="h-4 w-4" />
-                      {(!collapsed || isMobile) && <span>Settings</span>}
+                      {(!collapsed || isMobile) && <span>{settingsPage.title}</span>}
                     </NavLink>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
     </Sidebar>
   );

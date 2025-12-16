@@ -63,7 +63,7 @@ export const useSystemAnalytics = ({ userId, userRole }: UseSystemAnalyticsProps
       }
 
       // Fetch agencies data
-      const { data: agenciesData, error: agenciesError } = await supabase
+      const { data: agenciesData, error: agenciesError } = await db
         .from('agencies')
         .select('*')
         .order('created_at', { ascending: false });
@@ -71,22 +71,20 @@ export const useSystemAnalytics = ({ userId, userRole }: UseSystemAnalyticsProps
       if (agenciesError) throw agenciesError;
 
       // Fetch total users
-      const { count: totalUsers, error: usersError } = await supabase
+      const usersData = await db
         .from('profiles')
-        .select('*', { count: 'exact', head: true });
-
-      if (usersError) throw usersError;
+        .select('*');
+      const totalUsers = usersData.data?.length || 0;
 
       // Fetch active users
-      const { count: activeUsers, error: activeUsersError } = await supabase
+      const activeUsersData = await db
         .from('profiles')
-        .select('*', { count: 'exact', head: true })
+        .select('*')
         .eq('is_active', true);
-
-      if (activeUsersError) throw activeUsersError;
+      const activeUsers = activeUsersData.data?.length || 0;
 
       // Fetch subscription plan distribution
-      const { data: planDistribution, error: planError } = await supabase
+      const { data: planDistribution, error: planError } = await db
         .from('agencies')
         .select('subscription_plan')
         .eq('is_active', true);
@@ -95,10 +93,10 @@ export const useSystemAnalytics = ({ userId, userRole }: UseSystemAnalyticsProps
 
       // Fetch usage statistics
       const [projectsResult, invoicesResult, clientsResult, attendanceResult] = await Promise.all([
-        db.from('projects').select('*', { count: 'exact', head: true }),
-        db.from('invoices').select('*', { count: 'exact', head: true }),
-        db.from('clients').select('*', { count: 'exact', head: true }),
-        db.from('attendance').select('*', { count: 'exact', head: true })
+        db.from('projects').select('*'),
+        db.from('invoices').select('*'),
+        db.from('clients').select('*'),
+        db.from('attendance').select('*')
       ]);
 
       // Process subscription plans
@@ -117,26 +115,29 @@ export const useSystemAnalytics = ({ userId, userRole }: UseSystemAnalyticsProps
       // Fetch detailed agency data with user counts
       const agenciesWithStats = await Promise.all(
         (agenciesData || []).map(async (agency) => {
-          const { count: userCount } = await supabase
+          const userData = await db
             .from('profiles')
-            .select('*', { count: 'exact', head: true })
+            .select('*')
             .eq('agency_id', agency.id);
+          const userCount = userData.data?.length || 0;
 
-          const { count: projectCount } = await supabase
+          const projectData = await db
             .from('projects')
-            .select('*', { count: 'exact', head: true })
+            .select('*')
             .eq('agency_id', agency.id);
+          const projectCount = projectData.data?.length || 0;
 
-          const { count: invoiceCount } = await supabase
+          const invoiceData = await db
             .from('invoices')
-            .select('*', { count: 'exact', head: true })
+            .select('*')
             .eq('agency_id', agency.id);
+          const invoiceCount = invoiceData.data?.length || 0;
 
           return {
             ...agency,
-            user_count: userCount || 0,
-            project_count: projectCount || 0,
-            invoice_count: invoiceCount || 0,
+            user_count: userCount,
+            project_count: projectCount,
+            invoice_count: invoiceCount,
           };
         })
       );
@@ -152,10 +153,10 @@ export const useSystemAnalytics = ({ userId, userRole }: UseSystemAnalyticsProps
           arr: mrr * 12,
         },
         usageStats: {
-          totalProjects: projectsResult.count || 0,
-          totalInvoices: invoicesResult.count || 0,
-          totalClients: clientsResult.count || 0,
-          totalAttendanceRecords: attendanceResult.count || 0,
+          totalProjects: projectsResult.data?.length || 0,
+          totalInvoices: invoicesResult.data?.length || 0,
+          totalClients: clientsResult.data?.length || 0,
+          totalAttendanceRecords: attendanceResult.data?.length || 0,
         },
         systemHealth: {
           uptime: '99.9%',

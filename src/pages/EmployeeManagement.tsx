@@ -8,16 +8,24 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { 
   Plus, Search, Filter, Mail, Phone, Loader2, Edit, Trash2, Eye, 
   Users, UserCheck, UserX, Briefcase, Shield, Crown, Star, MapPin, 
-  Calendar, Building2, UserPlus, X
+  Calendar, Building2, UserPlus, X, MoreVertical, ExternalLink, Clock, Calculator
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import UserFormDialog from "@/components/UserFormDialog";
-import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
+import { DepartmentBreadcrumb } from "@/components/DepartmentBreadcrumb";
+import { useDepartmentNavigation } from "@/hooks/useDepartmentNavigation";
 import { selectRecords, updateRecord, deleteRecord } from '@/services/api/postgresql-service';
 import { getRoleDisplayName, ROLE_CATEGORIES } from '@/utils/roleUtils';
 
@@ -31,6 +39,7 @@ interface UnifiedEmployee {
   email: string;
   phone?: string;
   department?: string;
+  department_id?: string; // Add department_id for filtering by ID
   position?: string;
   role: string;
   status: 'active' | 'inactive';
@@ -47,6 +56,20 @@ const EmployeeManagement = () => {
   const { toast } = useToast();
   const { user, userRole } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const {
+    departmentId: urlDepartmentId,
+    departmentName: urlDepartmentName,
+    employeeId: urlEmployeeId,
+    navigateToDepartment,
+    navigateToProjects,
+    navigateToAttendance,
+    navigateToPayroll,
+  } = useDepartmentNavigation();
+  
+  // Get department filter from URL (for backward compatibility)
+  const legacyDepartmentId = searchParams.get('department');
+  const legacyDepartmentName = searchParams.get('name');
   
   const [employees, setEmployees] = useState<UnifiedEmployee[]>([]);
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
@@ -54,7 +77,7 @@ const EmployeeManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedTab, setSelectedTab] = useState("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
+  const [departmentFilter, setDepartmentFilter] = useState<string>((urlDepartmentId || legacyDepartmentId) || "all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   
   const [selectedEmployee, setSelectedEmployee] = useState<UnifiedEmployee | null>(null);
@@ -71,7 +94,15 @@ const EmployeeManagement = () => {
   useEffect(() => {
     fetchDepartments();
     fetchEmployees();
-  }, []);
+  }, [urlDepartmentId]);
+
+  // Update department filter when URL parameter changes
+  useEffect(() => {
+    const deptId = urlDepartmentId || legacyDepartmentId;
+    if (deptId) {
+      setDepartmentFilter(deptId);
+    }
+  }, [urlDepartmentId, legacyDepartmentId]);
 
   const fetchDepartments = async () => {
     try {
@@ -92,6 +123,85 @@ const EmployeeManagement = () => {
     try {
       setLoading(true);
       
+      // Use unified_employees view for single query instead of joining 4 tables
+      // This view consolidates: users, profiles, employee_details, and user_roles
+      // Note: We fetch all employees and let tabs filter by is_fully_active
+      const unifiedData = await selectRecords('unified_employees', {
+        orderBy: 'display_name ASC'
+      });
+
+      // Fetch team assignments to get department_id for each employee
+      const teamAssignments = await selectRecords('team_assignments', {
+        filters: [
+          { column: 'is_active', operator: 'eq', value: true }
+        ]
+      });
+
+      // Create a map of user_id to department_id
+      const userDepartmentMap = new Map<string, string>();
+      teamAssignments.forEach((ta: any) => {
+        if (ta.user_id && ta.department_id) {
+          userDepartmentMap.set(ta.user_id, ta.department_id);
+        }
+      });
+
+      // Transform view data to UnifiedEmployee interface
+      const unifiedEmployees: UnifiedEmployee[] = unifiedData.map((emp: any) => {
+        const departmentId = userDepartmentMap.get(emp.user_id);
+        return {
+          id: emp.employee_detail_id || emp.profile_id || emp.user_id,
+          user_id: emp.user_id,
+          employee_id: emp.employee_id,
+          full_name: emp.display_name || emp.full_name_computed || emp.full_name || 'Unknown User',
+          first_name: emp.first_name || emp.full_name?.split(' ')[0] || '',
+          last_name: emp.last_name || emp.full_name?.split(' ').slice(1).join(' ') || '',
+          email: emp.email || '',
+          phone: emp.phone,
+          department: emp.department,
+          department_id: departmentId, // Add department_id for filtering
+          position: emp.position,
+          role: emp.role || 'employee',
+          status: emp.is_fully_active ? 'active' : 'inactive',
+          is_active: emp.is_fully_active,
+          hire_date: emp.hire_date,
+          employment_type: emp.employment_type,
+          work_location: emp.work_location,
+          avatar_url: emp.avatar_url,
+          emergency_contact_name: emp.emergency_contact_name,
+          emergency_contact_phone: emp.emergency_contact_phone,
+        };
+      });
+
+      setEmployees(unifiedEmployees);
+    } catch (error: any) {
+      console.error('Error fetching employees:', error);
+      
+      // Fallback to old method if view doesn't exist yet
+      if (error.message?.includes('relation') && error.message?.includes('unified_employees')) {
+        console.warn('unified_employees view not found, falling back to old method');
+        toast({
+          title: "Warning",
+          description: "Database view not found. Please run migration: 03_create_unified_employees_view.sql",
+          variant: "default",
+        });
+        
+        // Fallback to old method
+        await fetchEmployeesFallback();
+      } else {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to fetch employees. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fallback method using old approach (for backward compatibility)
+  const fetchEmployeesFallback = async () => {
+    try {
       // Fetch profiles
       const profilesData = await selectRecords('profiles', {
         orderBy: 'full_name ASC'
@@ -166,19 +276,29 @@ const EmployeeManagement = () => {
 
       setEmployees(unifiedEmployees);
     } catch (error: any) {
-      console.error('Error fetching employees:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to fetch employees. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+      console.error('Error in fallback fetch:', error);
+      throw error;
     }
   };
 
   const getFilteredEmployees = () => {
     let filtered = employees;
+
+    // Tab filter
+    if (selectedTab === 'active') {
+      filtered = filtered.filter(emp => emp.is_active);
+    } else if (selectedTab === 'trash') {
+      filtered = filtered.filter(emp => !emp.is_active);
+    } else if (selectedTab === 'admins') {
+      // Admins tab shows only active admins
+      filtered = filtered.filter(emp => emp.is_active && ['super_admin', 'admin'].includes(emp.role));
+    } else if (selectedTab === 'managers') {
+      // Managers tab shows only active managers
+      filtered = filtered.filter(emp => emp.is_active && ROLE_CATEGORIES.management.includes(emp.role as any));
+    } else if (selectedTab === 'all') {
+      // "All" tab shows only active employees (deleted employees appear in "Trash" tab)
+      filtered = filtered.filter(emp => emp.is_active);
+    }
 
     // Search filter
     if (searchTerm) {
@@ -191,21 +311,17 @@ const EmployeeManagement = () => {
       );
     }
 
-    // Tab filter
-    if (selectedTab === 'active') {
-      filtered = filtered.filter(emp => emp.is_active);
-    } else if (selectedTab === 'inactive') {
-      filtered = filtered.filter(emp => !emp.is_active);
-    }
-
     // Role filter
     if (roleFilter !== 'all') {
       filtered = filtered.filter(emp => emp.role === roleFilter);
     }
 
-    // Department filter
+    // Department filter - support both department name and department_id
     if (departmentFilter !== 'all') {
-      filtered = filtered.filter(emp => emp.department === departmentFilter);
+      filtered = filtered.filter(emp => 
+        emp.department_id === departmentFilter || 
+        emp.department === departmentFilter
+      );
     }
 
     // Status filter
@@ -222,8 +338,8 @@ const EmployeeManagement = () => {
     total: employees.length,
     active: employees.filter(e => e.is_active).length,
     inactive: employees.filter(e => !e.is_active).length,
-    admins: employees.filter(e => ['super_admin', 'admin'].includes(e.role)).length,
-    managers: employees.filter(e => ROLE_CATEGORIES.management.includes(e.role as any)).length,
+    admins: employees.filter(e => e.is_active && ['super_admin', 'admin'].includes(e.role)).length,
+    managers: employees.filter(e => e.is_active && ROLE_CATEGORIES.management.includes(e.role as any)).length,
     departments: new Set(employees.map(e => e.department).filter(Boolean)).size,
   };
 
@@ -289,40 +405,87 @@ const EmployeeManagement = () => {
     
     setSaving(true);
     try {
-      // Update profile
-      await updateRecord('profiles', {
-        phone: editForm.phone,
-        department: editForm.department,
-        position: editForm.position,
-      }, { user_id: selectedEmployee.user_id }, user.id);
+      // Track if status changed from inactive to active
+      const wasInactive = !selectedEmployee.is_active;
+      const isNowActive = editForm.is_active;
+      const statusChangedToActive = wasInactive && isNowActive;
 
-      // Update employee_details if exists
+      // Check if profile exists
+      const existingProfiles = await selectRecords('profiles', {
+        filters: [{ column: 'user_id', operator: 'eq', value: selectedEmployee.user_id }]
+      });
+
+      // Update or create profile
+      if (existingProfiles.length > 0) {
+        // Update existing profile - include full_name and is_active
+        await updateRecord('profiles', {
+          full_name: editForm.full_name,
+          phone: editForm.phone,
+          department: editForm.department,
+          position: editForm.position,
+          is_active: editForm.is_active,
+        }, { user_id: selectedEmployee.user_id }, user.id);
+      } else {
+        // Profile doesn't exist, but we can't create it here without more info
+        // Just log a warning
+        console.warn('Profile does not exist for user:', selectedEmployee.user_id);
+      }
+
+      // Update users table is_active status
+      await updateRecord('users', {
+        is_active: editForm.is_active,
+      }, { id: selectedEmployee.user_id }, user.id);
+
+      // Check if employee_details exists
       const employeeDetails = await selectRecords('employee_details', {
         filters: [{ column: 'user_id', operator: 'eq', value: selectedEmployee.user_id }]
       });
 
       if (employeeDetails.length > 0) {
+        // Split full_name into first_name and last_name for employee_details
+        const nameParts = (editForm.full_name || '').trim().split(/\s+/);
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+
         // Normalize employment_type to database format (hyphens)
         const normalizedEmploymentType = normalizeEmploymentType(editForm.employment_type);
+        
+        // Update employee_details with all fields
         await updateRecord('employee_details', {
+          first_name: firstName,
+          last_name: lastName,
           employment_type: normalizedEmploymentType,
           work_location: editForm.work_location,
           is_active: editForm.is_active,
         }, { user_id: selectedEmployee.user_id }, user.id);
+      } else {
+        // Employee details doesn't exist - that's okay for users without employee records
+        console.log('Employee details does not exist for user:', selectedEmployee.user_id);
       }
 
       toast({
         title: "Success",
-        description: "Employee updated successfully",
+        description: statusChangedToActive 
+          ? "Employee reactivated successfully" 
+          : "Employee updated successfully",
       });
 
       setShowEditDialog(false);
-      fetchEmployees();
+      
+      // If status changed to active, switch to Active tab
+      if (statusChangedToActive) {
+        setSelectedTab('active');
+      }
+      
+      // Small delay to ensure view is updated
+      setTimeout(() => {
+        fetchEmployees();
+      }, 100);
     } catch (error: any) {
       console.error('Error updating employee:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to update employee",
+        description: error.message || error.detail || "Failed to update employee. Please check console for details.",
         variant: "destructive",
       });
     } finally {
@@ -341,72 +504,308 @@ const EmployeeManagement = () => {
     }
 
     try {
-      // Soft delete employee_details (set is_active to false) if exists
-      const employeeDetails = await selectRecords('employee_details', {
-        filters: [{ column: 'user_id', operator: 'eq', value: selectedEmployee.user_id }]
-      });
+      const errors: string[] = [];
+      let successCount = 0;
 
-      if (employeeDetails.length > 0) {
-        await updateRecord('employee_details', {
-          is_active: false
-        }, { id: employeeDetails[0].id }, user.id);
+      // 1. Soft delete employee_details if exists
+      try {
+        const employeeDetails = await selectRecords('employee_details', {
+          filters: [{ column: 'user_id', operator: 'eq', value: selectedEmployee.user_id }]
+        });
+
+        if (employeeDetails.length > 0) {
+          // Only update if not already inactive
+          if (employeeDetails[0].is_active !== false) {
+            const result = await updateRecord('employee_details', {
+              is_active: false
+            }, { id: employeeDetails[0].id }, user.id);
+            successCount++;
+          } else {
+            successCount++; // Count as success since it's already deleted
+          }
+        }
+      } catch (error: any) {
+        console.error('Error deleting employee_details:', error);
+        errors.push(`Employee details: ${error.message || 'Failed to delete'}`);
       }
 
-      // Soft delete profile (set is_active to false)
-      await updateRecord('profiles', {
-        is_active: false
-      }, { user_id: selectedEmployee.user_id }, user.id);
+      // 2. Soft delete profile if exists
+      try {
+        const existingProfiles = await selectRecords('profiles', {
+          filters: [{ column: 'user_id', operator: 'eq', value: selectedEmployee.user_id }]
+        });
 
-      // Also soft delete user if it exists
-      await updateRecord('users', {
-        is_active: false
-      }, { id: selectedEmployee.user_id }, user.id);
+        if (existingProfiles.length > 0) {
+          // Only update if not already inactive
+          if (existingProfiles[0].is_active !== false) {
+            const result = await updateRecord('profiles', {
+              is_active: false
+            }, { user_id: selectedEmployee.user_id }, user.id);
+            successCount++;
+          } else {
+            successCount++; // Count as success since it's already deleted
+          }
+        }
+      } catch (error: any) {
+        console.error('Error deleting profile:', error);
+        errors.push(`Profile: ${error.message || 'Failed to delete'}`);
+      }
 
-      toast({
-        title: "Success",
-        description: "Employee deleted successfully",
-      });
+      // 3. Soft delete user (this should always exist)
+      try {
+        const existingUsers = await selectRecords('users', {
+          filters: [{ column: 'id', operator: 'eq', value: selectedEmployee.user_id }]
+        });
 
-      setShowDeleteDialog(false);
-      setSelectedEmployee(null);
-      fetchEmployees();
+        if (existingUsers.length > 0) {
+          // Only update if not already inactive
+          if (existingUsers[0].is_active !== false) {
+            const result = await updateRecord('users', {
+              is_active: false
+            }, { id: selectedEmployee.user_id }, user.id);
+            successCount++;
+          } else {
+            successCount++; // Count as success since it's already deleted
+          }
+        } else {
+          errors.push('User record not found');
+        }
+      } catch (error: any) {
+        console.error('Error deleting user:', error);
+        errors.push(`User: ${error.message || 'Failed to delete'}`);
+      }
+
+      // Verify deletion by checking the view
+      let verificationFailed = false;
+      try {
+        const verifyData = await selectRecords('unified_employees', {
+          filters: [{ column: 'user_id', operator: 'eq', value: selectedEmployee.user_id }]
+        });
+        
+        if (verifyData.length > 0 && verifyData[0].is_fully_active === true) {
+          verificationFailed = true;
+          errors.push('Verification failed: Employee still appears as active in view');
+        }
+      } catch (verifyError: any) {
+        console.error('Error verifying deletion:', verifyError);
+        // Don't fail the deletion if verification fails
+      }
+
+      // Show appropriate message
+      if (errors.length > 0 && successCount === 0) {
+        // All operations failed
+        toast({
+          title: "Error",
+          description: `Failed to delete employee: ${errors.join('; ')}`,
+          variant: "destructive",
+        });
+      } else if (errors.length > 0 || verificationFailed) {
+        // Some operations failed or verification failed
+        toast({
+          title: verificationFailed ? "Warning" : "Partial Success",
+          description: verificationFailed 
+            ? `Employee marked as deleted but may still appear. Please refresh the page.`
+            : `Employee partially deleted. Some errors: ${errors.join('; ')}`,
+          variant: verificationFailed ? "default" : "default",
+        });
+        setShowDeleteDialog(false);
+        setSelectedEmployee(null);
+        // Small delay to ensure view is updated
+        setTimeout(() => {
+          fetchEmployees();
+        }, 100);
+      } else {
+        // All operations succeeded
+        toast({
+          title: "Success",
+          description: "Employee deleted successfully",
+        });
+        setShowDeleteDialog(false);
+        setSelectedEmployee(null);
+        // Small delay to ensure view is updated
+        setTimeout(() => {
+          fetchEmployees();
+        }, 100);
+      }
     } catch (error: any) {
       console.error('Error deleting employee:', error);
       toast({
         title: "Error",
-        description: error.message || error.detail || "Failed to delete employee",
+        description: error.message || error.detail || "Failed to delete employee. Please check console for details.",
         variant: "destructive",
       });
     }
   };
 
   const handleUserDeleteConfirmed = async () => {
-    if (!selectedUserForDelete || !user?.id) return;
+    if (!selectedUserForDelete || !user?.id) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to delete users",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
-      // Soft delete user (set is_active to false in users table)
-      await updateRecord('users', {
-        is_active: false
-      }, { id: selectedUserForDelete.user_id }, user.id);
+      // Check if user is already inactive before attempting deletion
+      let wasAlreadyInactive = false;
+      try {
+        const checkData = await selectRecords('unified_employees', {
+          filters: [{ column: 'user_id', operator: 'eq', value: selectedUserForDelete.user_id }]
+        });
+        if (checkData.length > 0 && checkData[0].is_fully_active === false) {
+          wasAlreadyInactive = true;
+        }
+      } catch (checkError) {
+        // Ignore check errors, proceed with deletion attempt
+      }
 
-      // Soft delete profile (set is_active to false)
-      await updateRecord('profiles', {
-        is_active: false
-      }, { user_id: selectedUserForDelete.user_id }, user.id);
+      const errors: string[] = [];
+      let successCount = 0;
+      let actuallyUpdated = 0; // Track if we actually made any changes
 
-      toast({
-        title: "Success",
-        description: "User deleted successfully",
-      });
+      // 1. Soft delete profile if exists
+      try {
+        const existingProfiles = await selectRecords('profiles', {
+          filters: [{ column: 'user_id', operator: 'eq', value: selectedUserForDelete.user_id }]
+        });
 
-      setShowUserDeleteDialog(false);
-      setSelectedUserForDelete(null);
-      fetchEmployees();
+        if (existingProfiles.length > 0) {
+          // Only update if not already inactive
+          if (existingProfiles[0].is_active !== false) {
+            const result = await updateRecord('profiles', {
+              is_active: false
+            }, { user_id: selectedUserForDelete.user_id }, user.id);
+            successCount++;
+            actuallyUpdated++;
+          } else {
+            successCount++; // Count as success since it's already deleted
+          }
+        }
+      } catch (error: any) {
+        console.error('Error deleting profile:', error);
+        errors.push(`Profile: ${error.message || 'Failed to delete'}`);
+      }
+
+      // 2. Soft delete user (this should always exist)
+      try {
+        const existingUsers = await selectRecords('users', {
+          filters: [{ column: 'id', operator: 'eq', value: selectedUserForDelete.user_id }]
+        });
+
+        if (existingUsers.length > 0) {
+          // Only update if not already inactive
+          if (existingUsers[0].is_active !== false) {
+            const result = await updateRecord('users', {
+              is_active: false
+            }, { id: selectedUserForDelete.user_id }, user.id);
+            successCount++;
+            actuallyUpdated++;
+          } else {
+            successCount++; // Count as success since it's already deleted
+          }
+        } else {
+          errors.push('User record not found');
+        }
+      } catch (error: any) {
+        console.error('Error deleting user:', error);
+        errors.push(`User: ${error.message || 'Failed to delete'}`);
+      }
+
+      // 3. Also check and soft delete employee_details if exists
+      try {
+        const employeeDetails = await selectRecords('employee_details', {
+          filters: [{ column: 'user_id', operator: 'eq', value: selectedUserForDelete.user_id }]
+        });
+
+        if (employeeDetails.length > 0) {
+          // Only update if not already inactive
+          if (employeeDetails[0].is_active !== false) {
+            const result = await updateRecord('employee_details', {
+              is_active: false
+            }, { id: employeeDetails[0].id }, user.id);
+            successCount++;
+            actuallyUpdated++;
+          } else {
+            successCount++; // Count as success since it's already deleted
+          }
+        }
+      } catch (error: any) {
+        console.error('Error deleting employee_details:', error);
+        errors.push(`Employee details: ${error.message || 'Failed to delete'}`);
+      }
+
+      // Verify deletion by checking the view
+      let verificationFailed = false;
+      try {
+        const verifyData = await selectRecords('unified_employees', {
+          filters: [{ column: 'user_id', operator: 'eq', value: selectedUserForDelete.user_id }]
+        });
+        
+        if (verifyData.length > 0 && verifyData[0].is_fully_active === true) {
+          verificationFailed = true;
+          errors.push('Verification failed: User still appears as active in view');
+        }
+      } catch (verifyError: any) {
+        console.error('Error verifying user deletion:', verifyError);
+        // Don't fail the deletion if verification fails
+      }
+
+      // Show appropriate message
+      if (errors.length > 0 && successCount === 0) {
+        // All operations failed
+        toast({
+          title: "Error",
+          description: `Failed to delete user: ${errors.join('; ')}`,
+          variant: "destructive",
+        });
+      } else if (wasAlreadyInactive && actuallyUpdated === 0) {
+        // User was already deleted (inactive) and no updates were made
+        toast({
+          title: "Already Deleted",
+          description: "This user is already deleted. They appear in the 'Trash' tab.",
+          variant: "default",
+        });
+        setShowUserDeleteDialog(false);
+        setSelectedUserForDelete(null);
+        // Refresh to ensure list is up to date
+        setTimeout(() => {
+          fetchEmployees();
+        }, 100);
+      } else if (errors.length > 0 || verificationFailed) {
+        // Some operations failed or verification failed
+        toast({
+          title: verificationFailed ? "Warning" : "Partial Success",
+          description: verificationFailed 
+            ? `User marked as deleted but may still appear. Please refresh the page.`
+            : `User partially deleted. Some errors: ${errors.join('; ')}`,
+          variant: verificationFailed ? "default" : "default",
+        });
+        setShowUserDeleteDialog(false);
+        setSelectedUserForDelete(null);
+        // Small delay to ensure view is updated
+        setTimeout(() => {
+          fetchEmployees();
+        }, 100);
+      } else {
+        // All operations succeeded - user was just deleted
+        toast({
+          title: "Success",
+          description: "User deleted successfully. They will now appear in the 'Trash' tab.",
+        });
+        setShowUserDeleteDialog(false);
+        setSelectedUserForDelete(null);
+        // Small delay to ensure view is updated
+        setTimeout(() => {
+          fetchEmployees();
+        }, 100);
+      }
     } catch (error: any) {
       console.error('Error deleting user:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to delete user",
+        description: error.message || "Failed to delete user. Please check console for details.",
         variant: "destructive",
       });
     }
@@ -468,14 +867,33 @@ const EmployeeManagement = () => {
     );
   }
 
+  const displayDepartmentName = urlDepartmentName || (legacyDepartmentName ? decodeURIComponent(legacyDepartmentName) : null);
+
   return (
     <div className="p-4 lg:p-6 space-y-6">
+      {/* Breadcrumb */}
+      <DepartmentBreadcrumb currentPage="employees" />
+      
       {/* Header */}
       <div className="flex flex-col space-y-4 lg:flex-row lg:justify-between lg:items-center lg:space-y-0">
         <div>
-          <h1 className="text-2xl lg:text-3xl font-bold">Employee Management</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl lg:text-3xl font-bold">Employee Management</h1>
+            {displayDepartmentName && (
+              <Badge 
+                variant="secondary" 
+                className="text-sm cursor-pointer hover:bg-secondary/80 transition-colors"
+                onClick={() => navigateToDepartment(urlDepartmentId || legacyDepartmentId || undefined, displayDepartmentName || undefined)}
+              >
+                <Building2 className="h-3 w-3 mr-1" />
+                {displayDepartmentName}
+              </Badge>
+            )}
+          </div>
           <p className="text-sm lg:text-base text-muted-foreground">
-            Manage all employees, users, and team members in one place
+            {displayDepartmentName 
+              ? `Employees in ${displayDepartmentName} department`
+              : "Manage all employees, users, and team members in one place"}
           </p>
         </div>
         <div className="flex gap-2">
@@ -519,7 +937,7 @@ const EmployeeManagement = () => {
             <div className="flex items-center">
               <UserX className="h-8 w-8 text-red-600 flex-shrink-0" />
               <div className="ml-4 min-w-0">
-                <p className="text-sm text-muted-foreground truncate">Inactive</p>
+                <p className="text-sm text-muted-foreground truncate">Trash</p>
                 <p className="text-2xl font-bold">{stats.inactive}</p>
               </div>
             </div>
@@ -606,7 +1024,7 @@ const EmployeeManagement = () => {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="inactive">Trash</SelectItem>
               </SelectContent>
             </Select>
             {hasActiveFilters && (
@@ -621,13 +1039,15 @@ const EmployeeManagement = () => {
 
       {/* Tabs */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-5">
-          <TabsTrigger value="all">All ({employees.length})</TabsTrigger>
-          <TabsTrigger value="active">Active ({stats.active})</TabsTrigger>
-          <TabsTrigger value="inactive">Inactive ({stats.inactive})</TabsTrigger>
-          <TabsTrigger value="admins">Admins ({stats.admins})</TabsTrigger>
-          <TabsTrigger value="managers">Managers ({stats.managers})</TabsTrigger>
-        </TabsList>
+        <div className="w-full overflow-x-auto -mx-4 px-4 lg:mx-0 lg:px-0">
+          <TabsList className="inline-flex w-full min-w-max lg:grid lg:grid-cols-5 h-auto lg:h-10">
+            <TabsTrigger value="all" className="whitespace-nowrap text-xs sm:text-sm px-2 sm:px-3 py-2 lg:py-1.5">All ({stats.active})</TabsTrigger>
+            <TabsTrigger value="active" className="whitespace-nowrap text-xs sm:text-sm px-2 sm:px-3 py-2 lg:py-1.5">Active ({stats.active})</TabsTrigger>
+            <TabsTrigger value="trash" className="whitespace-nowrap text-xs sm:text-sm px-2 sm:px-3 py-2 lg:py-1.5">Trash ({stats.inactive})</TabsTrigger>
+            <TabsTrigger value="admins" className="whitespace-nowrap text-xs sm:text-sm px-2 sm:px-3 py-2 lg:py-1.5">Admins ({stats.admins})</TabsTrigger>
+            <TabsTrigger value="managers" className="whitespace-nowrap text-xs sm:text-sm px-2 sm:px-3 py-2 lg:py-1.5">Managers ({stats.managers})</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value={selectedTab} className="space-y-4">
           {filteredEmployees.length === 0 ? (
@@ -657,127 +1077,235 @@ const EmployeeManagement = () => {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredEmployees.map((employee) => {
                 const RoleIcon = getRoleIcon(employee.role);
                 
                 return (
-                  <Card key={employee.id} className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-primary/20">
-                    <CardHeader className="pb-3">
+                  <Card 
+                    key={employee.id} 
+                    className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-primary/20 flex flex-col h-full w-full"
+                  >
+                    <CardHeader className="pb-3 flex-shrink-0">
                       <div className="flex items-start space-x-3">
-                        <Avatar className="h-12 w-12 border-2 border-primary/20 flex-shrink-0">
+                        <Avatar className="h-14 w-14 border-2 border-primary/20 flex-shrink-0">
                           <AvatarImage 
                             src={employee.avatar_url && employee.avatar_url.startsWith('data:') 
                               ? employee.avatar_url 
                               : employee.avatar_url || undefined} 
                             alt={employee.full_name} 
                           />
-                          <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                          <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
                             {getInitials(employee.full_name)}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <CardTitle className="text-base leading-5 truncate mb-1">
+                          <CardTitle className="text-base leading-5 truncate mb-1.5">
                             {employee.full_name}
                           </CardTitle>
-                          <div className="flex items-center space-x-2 mb-2">
-                            <RoleIcon className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                            <Badge variant={getRoleBadgeVariant(employee.role)} className="text-xs">
+                          <div className="flex items-center space-x-2 mb-1.5">
+                            <RoleIcon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                            <Badge variant={getRoleBadgeVariant(employee.role)} className="text-xs px-1.5 py-0">
                               {getRoleDisplayName(employee.role as any)}
                             </Badge>
                           </div>
-                          {employee.position && (
+                          {employee.position ? (
                             <p className="text-xs text-muted-foreground truncate">
                               {employee.position}
                             </p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground/50 italic">No position</p>
                           )}
                         </div>
                       </div>
                     </CardHeader>
                     
-                    <CardContent className="space-y-3">
-                      <div className="space-y-2 text-sm">
-                        {employee.email && (
-                          <div className="flex items-center space-x-2 text-muted-foreground">
-                            <Mail className="h-3 w-3 flex-shrink-0" />
-                            <span className="truncate text-xs">{employee.email}</span>
+                    <CardContent className="flex-1 flex flex-col space-y-3 pb-4">
+                      <div className="space-y-1.5 text-sm flex-1 min-h-[80px]">
+                        {employee.email ? (
+                          <div className="flex items-start space-x-2 text-muted-foreground">
+                            <Mail className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                            <span className="truncate text-xs leading-relaxed">{employee.email}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-start space-x-2 text-muted-foreground/50">
+                            <Mail className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                            <span className="text-xs italic">No email</span>
                           </div>
                         )}
                         
-                        {employee.phone && (
+                        {employee.phone ? (
                           <div className="flex items-center space-x-2 text-muted-foreground">
-                            <Phone className="h-3 w-3 flex-shrink-0" />
+                            <Phone className="h-3.5 w-3.5 flex-shrink-0" />
                             <span className="text-xs">{employee.phone}</span>
                           </div>
-                        )}
-                        
-                        {employee.work_location && (
-                          <div className="flex items-center space-x-2 text-muted-foreground">
-                            <MapPin className="h-3 w-3 flex-shrink-0" />
-                            <span className="truncate text-xs">{employee.work_location}</span>
+                        ) : (
+                          <div className="flex items-center space-x-2 text-muted-foreground/50">
+                            <Phone className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="text-xs italic">No phone</span>
                           </div>
                         )}
                         
-                        {employee.hire_date && (
+                        {employee.work_location ? (
                           <div className="flex items-center space-x-2 text-muted-foreground">
-                            <Calendar className="h-3 w-3 flex-shrink-0" />
+                            <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate text-xs">{employee.work_location}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2 text-muted-foreground/50">
+                            <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="text-xs italic">No location</span>
+                          </div>
+                        )}
+                        
+                        {employee.hire_date ? (
+                          <div className="flex items-center space-x-2 text-muted-foreground">
+                            <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
                             <span className="text-xs">
                               Joined {new Date(employee.hire_date).toLocaleDateString()}
                             </span>
                           </div>
+                        ) : (
+                          <div className="flex items-center space-x-2 text-muted-foreground/50">
+                            <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="text-xs italic">No hire date</span>
+                          </div>
                         )}
                       </div>
 
-                      <div className="pt-2 border-t space-y-2">
-                        <div className="flex flex-wrap gap-1">
-                          {employee.department && (
-                            <Badge variant="outline" className="text-xs">
+                      <div className="pt-2 border-t space-y-2 flex-shrink-0">
+                        <div className="flex flex-wrap gap-1.5 min-h-[24px]">
+                          {employee.department && employee.department_id ? (
+                            <Badge 
+                              variant="outline" 
+                              className="text-xs px-2 py-0.5 cursor-pointer hover:bg-accent transition-colors"
+                              onClick={() => navigateToDepartment(employee.department_id!, employee.department || undefined)}
+                            >
                               {employee.department}
                             </Badge>
-                          )}
-                          {employee.employment_type && (
-                            <Badge variant="secondary" className="text-xs">
-                              {getEmploymentTypeLabel(employee.employment_type)}
+                          ) : (
+                            <Badge variant="outline" className="text-xs px-2 py-0.5 opacity-50">
+                              No dept
                             </Badge>
                           )}
+                          {employee.employment_type ? (
+                            <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                              {getEmploymentTypeLabel(employee.employment_type)}
+                            </Badge>
+                          ) : null}
                           <Badge 
                             variant={employee.is_active ? 'default' : 'destructive'} 
-                            className="text-xs"
+                            className="text-xs px-2 py-0.5"
                           >
                             {employee.is_active ? 'Active' : 'Inactive'}
                           </Badge>
                         </div>
-                        {employee.employee_id && (
-                          <p className="text-xs text-muted-foreground font-mono">
+                        {employee.employee_id ? (
+                          <p className="text-xs text-muted-foreground font-mono truncate">
                             ID: {employee.employee_id}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground/50 italic">
+                            No employee ID
                           </p>
                         )}
                       </div>
 
-                      <div className="flex gap-2 pt-2">
+                      <div className="flex gap-1.5 sm:gap-2 pt-2 border-t flex-shrink-0">
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          className="flex-1"
+                          className="flex-1 text-xs h-8 min-w-0"
                           onClick={() => handleViewEmployee(employee)}
                         >
-                          <Eye className="h-3 w-3 mr-1" />
-                          View
+                          <Eye className="h-3.5 w-3.5 mr-1 sm:mr-1.5" />
+                          <span className="hidden sm:inline">View</span>
                         </Button>
                         <Button 
                           variant="outline" 
                           size="sm" 
+                          className="h-8 w-8 sm:w-8 p-0 flex-shrink-0"
                           onClick={() => handleEditEmployee(employee)}
+                          title="Edit employee"
                         >
-                          <Edit className="h-3 w-3" />
+                          <Edit className="h-3.5 w-3.5" />
                         </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          onClick={() => handleDeleteEmployee(employee)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-8 w-8 p-0 flex-shrink-0"
+                              title="More actions"
+                            >
+                              <MoreVertical className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleViewEmployee(employee)}>
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleEditEmployee(employee)}>
+                              <Edit className="h-4 w-4 mr-2" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {employee.department_id && (
+                              <DropdownMenuItem 
+                                onClick={() => navigateToDepartment(employee.department_id, employee.department || undefined)}
+                              >
+                                <Building2 className="h-4 w-4 mr-2" />
+                                View Department
+                                <ExternalLink className="h-3 w-3 ml-auto" />
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem 
+                              onClick={() => navigateToProjects({ 
+                                employeeId: employee.user_id, 
+                                employeeName: employee.full_name,
+                                departmentId: employee.department_id,
+                                departmentName: employee.department || undefined
+                              })}
+                            >
+                              <Briefcase className="h-4 w-4 mr-2" />
+                              View Projects
+                              <ExternalLink className="h-3 w-3 ml-auto" />
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => navigateToAttendance({ 
+                                employeeId: employee.user_id, 
+                                employeeName: employee.full_name,
+                                departmentId: employee.department_id,
+                                departmentName: employee.department || undefined
+                              })}
+                            >
+                              <Clock className="h-4 w-4 mr-2" />
+                              View Attendance
+                              <ExternalLink className="h-3 w-3 ml-auto" />
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => navigateToPayroll({ 
+                                employeeId: employee.user_id, 
+                                employeeName: employee.full_name,
+                                departmentId: employee.department_id,
+                                departmentName: employee.department || undefined
+                              })}
+                            >
+                              <Calculator className="h-4 w-4 mr-2" />
+                              View Payroll
+                              <ExternalLink className="h-3 w-3 ml-auto" />
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={() => handleDeleteEmployee(employee)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </CardContent>
                   </Card>
@@ -826,11 +1354,17 @@ const EmployeeManagement = () => {
               <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Email</p>
-                  <p className="font-medium break-all">{selectedEmployee.email}</p>
+                  <p className="font-medium break-all">{selectedEmployee.email || 'Not provided'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Phone</p>
                   <p className="font-medium">{selectedEmployee.phone || 'Not provided'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Status</p>
+                  <Badge variant={selectedEmployee.is_active ? 'default' : 'destructive'} className="mt-1">
+                    {selectedEmployee.is_active ? 'Active' : 'Trash'}
+                  </Badge>
                 </div>
                 {selectedEmployee.employee_id && (
                   <div>
@@ -840,24 +1374,46 @@ const EmployeeManagement = () => {
                 )}
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Department</p>
-                  <p className="font-medium">{selectedEmployee.department || 'Not assigned'}</p>
+                  {selectedEmployee.department && selectedEmployee.department_id ? (
+                    <Badge 
+                      variant="secondary" 
+                      className="cursor-pointer hover:bg-secondary/80 transition-colors mt-1"
+                      onClick={() => {
+                        setShowViewDialog(false);
+                        navigateToDepartment(selectedEmployee.department_id!, selectedEmployee.department || undefined);
+                      }}
+                    >
+                      <Building2 className="h-3 w-3 mr-1" />
+                      {selectedEmployee.department}
+                    </Badge>
+                  ) : (
+                    <p className="font-medium">Not assigned</p>
+                  )}
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Employment Type</p>
-                  <p className="font-medium">{getEmploymentTypeLabel(selectedEmployee.employment_type)}</p>
+                  <p className="text-sm text-muted-foreground mb-1">Position</p>
+                  <p className="font-medium">{selectedEmployee.position || 'Not specified'}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Work Location</p>
-                  <p className="font-medium">{selectedEmployee.work_location || 'Not specified'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Hire Date</p>
-                  <p className="font-medium">
-                    {selectedEmployee.hire_date 
-                      ? new Date(selectedEmployee.hire_date).toLocaleDateString()
-                      : 'Not specified'}
-                  </p>
-                </div>
+                {selectedEmployee.employment_type && (
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Employment Type</p>
+                    <p className="font-medium">{getEmploymentTypeLabel(selectedEmployee.employment_type)}</p>
+                  </div>
+                )}
+                {selectedEmployee.work_location && (
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Work Location</p>
+                    <p className="font-medium">{selectedEmployee.work_location}</p>
+                  </div>
+                )}
+                {selectedEmployee.hire_date && (
+                  <div>
+                    <p className="text-sm text-muted-foreground mb-1">Hire Date</p>
+                    <p className="font-medium">
+                      {new Date(selectedEmployee.hire_date).toLocaleDateString()}
+                    </p>
+                  </div>
+                )}
                 {selectedEmployee.emergency_contact_name && (
                   <div>
                     <p className="text-sm text-muted-foreground mb-1">Emergency Contact</p>
@@ -868,6 +1424,82 @@ const EmployeeManagement = () => {
                   </div>
                 )}
               </div>
+
+              {/* Quick Actions */}
+              {selectedEmployee && (
+                <div className="border-t pt-4">
+                  <label className="text-sm font-medium text-muted-foreground mb-3 block">
+                    Quick Actions
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {selectedEmployee.department_id && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowViewDialog(false);
+                          navigateToDepartment(selectedEmployee.department_id!, selectedEmployee.department || undefined);
+                        }}
+                        className="w-full"
+                      >
+                        <Building2 className="h-4 w-4 mr-2" />
+                        View Department
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowViewDialog(false);
+                        navigateToProjects({ 
+                          employeeId: selectedEmployee.user_id, 
+                          employeeName: selectedEmployee.full_name,
+                          departmentId: selectedEmployee.department_id,
+                          departmentName: selectedEmployee.department || undefined
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      <Briefcase className="h-4 w-4 mr-2" />
+                      View Projects
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowViewDialog(false);
+                        navigateToAttendance({ 
+                          employeeId: selectedEmployee.user_id, 
+                          employeeName: selectedEmployee.full_name,
+                          departmentId: selectedEmployee.department_id,
+                          departmentName: selectedEmployee.department || undefined
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      <Clock className="h-4 w-4 mr-2" />
+                      View Attendance
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowViewDialog(false);
+                        navigateToPayroll({ 
+                          employeeId: selectedEmployee.user_id, 
+                          employeeName: selectedEmployee.full_name,
+                          departmentId: selectedEmployee.department_id,
+                          departmentName: selectedEmployee.department || undefined
+                        });
+                      }}
+                      className="w-full"
+                    >
+                      <Calculator className="h-4 w-4 mr-2" />
+                      View Payroll
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
@@ -980,16 +1612,33 @@ const EmployeeManagement = () => {
       </Dialog>
 
       {/* Delete Dialog */}
-      <DeleteConfirmDialog
-        isOpen={showDeleteDialog}
-        onClose={() => setShowDeleteDialog(false)}
-        onDeleted={handleDeleteConfirmed}
-        itemType="Employee"
-        itemName={selectedEmployee ? selectedEmployee.full_name : ''}
-        itemId={selectedEmployee?.id || ''}
-        tableName="employee_details"
-        userId={user?.id}
-      />
+      <AlertDialog open={showDeleteDialog} onOpenChange={(open) => {
+        if (!open) {
+          setShowDeleteDialog(false);
+          setSelectedEmployee(null);
+        }
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Employee</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{selectedEmployee?.full_name || 'this employee'}"? This will deactivate the employee account and all related records.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowDeleteDialog(false);
+              setSelectedEmployee(null);
+            }}>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirmed} 
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* User Form Dialog */}
       <UserFormDialog

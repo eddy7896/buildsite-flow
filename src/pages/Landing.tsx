@@ -103,8 +103,8 @@ export default function Landing() {
               <Link to="/auth">
                 <Button variant="ghost" className="hidden sm:inline-flex">Sign In</Button>
               </Link>
-              <Link to="/signup">
-                <Button>Get Started <ArrowRight className="ml-2 h-4 w-4" /></Button>
+              <Link to="/agency-signup">
+                <Button>Create Agency <ArrowRight className="ml-2 h-4 w-4" /></Button>
               </Link>
             </div>
           </div>
@@ -131,9 +131,9 @@ export default function Landing() {
             </p>
             
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Link to="/signup">
+              <Link to="/agency-signup">
                 <Button size="lg" className="w-full sm:w-auto">
-                  Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
+                  Create Your Agency <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
               </Link>
               <Button variant="outline" size="lg" className="w-full sm:w-auto">
@@ -197,9 +197,9 @@ export default function Landing() {
               </div>
 
               <div className="mt-8">
-                <Link to="/signup">
+                <Link to="/agency-signup">
                   <Button size="lg">
-                    Start Your Growth Journey <ArrowRight className="ml-2 h-5 w-5" />
+                    Create Your Agency <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
               </div>
@@ -270,9 +270,9 @@ export default function Landing() {
                 Join the hundreds of agencies already using BuildFlow to scale their operations and drive growth.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link to="/signup">
+                <Link to="/agency-signup">
                   <Button size="lg" variant="secondary" className="w-full sm:w-auto">
-                    Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
+                    Create Your Agency <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
                 </Link>
                 <Button size="lg" variant="outline" className="w-full sm:w-auto bg-transparent border-white text-white hover:bg-white hover:text-primary">

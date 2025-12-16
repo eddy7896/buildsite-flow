@@ -8,6 +8,7 @@ import { useState, useEffect } from "react";
 import { selectRecords, rawQuery, deleteRecord } from '@/services/api/postgresql-service';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 import PaymentFormDialog from "@/components/PaymentFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
 
@@ -50,18 +51,29 @@ const Payments = () => {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<Payment | null>(null);
+  const [agencyId, setAgencyId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (profile?.agency_id) {
-      fetchPayments();
-    }
-  }, [profile?.agency_id]);
+    const initializeAgency = async () => {
+      const id = await getAgencyId(profile, user?.id);
+      setAgencyId(id);
+      if (id) {
+        fetchPayments(id);
+      }
+    };
 
-  const fetchPayments = async () => {
+    if (user?.id) {
+      initializeAgency();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, profile?.agency_id]);
+
+  const fetchPayments = async (agencyIdParam?: string | null) => {
+    const effectiveAgencyId = agencyIdParam || agencyId;
     try {
       setLoading(true);
 
-      if (!profile?.agency_id) {
+      if (!effectiveAgencyId) {
         setPayments([]);
         setPaymentStats({
           totalReceived: 0,
@@ -117,7 +129,7 @@ const Payments = () => {
         ORDER BY je.entry_date DESC, je.created_at DESC
       `;
 
-      const paymentData = await rawQuery(query, [profile.agency_id]);
+      const paymentData = await rawQuery(query, [effectiveAgencyId]);
 
       // Transform to Payment interface
       const transformedPayments: Payment[] = (paymentData || []).map((p: any) => ({
@@ -143,7 +155,7 @@ const Payments = () => {
       // Get pending invoices to calculate pending payments
       const pendingInvoices = await selectRecords('invoices', {
         where: {
-          agency_id: profile.agency_id,
+          agency_id: effectiveAgencyId,
           status: { operator: 'IN', value: ['sent', 'overdue', 'partial'] }
         },
       });
@@ -210,7 +222,7 @@ const Payments = () => {
 
     try {
       // Delete journal entry (which will cascade delete lines)
-      await deleteRecord('journal_entries', paymentToDelete.journal_entry_id, user.id);
+      await deleteRecord('journal_entries', { id: paymentToDelete.journal_entry_id });
 
       // Update invoice status back to unpaid/partial
       const invoice = await selectRecords('invoices', {
@@ -235,7 +247,7 @@ const Payments = () => {
 
         const cashAccounts = await selectRecords('chart_of_accounts', {
           where: {
-            agency_id: profile?.agency_id,
+            agency_id: agencyId,
             account_type: 'Asset',
             account_name: { operator: 'ILIKE', value: '%cash%' }
           },
@@ -245,7 +257,7 @@ const Payments = () => {
         if (cashAccounts && cashAccounts.length > 0) {
           const existingPayments = await rawQuery(paymentsQuery, [
             `%${inv.invoice_number}%`,
-            profile?.agency_id,
+            agencyId,
             paymentToDelete.journal_entry_id
           ]);
 
@@ -274,7 +286,7 @@ const Payments = () => {
         description: "Payment deleted successfully",
       });
 
-      fetchPayments();
+      await fetchPayments(agencyId);
       setDeleteDialogOpen(false);
       setPaymentToDelete(null);
     } catch (error: any) {
@@ -317,7 +329,7 @@ const Payments = () => {
     );
   }
 
-  if (!profile?.agency_id) {
+  if (!agencyId && !loading && user?.id) {
     return (
       <div className="p-6">
         <div className="text-center py-8">
@@ -564,9 +576,11 @@ const Payments = () => {
           setDeleteDialogOpen(false);
           setPaymentToDelete(null);
         }}
-        onConfirm={handleDeletePayment}
-        title="Delete Payment"
-        description={`Are you sure you want to delete this payment of ₹${paymentToDelete?.amount.toLocaleString()}? This action cannot be undone and will update the invoice status.`}
+        onDeleted={handleDeletePayment}
+        itemType="Payment"
+        itemName={`Payment of ₹${paymentToDelete?.amount.toLocaleString()}`}
+        itemId={paymentToDelete?.journal_entry_id || ''}
+        tableName="journal_entries"
       />
     </div>
   );

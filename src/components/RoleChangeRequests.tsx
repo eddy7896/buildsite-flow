@@ -52,7 +52,19 @@ export function RoleChangeRequests() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      // Handle missing table gracefully
+      if (error) {
+        const errorMessage = error.message || String(error);
+        // Check for missing table error (42P01 is PostgreSQL error code for "undefined_table")
+        if (errorMessage.includes('does not exist') || errorMessage.includes('42P01') || 
+            (errorMessage.includes('Database API error') && errorMessage.includes('relation'))) {
+          console.warn('role_change_requests table does not exist yet - feature not implemented');
+          setRequests([]);
+          setLoading(false);
+          return;
+        }
+        throw error;
+      }
 
       // Fetch profiles for user_id and requested_by
       const userIds = new Set<string>();

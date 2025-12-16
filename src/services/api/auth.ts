@@ -35,11 +35,18 @@ interface UserRole {
 export class AuthService extends BaseApiService {
   static async signUp(data: SignUpData, options: ApiOptions = {}): Promise<ApiResponse<any>> {
     return this.execute(async () => {
+      // Get agency_id from localStorage (set during login)
+      const agencyId = typeof window !== 'undefined' ? localStorage.getItem('agency_id') : null;
+      
+      if (!agencyId) {
+        throw new Error('Agency ID not found. Please ensure you are logged in to an agency account.');
+      }
+      
       const result = await registerUser({
         email: data.email,
         password: data.password,
         fullName: data.fullName,
-        agencyId: '550e8400-e29b-41d4-a716-446655440000' // Default agency
+        agencyId
       });
 
       // Store token
@@ -175,6 +182,11 @@ export class AuthService extends BaseApiService {
         }
       };
 
+      // Get agency_id from localStorage if available, otherwise null
+      const agencyId = typeof window !== 'undefined' 
+        ? localStorage.getItem('agency_id') || null 
+        : null;
+
       const mockProfile = {
         user_id: mockUser.userId,
         full_name: mockUser.fullName,
@@ -184,7 +196,7 @@ export class AuthService extends BaseApiService {
         hire_date: null,
         avatar_url: null,
         is_active: true,
-        agency_id: '550e8400-e29b-41d4-a716-446655440000'
+        agency_id: agencyId
       };
 
       // Update auth store

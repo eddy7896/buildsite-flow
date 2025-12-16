@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/database';
 import { generateUUID } from '@/lib/uuid';
+import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface Client {
   id?: string;
@@ -180,7 +182,7 @@ const ClientFormDialog: React.FC<ClientFormDialogProps> = ({
             id: generateUUID(),
             ...insertData,
             client_number: clientNumberData || `CLT-${Date.now().toString(36).toUpperCase()}`,
-            agency_id: '550e8400-e29b-41d4-a716-446655440000' // Default agency
+            agency_id: await getAgencyId(profile, user?.id) || undefined
           });
 
         if (error) throw error;

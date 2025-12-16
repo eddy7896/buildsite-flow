@@ -12,6 +12,8 @@ import { format } from "date-fns";
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface Task {
   id?: string;
@@ -42,11 +44,13 @@ interface TaskFormDialogProps {
 }
 
 export function TaskFormDialog({ task, onTaskSaved, trigger }: TaskFormDialogProps) {
+  const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const { toast } = useToast();
+  const [agencyId, setAgencyId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<Task>({
     title: "",
@@ -69,16 +73,29 @@ export function TaskFormDialog({ task, onTaskSaved, trigger }: TaskFormDialogPro
   }, [task]);
 
   useEffect(() => {
-    if (open) {
+    const initializeAgency = async () => {
+      const id = await getAgencyId(profile, user?.id);
+      setAgencyId(id);
+    };
+    if (user?.id) {
+      initializeAgency();
+    }
+  }, [user?.id, profile?.agency_id]);
+
+  useEffect(() => {
+    if (open && agencyId) {
       fetchProjects();
       fetchUsers();
     }
-  }, [open]);
+  }, [open, agencyId]);
 
   const fetchProjects = async () => {
-    const { data, error } = await supabase
+    if (!agencyId) return;
+    
+    const { data, error } = await db
       .from("projects")
       .select("id, name")
+      .eq('agency_id', agencyId)
       .order("name");
 
     if (error) {
@@ -93,9 +110,12 @@ export function TaskFormDialog({ task, onTaskSaved, trigger }: TaskFormDialogPro
   };
 
   const fetchUsers = async () => {
-    const { data, error } = await supabase
+    if (!agencyId) return;
+    
+    const { data, error } = await db
       .from("profiles")
       .select("user_id, full_name")
+      .eq('agency_id', agencyId)
       .order("full_name");
 
     if (error) {
@@ -119,10 +139,19 @@ export function TaskFormDialog({ task, onTaskSaved, trigger }: TaskFormDialogPro
         due_date: formData.due_date ? format(formData.due_date, "yyyy-MM-dd") : null,
       };
 
+      if (!agencyId) {
+        throw new Error('Agency ID not found');
+      }
+
+      const taskDataWithAgency = {
+        ...taskData,
+        agency_id: agencyId
+      };
+
       if (task?.id) {
-        const { error } = await supabase
+        const { error } = await db
           .from("tasks")
-          .update(taskData)
+          .update(taskDataWithAgency)
           .eq("id", task.id);
 
         if (error) throw error;
@@ -132,9 +161,9 @@ export function TaskFormDialog({ task, onTaskSaved, trigger }: TaskFormDialogPro
           description: "Task updated successfully",
         });
       } else {
-        const { error } = await supabase
+        const { error } = await db
           .from("tasks")
-          .insert([taskData]);
+          .insert([taskDataWithAgency]);
 
         if (error) throw error;
 

@@ -14,7 +14,7 @@ interface ChartOfAccount {
   account_code: string;
   account_name: string;
   account_type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense';
-  parent_id?: string | null;
+  parent_account_id?: string | null;
   is_active?: boolean;
   description?: string | null;
 }
@@ -33,14 +33,14 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
   onAccountSaved 
 }) => {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [parentAccounts, setParentAccounts] = useState<any[]>([]);
   const [formData, setFormData] = useState<ChartOfAccount>({
     account_code: account?.account_code || '',
     account_name: account?.account_name || '',
     account_type: account?.account_type || 'asset',
-    parent_id: account?.parent_id || null,
+    parent_account_id: account?.parent_account_id || null,
     is_active: account?.is_active !== undefined ? account.is_active : true,
     description: account?.description || '',
   });
@@ -53,7 +53,7 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
           account_code: account.account_code,
           account_name: account.account_name,
           account_type: account.account_type,
-          parent_id: account.parent_id || null,
+          parent_account_id: account.parent_account_id || null,
           is_active: account.is_active !== undefined ? account.is_active : true,
           description: account.description || '',
         });
@@ -62,7 +62,7 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
           account_code: '',
           account_name: '',
           account_type: 'asset',
-          parent_id: null,
+          parent_account_id: null,
           is_active: true,
           description: '',
         });
@@ -72,20 +72,35 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
 
   const fetchParentAccounts = async () => {
     try {
+      const { selectRecords } = await import('@/services/api/postgresql-service');
       if (!user?.id) return;
+      
       // Get agency_id from profile
       const { selectOne } = await import('@/services/api/postgresql-service');
-      const profile = await selectOne('profiles', { user_id: user.id });
-      if (!profile?.agency_id) return;
+      const userProfile = profile || await selectOne('profiles', { user_id: user.id });
       
-      const { selectRecords } = await import('@/services/api/postgresql-service');
+      let where: Record<string, any> = { is_active: true };
+      if (userProfile?.agency_id) {
+        where.agency_id = userProfile.agency_id;
+      }
+      
       const accounts = await selectRecords('chart_of_accounts', {
-        where: { is_active: true, agency_id: profile.agency_id },
+        where,
         orderBy: 'account_code ASC',
       });
       setParentAccounts(accounts || []);
-    } catch (error) {
-      console.error('Error fetching parent accounts:', error);
+    } catch (error: any) {
+      // Fallback if agency_id column doesn't exist
+      if (error?.code === '42703' || String(error?.message || '').includes('agency_id')) {
+        const { selectRecords } = await import('@/services/api/postgresql-service');
+        const accounts = await selectRecords('chart_of_accounts', {
+          where: { is_active: true },
+          orderBy: 'account_code ASC',
+        });
+        setParentAccounts(accounts || []);
+      } else {
+        console.error('Error fetching parent accounts:', error);
+      }
     }
   };
 
@@ -115,48 +130,11 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
         return;
       }
 
-      // Validate account code is unique within agency (if creating new or changing code)
-      if (!account?.id || formData.account_code !== account.account_code) {
-        const { selectOne } = await import('@/services/api/postgresql-service');
-        const profile = user?.id ? await selectOne('profiles', { user_id: user.id }) : null;
-        if (profile?.agency_id) {
-          const existing = await selectOne('chart_of_accounts', { 
-            account_code: formData.account_code.trim(),
-            agency_id: profile.agency_id
-          });
-          if (existing && existing.id !== account?.id) {
-            toast({
-              title: 'Error',
-              description: 'Account code already exists. Please use a unique code.',
-              variant: 'destructive',
-            });
-            setLoading(false);
-            return;
-          }
-        }
-      }
-
-      // Use parent_id if that's the actual column name, otherwise parent_account_id
-      // Check which column exists by trying parent_account_id first (as per migration plan)
-      const cleanedData: any = {
-        account_code: formData.account_code.trim(),
-        account_name: formData.account_name.trim(),
-        account_type: formData.account_type,
-        is_active: formData.is_active !== undefined ? formData.is_active : true,
-        description: formData.description?.trim() || null,
-      };
-
-      // Handle parent_id (matches database column name)
-      if (formData.parent_id) {
-        cleanedData.parent_id = formData.parent_id;
-      } else {
-        cleanedData.parent_id = null;
-      }
-
       // Get agency_id from profile
       const { selectOne } = await import('@/services/api/postgresql-service');
-      const profile = user?.id ? await selectOne('profiles', { user_id: user.id }) : null;
-      if (!profile?.agency_id) {
+      const userProfile = profile || (user?.id ? await selectOne('profiles', { user_id: user.id }) : null);
+      
+      if (!userProfile?.agency_id && !account?.id) {
         toast({
           title: 'Error',
           description: 'Unable to determine agency. Please ensure you are logged in.',
@@ -165,7 +143,41 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
         setLoading(false);
         return;
       }
-      cleanedData.agency_id = profile.agency_id;
+
+      // Validate account code is unique within agency (if creating new or changing code)
+      if (!account?.id || formData.account_code !== account.account_code) {
+        let where: Record<string, any> = { account_code: formData.account_code.trim() };
+        if (userProfile?.agency_id) {
+          where.agency_id = userProfile.agency_id;
+        }
+        
+        const existing = await selectOne('chart_of_accounts', where);
+        if (existing && existing.id !== account?.id) {
+          toast({
+            title: 'Error',
+            description: 'Account code already exists. Please use a unique code.',
+            variant: 'destructive',
+          });
+          setLoading(false);
+          return;
+        }
+      }
+
+      const cleanedData: any = {
+        account_code: formData.account_code.trim(),
+        account_name: formData.account_name.trim(),
+        account_type: formData.account_type,
+        is_active: formData.is_active !== undefined ? formData.is_active : true,
+        description: formData.description?.trim() || null,
+      };
+
+      // Handle parent_account_id (matches database column name)
+      cleanedData.parent_account_id = formData.parent_account_id || null;
+      
+      // Add agency_id when creating new account
+      if (!account?.id && userProfile?.agency_id) {
+        cleanedData.agency_id = userProfile.agency_id;
+      }
 
       if (account?.id) {
         await updateRecord('chart_of_accounts', cleanedData, { id: account.id }, user?.id);
@@ -258,16 +270,16 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="parent_id">Parent Account</Label>
-            <Select 
-              value={formData.parent_id || ''} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, parent_id: value || null }))}
+            <Label htmlFor="parent_account_id">Parent Account</Label>
+            <Select
+              value={formData.parent_account_id || '__none__'}
+              onValueChange={(value) => setFormData(prev => ({ ...prev, parent_account_id: value === '__none__' ? null : value }))}                                                           
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select parent account (optional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="__none__">None</SelectItem>
                 {parentAccounts
                   .filter(acc => !account?.id || acc.id !== account.id)
                   .map((acc) => (

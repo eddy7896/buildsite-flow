@@ -78,7 +78,7 @@ const DemoDataManager = ({ onDataChange }: DemoDataManagerProps) => {
       // Delete demo data in order (respecting foreign key constraints)
       
       // 1. Delete quotation line items first
-      const { data: quotationsToDelete } = await supabase
+      const { data: quotationsToDelete } = await db
         .from('quotations')
         .select('id')
         .eq('agency_id', agencyId);
@@ -91,7 +91,7 @@ const DemoDataManager = ({ onDataChange }: DemoDataManagerProps) => {
       }
 
       // 2. Delete job cost items
-      const { data: jobsToDelete } = await supabase
+      const { data: jobsToDelete } = await db
         .from('jobs')
         .select('id')
         .eq('agency_id', agencyId);

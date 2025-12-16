@@ -12,7 +12,7 @@
 #   -p, --port PORT           PostgreSQL port (default: 5432)
 #   -u, --user USER           PostgreSQL user (default: postgres)
 #   -d, --database DATABASE   Database name (default: buildflow_db)
-#   -f, --file FILE           Migration file path (default: supabase/migrations/00_core_auth_schema.sql)
+#   -f, --file FILE           Migration file path (default: database/migrations/01_core_schema.sql)
 #   --verify-only             Only verify schema, don't create
 #   --help                    Show this help message
 #
@@ -32,7 +32,7 @@ PG_HOST="localhost"
 PG_PORT="5432"
 PG_USER="postgres"
 PG_DATABASE="buildflow_db"
-MIGRATION_FILE="supabase/migrations/00_core_auth_schema.sql"
+MIGRATION_FILE="database/migrations/01_core_schema.sql"
 VERIFY_ONLY=false
 
 # Function to print colored output
@@ -64,7 +64,7 @@ Options:
   -p, --port PORT           PostgreSQL port (default: 5432)
   -u, --user USER           PostgreSQL user (default: postgres)
   -d, --database DATABASE   Database name (default: buildflow_db)
-  -f, --file FILE           Migration file path (default: supabase/migrations/00_core_auth_schema.sql)
+  -f, --file FILE           Migration file path (default: database/migrations/01_core_schema.sql)
   --verify-only             Only verify schema, don't create
   --help                    Show this help message
 
@@ -306,7 +306,7 @@ main() {
     print_info "Next steps:"
     print_info "1. Review the schema documentation: CORE_AUTH_SCHEMA_DOCUMENTATION.md"
     print_info "2. Create remaining tables from the migration plan"
-    print_info "3. Migrate data from Supabase"
+    print_info "3. Set up remaining database tables"
     print_info "4. Update application configuration"
     print_info "5. Test thoroughly before production deployment"
     echo ""

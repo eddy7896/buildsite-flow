@@ -1,5 +1,6 @@
 // PostgreSQL API Service
 import { queryOne, queryMany, execute, transaction } from '@/integrations/postgresql/client';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 export interface FilterCondition {
   column: string;
@@ -57,7 +58,7 @@ function buildWhereClause(where: Record<string, any>, startIndex: number = 1): {
 }
 
 /**
- * Parse Supabase-style OR filter string
+ * Parse OR filter string
  */
 function parseOrFilter(filterString: string): { column: string; operator: string; value: string }[] {
   // Parse strings like "col1.eq.val1,col2.ilike.%val2%"
@@ -244,16 +245,38 @@ export async function selectOne<T = any>(
 }
 
 /**
+ * Tables that require agency_id (multi-tenant tables)
+ * Tables NOT in this list are global (e.g., subscription_plans, plan_features)
+ */
+const AGENCY_REQUIRED_TABLES = [
+  'profiles', 'user_roles', 'departments', 'team_assignments', 'clients', 'projects', 'tasks',
+  'invoices', 'quotations', 'quotation_line_items', 'jobs', 'job_cost_items', 'job_categories',
+  'leads', 'lead_sources', 'crm_activities', 'chart_of_accounts', 'journal_entries', 'journal_entry_lines',
+  'attendance', 'leave_requests', 'leave_types', 'leave_balances', 'payroll', 'payroll_periods',
+  'reimbursement_requests', 'reimbursement_attachments', 'reimbursement_categories', 'expense_categories',
+  'employee_details', 'employee_salary_details', 'holidays', 'company_events', 'notifications',
+  'dashboard_widgets', 'custom_reports', 'message_threads', 'messages', 'thread_participants',
+  'document_folders', 'documents', 'reports'
+];
+
+/**
  * Insert record
  * @param table - Table name
  * @param data - Record data
  * @param userId - Optional user ID to set context for audit logs
+ * @param agencyId - Optional agency ID to automatically add if table requires it
  */
 export async function insertRecord<T = any>(
   table: string,
   data: Record<string, any>,
-  userId?: string
+  userId?: string,
+  agencyId?: string | null
 ): Promise<T> {
+  // Automatically add agency_id if table requires it and it's not already set
+  if (AGENCY_REQUIRED_TABLES.includes(table) && !data.agency_id && agencyId) {
+    data.agency_id = agencyId;
+  }
+
   const keys = Object.keys(data);
   const values = Object.values(data);
   const placeholders = keys.map((_, i) => `$${i + 1}`).join(',');
@@ -320,9 +343,22 @@ export async function updateRecord<T = any>(
   });
 
   const result = await queryOne<T>(query, allParams, userId);
+  
   if (!result) {
-    console.error('[PostgreSQL Service] Update returned no result for:', { table, where });
-    throw new Error(`Failed to update record in ${table}`);
+    // Check if record exists but update had no effect (e.g., setting is_active=false when already false)
+    // Try to fetch the record to verify it exists
+    const checkQuery = `SELECT * FROM public.${table} ${whereClause} LIMIT 1`;
+    const existingRecord = await queryOne<T>(checkQuery, whereParams, userId);
+    
+    if (existingRecord) {
+      // Record exists but update had no effect (likely already has the same value)
+      // Return the existing record as if update succeeded
+      console.log('[PostgreSQL Service] Update had no effect (record already has target value):', { table, where });
+      return existingRecord;
+    }
+    
+    console.error('[PostgreSQL Service] Update returned no result and record not found:', { table, where });
+    throw new Error(`Failed to update record in ${table}: Record not found`);
   }
 
   console.log('[PostgreSQL Service] Update successful:', { table, resultId: (result as any)?.id });

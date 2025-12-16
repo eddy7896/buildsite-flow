@@ -11,6 +11,7 @@ import { useState, useEffect } from "react";
 import { selectRecords, deleteRecord, updateRecord } from '@/services/api/postgresql-service';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { getAgencyId } from '@/utils/agencyUtils';
 import { ReceiptFormDialog } from "@/components/ReceiptFormDialog";
 import { ReceiptViewDialog } from "@/components/ReceiptViewDialog";
 import {
@@ -69,26 +70,37 @@ const Receipts = () => {
   const [selectedReceipt, setSelectedReceipt] = useState<Receipt | null>(null);
   const [receiptToDelete, setReceiptToDelete] = useState<Receipt | null>(null);
   const [receiptToUpdateStatus, setReceiptToUpdateStatus] = useState<{ receipt: Receipt; newStatus: string } | null>(null);
+  const [agencyId, setAgencyId] = useState<string | null>(null);
 
   const isFinanceManager = userRole === 'admin' || userRole === 'finance_manager';
 
   useEffect(() => {
-    if (profile?.agency_id) {
-      fetchReceipts();
-      fetchCategories();
-    }
-  }, [profile?.agency_id]);
+    const initializeAgency = async () => {
+      const id = await getAgencyId(profile, user?.id);
+      setAgencyId(id);
+      if (id) {
+        fetchReceipts(id);
+        fetchCategories(id);
+      }
+    };
 
-  const fetchCategories = async () => {
+    if (user?.id) {
+      initializeAgency();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, profile?.agency_id]);
+
+  const fetchCategories = async (agencyIdParam?: string | null) => {
+    const effectiveAgencyId = agencyIdParam || agencyId;
     try {
-      if (!profile?.agency_id) {
+      if (!effectiveAgencyId) {
         setCategories([]);
         return;
       }
 
       const categoriesData = await selectRecords('expense_categories', {
         where: { 
-          agency_id: profile.agency_id,
+          agency_id: effectiveAgencyId,
           is_active: true 
         },
         orderBy: 'name ASC',
@@ -108,11 +120,12 @@ const Receipts = () => {
     }
   };
 
-  const fetchReceipts = async () => {
+  const fetchReceipts = async (agencyIdParam?: string | null) => {
+    const effectiveAgencyId = agencyIdParam || agencyId;
     try {
       setLoading(true);
 
-      if (!profile?.agency_id) {
+      if (!effectiveAgencyId) {
         setReceipts([]);
         setReceiptStats({
           totalReceipts: 0,
@@ -125,7 +138,7 @@ const Receipts = () => {
 
       // Fetch reimbursement requests with agency_id filter
       const requests = await selectRecords('reimbursement_requests', {
-        where: { agency_id: profile.agency_id },
+        where: { agency_id: effectiveAgencyId },
         orderBy: 'created_at DESC',
       });
 
@@ -142,7 +155,7 @@ const Receipts = () => {
 
       // Fetch expense categories
       const categoriesData = await selectRecords('expense_categories', {
-        where: { agency_id: profile.agency_id },
+        where: { agency_id: effectiveAgencyId },
       });
 
       const categoryMap = new Map((categoriesData || []).map((c: any) => [c.id, c.name]));
@@ -292,7 +305,7 @@ const Receipts = () => {
       });
 
       setReceiptToUpdateStatus(null);
-      fetchReceipts();
+      await fetchReceipts(agencyId);
     } catch (error: any) {
       console.error('Error updating status:', error);
       toast({
@@ -327,12 +340,30 @@ const Receipts = () => {
     );
   }
 
-  if (!profile?.agency_id) {
+  if (!agencyId && !loading && user?.id) {
     return (
       <div className="p-6">
-        <div className="text-center py-8">
-          <p className="text-muted-foreground">Unable to load receipts. Please ensure you are logged in.</p>
-        </div>
+        <Card>
+          <CardContent className="p-8 text-center">
+            <p className="text-muted-foreground mb-4">Unable to determine agency. Please ensure you are logged in and have an agency assigned.</p>
+            <Button onClick={async () => {
+              const id = await getAgencyId(profile, user.id);
+              if (id) {
+                setAgencyId(id);
+                fetchReceipts(id);
+                fetchCategories(id);
+              } else {
+                toast({
+                  title: 'Error',
+                  description: 'Could not find agency. Please contact your administrator.',
+                  variant: 'destructive',
+                });
+              }
+            }}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }

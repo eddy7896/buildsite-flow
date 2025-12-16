@@ -18,7 +18,7 @@ export const services = {
   ai: {
     predictionsEndpoint: '/functions/v1/ai-predictions',
     documentProcessorEndpoint: '/functions/v1/ai-document-processor',
-    enabled: true, // Always enabled, server-side keys managed via Supabase
+    enabled: true, // Always enabled, server-side keys managed via backend
   },
   notifications: {
     emailEndpoint: '/functions/v1/send-welcome-email',
@@ -43,5 +43,6 @@ export const getServiceConfig = <T extends keyof typeof services>(
 
 // API endpoints with full URLs
 export const getApiEndpoint = (endpoint: string) => {
-  return `${env.VITE_SUPABASE_URL}${endpoint}`;
+  const apiUrl = env.VITE_API_URL || 'http://localhost:3000';
+  return `${apiUrl}${endpoint}`;
 };

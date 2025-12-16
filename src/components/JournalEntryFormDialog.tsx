@@ -231,35 +231,52 @@ const JournalEntryFormDialog: React.FC<JournalEntryFormDialogProps> = ({
         total_credit: totalCredits,
       };
 
-      // Use sequential calls (transactions will be added later if needed)
+      // Use transactions for updates to ensure data consistency
       if (entry?.id) {
-        // Update existing entry
-        const { updateRecord } = await import('@/services/api/postgresql-service');
-        await updateRecord('journal_entries', {
-          entry_date: entryData.entry_date,
-          description: entryData.description,
-          reference: entryData.reference,
-          status: entryData.status,
-          total_debit: entryData.total_debit,
-          total_credit: entryData.total_credit,
-        }, { id: entry.id }, user?.id);
+        const { executeTransaction, updateRecord, deleteRecord, insertRecord } = await import('@/services/api/postgresql-service');
+        
+        // Use transaction for atomic update
+        await executeTransaction(async (client) => {
+          // Update entry
+          await client.query(
+            `UPDATE journal_entries 
+             SET entry_date = $1, description = $2, reference = $3, status = $4, 
+                 total_debit = $5, total_credit = $6, updated_at = NOW()
+             WHERE id = $7`,
+            [
+              entryData.entry_date,
+              entryData.description,
+              entryData.reference,
+              entryData.status,
+              entryData.total_debit,
+              entryData.total_credit,
+              entry.id
+            ]
+          );
 
-        // Delete existing lines
-        const { deleteRecord } = await import('@/services/api/postgresql-service');
-        await deleteRecord('journal_entry_lines', { journal_entry_id: entry.id });
+          // Delete existing lines
+          await client.query(
+            'DELETE FROM journal_entry_lines WHERE journal_entry_id = $1',
+            [entry.id]
+          );
 
-        // Insert new lines
-        const { insertRecord } = await import('@/services/api/postgresql-service');
-        for (const line of formData.lines) {
-          await insertRecord('journal_entry_lines', {
-            journal_entry_id: entry.id,
-            account_id: line.account_id,
-            description: line.description.trim() || formData.description.trim(),
-            debit_amount: line.debit_amount || 0,
-            credit_amount: line.credit_amount || 0,
-            line_number: line.line_number,
-          }, user?.id);
-        }
+          // Insert new lines
+          for (const line of formData.lines) {
+            await client.query(
+              `INSERT INTO journal_entry_lines 
+               (journal_entry_id, account_id, description, debit_amount, credit_amount, line_number, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())`,
+              [
+                entry.id,
+                line.account_id,
+                line.description.trim() || formData.description.trim(),
+                line.debit_amount || 0,
+                line.credit_amount || 0,
+                line.line_number
+              ]
+            );
+          }
+        });
       } else {
         // Get agency_id from profile
         const { selectOne } = await import('@/services/api/postgresql-service');

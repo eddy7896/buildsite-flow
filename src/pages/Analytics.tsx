@@ -28,12 +28,21 @@ import {
   Clock, 
   FileText,
   Download,
-  RefreshCw
+  RefreshCw,
+  ArrowRight,
+  Building2,
+  Calendar,
+  Briefcase,
+  UserCheck,
+  Receipt
 } from "lucide-react";
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 import { DateRange } from "react-day-picker";
+import { useAuth } from "@/hooks/useAuth";
+import { useNavigate } from "react-router-dom";
+import { getAgencyId } from "@/utils/agencyUtils";
 
 interface DashboardMetrics {
   totalRevenue: number;
@@ -53,6 +62,25 @@ interface ChartData {
   expenses?: number;
   projects?: number;
   employees?: number;
+  attendance?: number;
+  present?: number;
+  absent?: number;
+  late?: number;
+}
+
+interface WorkforceData {
+  totalEmployees: number;
+  activeEmployees: number;
+  onLeave: number;
+  presentToday: number;
+  absentToday: number;
+  lateToday: number;
+  departmentStats: Array<{
+    department: string;
+    employees: number;
+    present: number;
+    attendanceRate: number;
+  }>;
 }
 
 const COLORS = ['hsl(var(--primary))', 'hsl(var(--secondary))', 'hsl(var(--accent))', 'hsl(var(--muted))'];
@@ -63,43 +91,132 @@ export default function Analytics() {
   const [expenseData, setExpenseData] = useState<ChartData[]>([]);
   const [projectStatusData, setProjectStatusData] = useState<ChartData[]>([]);
   const [leaveData, setLeaveData] = useState<ChartData[]>([]);
+  const [workforceData, setWorkforceData] = useState<WorkforceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [selectedPeriod, setSelectedPeriod] = useState("month");
   const { toast } = useToast();
+  const { user, profile } = useAuth();
+  const navigate = useNavigate();
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       
-      // Fetch key metrics
+      // Get agency_id
+      const agencyId = await getAgencyId(profile, user?.id || null);
+      if (!agencyId) {
+        toast({
+          title: "Error",
+          description: "Agency ID not found. Please ensure you're assigned to an agency.",
+          variant: "destructive"
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Calculate date range based on selected period
+      const now = new Date();
+      let fromDate: Date;
+      let toDate = now;
+
+      switch (selectedPeriod) {
+        case "week":
+          fromDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case "month":
+          fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        case "quarter":
+          const quarter = Math.floor(now.getMonth() / 3);
+          fromDate = new Date(now.getFullYear(), quarter * 3, 1);
+          break;
+        case "year":
+          fromDate = new Date(now.getFullYear(), 0, 1);
+          break;
+        default:
+          fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+
+      // Use custom date range if provided
+      if (dateRange?.from && dateRange?.to) {
+        fromDate = dateRange.from;
+        toDate = dateRange.to;
+      }
+
+      const fromDateStr = fromDate.toISOString();
+      const toDateStr = toDate.toISOString();
+
+      // Calculate previous period for growth comparison
+      const periodDiff = toDate.getTime() - fromDate.getTime();
+      const previousToDate = new Date(fromDate.getTime() - 1);
+      const previousFromDate = new Date(previousToDate.getTime() - periodDiff);
+      const previousFromDateStr = previousFromDate.toISOString();
+      const previousToDateStr = previousToDate.toISOString();
+
+      // Fetch key metrics with agency_id filtering and date range
       const [
         { data: invoices },
+        { data: previousInvoices },
         { data: employees },
+        { data: previousEmployees },
         { data: projects },
-        { data: reimbursements }
+        { data: previousProjects },
+        { data: reimbursements },
+        { data: previousReimbursements }
       ] = await Promise.all([
-        db.from('invoices').select('total_amount, created_at'),
-        db.from('profiles').select('id, created_at'),
-        db.from('jobs').select('id, status, created_at'),
-        db.from('reimbursement_requests').select('amount, status, created_at')
+        db.from('invoices')
+          .select('total_amount, created_at')
+          .eq('agency_id', agencyId)
+          .gte('created_at', fromDateStr)
+          .lte('created_at', toDateStr),
+        db.from('invoices')
+          .select('total_amount, created_at')
+          .eq('agency_id', agencyId)
+          .gte('created_at', previousFromDateStr)
+          .lte('created_at', previousToDateStr),
+        db.from('profiles')
+          .select('id, created_at, is_active')
+          .eq('agency_id', agencyId),
+        db.from('profiles')
+          .select('id, created_at')
+          .eq('agency_id', agencyId)
+          .lte('created_at', previousToDateStr),
+        db.from('projects')
+          .select('id, status, created_at')
+          .eq('agency_id', agencyId),
+        db.from('projects')
+          .select('id, status, created_at')
+          .eq('agency_id', agencyId)
+          .lte('created_at', previousToDateStr),
+        db.from('reimbursement_requests')
+          .select('amount, status, created_at')
+          .eq('agency_id', agencyId)
+          .gte('created_at', fromDateStr)
+          .lte('created_at', toDateStr),
+        db.from('reimbursement_requests')
+          .select('amount, status, created_at')
+          .eq('agency_id', agencyId)
+          .gte('created_at', previousFromDateStr)
+          .lte('created_at', previousToDateStr)
       ]);
 
       // Calculate metrics
-      const totalRevenue = invoices?.reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 0;
-      const totalEmployees = employees?.length || 0;
-      const activeProjects = projects?.filter(p => p.status === 'in_progress').length || 0;
-      const pendingReimbursements = reimbursements?.filter(r => r.status === 'submitted').length || 0;
+      const totalRevenue = invoices?.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0) || 0;
+      const previousRevenue = previousInvoices?.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0) || 0;
+      const revenueGrowth = previousRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 : 0;
 
-      // Calculate growth (simplified - comparing with previous period)
-      const now = new Date();
-      const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      
-      const previousRevenue = invoices?.filter(inv => 
-        new Date(inv.created_at) < previousMonth
-      ).reduce((sum, inv) => sum + (inv.total_amount || 0), 0) || 1;
-      
-      const revenueGrowth = ((totalRevenue - previousRevenue) / previousRevenue) * 100;
+      const totalEmployees = employees?.length || 0;
+      const previousTotalEmployees = previousEmployees?.length || 0;
+      const employeeGrowth = previousTotalEmployees > 0 ? ((totalEmployees - previousTotalEmployees) / previousTotalEmployees) * 100 : 0;
+
+      const activeProjects = projects?.filter(p => p.status === 'in_progress' || p.status === 'active').length || 0;
+      const previousActiveProjects = previousProjects?.filter(p => p.status === 'in_progress' || p.status === 'active').length || 0;
+      const projectsGrowth = previousActiveProjects > 0 ? ((activeProjects - previousActiveProjects) / previousActiveProjects) * 100 : 0;
+
+      const pendingReimbursements = reimbursements?.filter(r => r.status === 'submitted' || r.status === 'pending').length || 0;
+      const previousPendingReimbursements = previousReimbursements?.filter(r => r.status === 'submitted' || r.status === 'pending').length || 0;
+      const reimbursementGrowth = previousPendingReimbursements > 0 ? ((pendingReimbursements - previousPendingReimbursements) / previousPendingReimbursements) * 100 : 0;
 
       setMetrics({
         totalRevenue,
@@ -107,19 +224,20 @@ export default function Analytics() {
         activeProjects,
         pendingReimbursements,
         revenueGrowth,
-        employeeGrowth: 5.2, // Mock data
-        projectsGrowth: 12.1, // Mock data
-        reimbursementGrowth: -8.3 // Mock data
+        employeeGrowth,
+        projectsGrowth,
+        reimbursementGrowth
       });
 
-      // Generate chart data
-      generateChartData(invoices, reimbursements, projects);
+      // Generate chart data (uses all historical data, not just date range)
+      await generateChartData(invoices, reimbursements, projects, agencyId);
+      await fetchWorkforceData(agencyId);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
       toast({
         title: "Error",
-        description: "Failed to load analytics data",
+        description: error.message || "Failed to load analytics data",
         variant: "destructive"
       });
     } finally {
@@ -127,20 +245,35 @@ export default function Analytics() {
     }
   };
 
-  const generateChartData = (invoices: any[], reimbursements: any[], projects: any[]) => {
-    // Revenue trend (last 6 months)
+  const generateChartData = async (invoices: any[], reimbursements: any[], projects: any[], agencyId: string) => {
+    // Fetch ALL historical invoices for revenue trend (not just date range)
+    const { data: allInvoices } = await db
+      .from('invoices')
+      .select('total_amount, created_at')
+      .eq('agency_id', agencyId)
+      .order('created_at', { ascending: true });
+
+    // Fetch ALL historical reimbursements for expense trend
+    const { data: allReimbursements } = await db
+      .from('reimbursement_requests')
+      .select('amount, created_at')
+      .eq('agency_id', agencyId)
+      .order('created_at', { ascending: true });
+
+    // Revenue trend (last 12 months for better historical view)
     const monthlyRevenue = [];
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
-      const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthName = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
       
-      const monthlyInvoices = invoices?.filter(inv => {
+      const monthlyInvoices = allInvoices?.filter(inv => {
+        if (!inv.created_at) return false;
         const invDate = new Date(inv.created_at);
         return invDate.getMonth() === date.getMonth() && invDate.getFullYear() === date.getFullYear();
       }) || [];
       
-      const revenue = monthlyInvoices.reduce((sum, inv) => sum + (inv.total_amount || 0), 0);
+      const revenue = monthlyInvoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
       
       monthlyRevenue.push({
         name: monthName,
@@ -150,19 +283,19 @@ export default function Analytics() {
     }
     setRevenueData(monthlyRevenue);
 
-    // Expense data (mock - reimbursements by month)
+    // Expense data (reimbursements by month - last 12 months)
     const monthlyExpenses = [];
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date();
-      date.setMonth(date.getMonth() - i);
-      const monthName = date.toLocaleDateString('en-US', { month: 'short' });
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthName = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
       
-      const monthlyReimbursements = reimbursements?.filter(reimb => {
+      const monthlyReimbursements = allReimbursements?.filter(reimb => {
+        if (!reimb.created_at) return false;
         const reimbDate = new Date(reimb.created_at);
         return reimbDate.getMonth() === date.getMonth() && reimbDate.getFullYear() === date.getFullYear();
       }) || [];
       
-      const expenses = monthlyReimbursements.reduce((sum, reimb) => sum + (reimb.amount || 0), 0);
+      const expenses = monthlyReimbursements.reduce((sum, reimb) => sum + (Number(reimb.amount) || 0), 0);
       
       monthlyExpenses.push({
         name: monthName,
@@ -174,7 +307,8 @@ export default function Analytics() {
 
     // Project status distribution
     const statusCounts = projects?.reduce((acc, project) => {
-      acc[project.status] = (acc[project.status] || 0) + 1;
+      const status = project.status || 'unknown';
+      acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>) || {};
 
@@ -184,34 +318,127 @@ export default function Analytics() {
     }));
     setProjectStatusData(projectData);
 
-    // Leave requests data (mock)
-    setLeaveData([
-      { name: 'Approved', value: 45 },
-      { name: 'Pending', value: 12 },
-      { name: 'Rejected', value: 3 }
-    ]);
+    // Leave requests data (real data from database - ALL leave requests)
+    try {
+      const { data: leaveRequests } = await db
+        .from('leave_requests')
+        .select('status')
+        .eq('agency_id', agencyId);
+
+      const leaveCounts = leaveRequests?.reduce((acc, req) => {
+        const status = req.status || 'pending';
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>) || {};
+
+      const leaveDataArray = Object.entries(leaveCounts)
+        .map(([status, count]) => ({
+          name: status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' '),
+          value: Number(count)
+        }))
+        .filter(item => item.value > 0); // Only show statuses that have data
+
+      // Always set real data, even if empty array
+      setLeaveData(leaveDataArray.length > 0 ? leaveDataArray : []);
+    } catch (error) {
+      console.error('Error fetching leave data:', error);
+      // On error, set empty array instead of mock zeros
+      setLeaveData([]);
+    }
+  };
+
+  const fetchWorkforceData = async (agencyId: string) => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString().split('T')[0];
+
+      // Fetch employees
+      const { data: employees } = await db
+        .from('profiles')
+        .select('id, is_active, department')
+        .eq('agency_id', agencyId);
+
+      // Fetch attendance for today
+      const { data: attendanceToday } = await db
+        .from('attendance')
+        .select('employee_id, status, check_in_time')
+        .eq('agency_id', agencyId)
+        .gte('date', todayStr)
+        .lte('date', todayStr);
+
+      // Fetch leave requests for today (where today is between start_date and end_date)
+      const { data: leaveRequests } = await db
+        .from('leave_requests')
+        .select('employee_id, status, start_date, end_date')
+        .eq('agency_id', agencyId)
+        .eq('status', 'approved')
+        .lte('start_date', todayStr)
+        .gte('end_date', todayStr);
+
+      const totalEmployees = employees?.length || 0;
+      const activeEmployees = employees?.filter(e => e.is_active).length || 0;
+      const onLeave = leaveRequests?.length || 0;
+
+      // Calculate attendance stats
+      const presentToday = attendanceToday?.filter(a => a.status === 'present' || a.status === 'checked_in').length || 0;
+      const absentToday = totalEmployees - presentToday - onLeave;
+      const lateToday = attendanceToday?.filter(a => {
+        if (!a.check_in_time) return false;
+        const checkIn = new Date(a.check_in_time);
+        return checkIn.getHours() > 9 || (checkIn.getHours() === 9 && checkIn.getMinutes() > 0);
+      }).length || 0;
+
+      // Department stats
+      const departmentMap = new Map<string, { employees: number; present: number }>();
+      
+      employees?.forEach(emp => {
+        const dept = emp.department || 'Unassigned';
+        if (!departmentMap.has(dept)) {
+          departmentMap.set(dept, { employees: 0, present: 0 });
+        }
+        const deptData = departmentMap.get(dept)!;
+        deptData.employees++;
+        
+        const isPresent = attendanceToday?.some(a => a.employee_id === emp.id && (a.status === 'present' || a.status === 'checked_in'));
+        if (isPresent) {
+          deptData.present++;
+        }
+      });
+
+      const departmentStats = Array.from(departmentMap.entries()).map(([department, data]) => ({
+        department,
+        employees: data.employees,
+        present: data.present,
+        attendanceRate: data.employees > 0 ? (data.present / data.employees) * 100 : 0
+      }));
+
+      setWorkforceData({
+        totalEmployees,
+        activeEmployees,
+        onLeave,
+        presentToday,
+        absentToday,
+        lateToday,
+        departmentStats
+      });
+    } catch (error) {
+      console.error('Error fetching workforce data:', error);
+    }
   };
 
   const exportReport = async (type: string) => {
     try {
-      const { data, error } = await db.functions.invoke('generate-report', {
-        body: { 
-          reportType: type, 
-          dateRange,
-          format: 'pdf'
-        }
-      });
-      
-      if (error) throw error;
-      
+      // Navigate to Reports page with the report type
+      navigate(`/reports?type=${type}&from=${dateRange?.from?.toISOString() || ''}&to=${dateRange?.to?.toISOString() || ''}`);
       toast({
-        title: "Success",
-        description: `${type} report exported successfully`
+        title: "Redirecting",
+        description: `Opening ${type} report in Reports page`
       });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to export report",
+        description: "Failed to open report",
         variant: "destructive"
       });
     }
@@ -221,7 +448,7 @@ export default function Analytics() {
     fetchDashboardData();
   }, [dateRange, selectedPeriod]);
 
-  if (loading) {
+  if (loading && !metrics) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <LoadingSpinner />
@@ -257,6 +484,58 @@ export default function Analytics() {
         </div>
       </div>
 
+      {/* Quick Navigation Links */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Button
+          variant="outline"
+          className="h-auto p-4 flex flex-col items-start space-y-2"
+          onClick={() => navigate('/reports')}
+        >
+          <FileText className="h-5 w-5" />
+          <div className="text-left">
+            <div className="font-semibold">Reports</div>
+            <div className="text-xs text-muted-foreground">View detailed reports</div>
+          </div>
+          <ArrowRight className="h-4 w-4 ml-auto" />
+        </Button>
+        <Button
+          variant="outline"
+          className="h-auto p-4 flex flex-col items-start space-y-2"
+          onClick={() => navigate('/attendance')}
+        >
+          <Calendar className="h-5 w-5" />
+          <div className="text-left">
+            <div className="font-semibold">Attendance</div>
+            <div className="text-xs text-muted-foreground">View attendance records</div>
+          </div>
+          <ArrowRight className="h-4 w-4 ml-auto" />
+        </Button>
+        <Button
+          variant="outline"
+          className="h-auto p-4 flex flex-col items-start space-y-2"
+          onClick={() => navigate('/projects')}
+        >
+          <Briefcase className="h-5 w-5" />
+          <div className="text-left">
+            <div className="font-semibold">Projects</div>
+            <div className="text-xs text-muted-foreground">Manage projects</div>
+          </div>
+          <ArrowRight className="h-4 w-4 ml-auto" />
+        </Button>
+        <Button
+          variant="outline"
+          className="h-auto p-4 flex flex-col items-start space-y-2"
+          onClick={() => navigate('/employee-management')}
+        >
+          <UserCheck className="h-5 w-5" />
+          <div className="text-left">
+            <div className="font-semibold">Employees</div>
+            <div className="text-xs text-muted-foreground">Manage workforce</div>
+          </div>
+          <ArrowRight className="h-4 w-4 ml-auto" />
+        </Button>
+      </div>
+
       {/* Key Metrics */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -266,7 +545,7 @@ export default function Analytics() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${metrics?.totalRevenue.toLocaleString()}
+              ${metrics?.totalRevenue.toLocaleString() || '0'}
             </div>
             <div className="flex items-center text-xs text-muted-foreground">
               {metrics?.revenueGrowth && metrics.revenueGrowth > 0 ? (
@@ -274,7 +553,7 @@ export default function Analytics() {
               ) : (
                 <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
               )}
-              {Math.abs(metrics?.revenueGrowth || 0).toFixed(1)}% from last month
+              {Math.abs(metrics?.revenueGrowth || 0).toFixed(1)}% from previous period
             </div>
           </CardContent>
         </Card>
@@ -285,10 +564,14 @@ export default function Analytics() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics?.totalEmployees}</div>
+            <div className="text-2xl font-bold">{metrics?.totalEmployees || 0}</div>
             <div className="flex items-center text-xs text-muted-foreground">
-              <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
-              {metrics?.employeeGrowth.toFixed(1)}% from last month
+              {metrics?.employeeGrowth && metrics.employeeGrowth > 0 ? (
+                <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
+              ) : (
+                <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
+              )}
+              {Math.abs(metrics?.employeeGrowth || 0).toFixed(1)}% from previous period
             </div>
           </CardContent>
         </Card>
@@ -299,10 +582,14 @@ export default function Analytics() {
             <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics?.activeProjects}</div>
+            <div className="text-2xl font-bold">{metrics?.activeProjects || 0}</div>
             <div className="flex items-center text-xs text-muted-foreground">
-              <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
-              {metrics?.projectsGrowth.toFixed(1)}% from last month
+              {metrics?.projectsGrowth && metrics.projectsGrowth > 0 ? (
+                <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
+              ) : (
+                <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
+              )}
+              {Math.abs(metrics?.projectsGrowth || 0).toFixed(1)}% from previous period
             </div>
           </CardContent>
         </Card>
@@ -313,10 +600,14 @@ export default function Analytics() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics?.pendingReimbursements}</div>
+            <div className="text-2xl font-bold">{metrics?.pendingReimbursements || 0}</div>
             <div className="flex items-center text-xs text-muted-foreground">
-              <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
-              {Math.abs(metrics?.reimbursementGrowth || 0).toFixed(1)}% from last month
+              {metrics?.reimbursementGrowth && metrics.reimbursementGrowth > 0 ? (
+                <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
+              ) : (
+                <TrendingDown className="h-3 w-3 text-red-500 mr-1" />
+              )}
+              {Math.abs(metrics?.reimbursementGrowth || 0).toFixed(1)}% from previous period
             </div>
           </CardContent>
         </Card>
@@ -391,25 +682,31 @@ export default function Analytics() {
                 <CardDescription>Current status of all projects</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={projectStatusData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {projectStatusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                {projectStatusData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={projectStatusData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {projectStatusData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                    No project data available
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -419,42 +716,144 @@ export default function Analytics() {
                 <CardDescription>Leave request status breakdown</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={leaveData}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {leaveData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
+                {leaveData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={leaveData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={80}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {leaveData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                    No leave request data available
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
         <TabsContent value="workforce" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Workforce Analytics</CardTitle>
-              <CardDescription>Employee metrics and insights</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                Workforce analytics coming soon...
-              </div>
-            </CardContent>
-          </Card>
+          {workforceData ? (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Today's Attendance</CardTitle>
+                  <CardDescription>Current day workforce status</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Present</span>
+                    <span className="text-2xl font-bold text-green-600">{workforceData.presentToday}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Absent</span>
+                    <span className="text-2xl font-bold text-red-600">{workforceData.absentToday}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">On Leave</span>
+                    <span className="text-2xl font-bold text-blue-600">{workforceData.onLeave}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Late</span>
+                    <span className="text-2xl font-bold text-orange-600">{workforceData.lateToday}</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full mt-4"
+                    onClick={() => navigate('/attendance')}
+                  >
+                    View Attendance <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Workforce Overview</CardTitle>
+                  <CardDescription>Employee statistics</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Employees</span>
+                    <span className="text-2xl font-bold">{workforceData.totalEmployees}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Active Employees</span>
+                    <span className="text-2xl font-bold text-green-600">{workforceData.activeEmployees}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Attendance Rate</span>
+                    <span className="text-2xl font-bold">
+                      {workforceData.totalEmployees > 0 
+                        ? ((workforceData.presentToday / workforceData.totalEmployees) * 100).toFixed(1)
+                        : '0'}%
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full mt-4"
+                    onClick={() => navigate('/employee-management')}
+                  >
+                    Manage Employees <ArrowRight className="h-4 w-4 ml-2" />
+                  </Button>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Department Stats</CardTitle>
+                  <CardDescription>Attendance by department</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                    {workforceData.departmentStats.map((dept, index) => (
+                      <div key={index} className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium">{dept.department}</span>
+                          <span className="text-muted-foreground">{dept.present}/{dept.employees}</span>
+                        </div>
+                        <div className="w-full bg-secondary rounded-full h-2">
+                          <div
+                            className="bg-primary h-2 rounded-full"
+                            style={{ width: `${dept.attendanceRate}%` }}
+                          />
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {dept.attendanceRate.toFixed(1)}% attendance
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Workforce Analytics</CardTitle>
+                <CardDescription>Employee metrics and insights</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="text-center py-8 text-muted-foreground">
+                  {loading ? 'Loading workforce data...' : 'No workforce data available'}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="reports" className="space-y-4">
@@ -490,6 +889,15 @@ export default function Analytics() {
                 >
                   <Users className="h-6 w-6" />
                   <span>Workforce Report</span>
+                </Button>
+              </div>
+              <div className="mt-4">
+                <Button
+                  variant="default"
+                  className="w-full"
+                  onClick={() => navigate('/reports')}
+                >
+                  View All Reports <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               </div>
             </CardContent>

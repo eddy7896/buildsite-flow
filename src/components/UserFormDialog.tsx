@@ -11,6 +11,7 @@ import { Loader2, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import bcrypt from 'bcryptjs';
 import { selectRecords, insertRecord, updateRecord } from '@/services/api/postgresql-service';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface User {
   id: string;
@@ -48,7 +49,7 @@ const generatePassword = () => {
 
 const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogProps) => {
   const { toast } = useToast();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [showCredentials, setShowCredentials] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -62,7 +63,8 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
     position: '',
     department: '',
     phone: '',
-    hire_date: ''
+    hire_date: '',
+    is_active: true
   });
 
   const [passwordData, setPasswordData] = useState({
@@ -75,15 +77,48 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
 
   useEffect(() => {
     if (user) {
-      setFormData({
-        name: user.name || '',
-        email: user.email || '',
-        role: user.role || '',
-        position: user.position || '',
-        department: user.department || '',
-        phone: user.phone || '',
-        hire_date: user.hire_date || ''
-      });
+      // Fetch current user status from database
+      const fetchUserStatus = async () => {
+        try {
+          const userData = await selectRecords('users', {
+            filters: [{ column: 'id', operator: 'eq', value: user.id }],
+            limit: 1
+          });
+          const profileData = await selectRecords('profiles', {
+            filters: [{ column: 'user_id', operator: 'eq', value: user.id }],
+            limit: 1
+          });
+          
+          const userIsActive = userData?.[0]?.is_active ?? true;
+          const profileIsActive = profileData?.[0]?.is_active ?? true;
+          const isActive = userIsActive && profileIsActive;
+          
+          setFormData({
+            name: user.name || '',
+            email: user.email || '',
+            role: user.role || '',
+            position: user.position || '',
+            department: user.department || '',
+            phone: user.phone || '',
+            hire_date: user.hire_date || '',
+            is_active: isActive
+          });
+        } catch (error) {
+          console.error('Error fetching user status:', error);
+          setFormData({
+            name: user.name || '',
+            email: user.email || '',
+            role: user.role || '',
+            position: user.position || '',
+            department: user.department || '',
+            phone: user.phone || '',
+            hire_date: user.hire_date || '',
+            is_active: true
+          });
+        }
+      };
+      
+      fetchUserStatus();
     } else {
       setFormData({
         name: '',
@@ -92,7 +127,8 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
         position: '',
         department: '',
         phone: '',
-        hire_date: ''
+        hire_date: '',
+        is_active: true
       });
     }
     setPasswordData({
@@ -143,8 +179,14 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           phone: formData.phone || null,
           department: formData.department || null,
           position: formData.position || null,
-          hire_date: formData.hire_date || null
+          hire_date: formData.hire_date || null,
+          is_active: formData.is_active
         }, { user_id: user.id }, currentUser?.id);
+        
+        // Update user is_active status
+        await updateRecord('users', {
+          is_active: formData.is_active
+        }, { id: user.id }, currentUser?.id);
 
         // Update password if provided
         if (passwordData.newPassword) {
@@ -170,11 +212,15 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           );
         } else {
           // Insert new role if it doesn't exist
+          const agencyId = await getAgencyId(profile, currentUser?.id);
+          if (!agencyId) {
+            throw new Error('Agency ID is required to assign a role');
+          }
           await insertRecord('user_roles', {
             id: generateUUID(),
             user_id: user.id,
             role: formData.role as any,
-            agency_id: '550e8400-e29b-41d4-a716-446655440000'
+            agency_id: agencyId
           }, currentUser?.id);
         }
 
@@ -208,6 +254,11 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
         const { selectOne } = await import('@/services/api/postgresql-service');
         const existingProfile = await selectOne('profiles', { user_id: newUserId });
         
+        const agencyId = await getAgencyId(profile, currentUser?.id);
+        if (!agencyId) {
+          throw new Error('Agency ID is required to create a user');
+        }
+
         const profileData = {
           full_name: formData.name,
           phone: formData.phone || null,
@@ -215,7 +266,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           position: formData.position || null,
           hire_date: formData.hire_date || null,
           is_active: true,
-          agency_id: '550e8400-e29b-41d4-a716-446655440000' // Default agency
+          agency_id: agencyId
         };
 
         if (existingProfile) {
@@ -235,7 +286,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           id: generateUUID(),
           user_id: newUserId,
           role: formData.role || 'employee',
-          agency_id: '550e8400-e29b-41d4-a716-446655440000'
+          agency_id: agencyId
         }, currentUser?.id);
 
         // Store the created user credentials to display
@@ -448,15 +499,35 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="hire_date">Hire Date</Label>
-            <Input
-              id="hire_date"
-              type="date"
-              value={formData.hire_date}
-              onChange={(e) => setFormData({ ...formData, hire_date: e.target.value })}
-              disabled={loading}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="hire_date">Hire Date</Label>
+              <Input
+                id="hire_date"
+                type="date"
+                value={formData.hire_date}
+                onChange={(e) => setFormData({ ...formData, hire_date: e.target.value })}
+                disabled={loading}
+              />
+            </div>
+            {user && (
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.is_active ? 'active' : 'inactive'}
+                  onValueChange={(value) => setFormData({ ...formData, is_active: value === 'active' })}
+                  disabled={loading}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Trash</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {user && (

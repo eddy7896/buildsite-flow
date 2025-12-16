@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/database';
 import { generateUUID } from '@/lib/uuid';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface Project {
   id?: string;
@@ -151,7 +152,16 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
   const fetchClients = async () => {
     try {
       setLoadingClients(true);
-      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        toast({
+          title: 'Error',
+          description: 'Agency ID not found. Please ensure you are logged in to an agency account.',
+          variant: 'destructive',
+        });
+        setLoadingClients(false);
+        return;
+      }
       
       const { data, error } = await db
         .from('clients')
@@ -218,8 +228,26 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
     setLoading(true);
 
     try {
-      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
-      const userId = user?.id || '550e8400-e29b-41d4-a716-446655440001';
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        toast({
+          title: 'Error',
+          description: 'Agency ID not found. Please ensure you are logged in to an agency account.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+      const userId = user?.id;
+      if (!userId) {
+        toast({
+          title: 'Error',
+          description: 'User ID not found. Please log in again.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
 
       const cleanedData: any = {
         name: formData.name.trim(),

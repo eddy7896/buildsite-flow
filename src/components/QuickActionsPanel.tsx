@@ -28,6 +28,7 @@ import {
   UserPlus
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 import { db } from '@/lib/database';
 import { toast } from '@/hooks/use-toast';
 import { generateUUID } from '@/lib/uuid';
@@ -180,7 +181,7 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
           location: eventForm.location,
           color: eventForm.color,
           created_by: user?.id,
-          agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000',
+          agency_id: await getAgencyId(profile, user?.id) || undefined,
           created_at: new Date().toISOString()
         });
 
@@ -228,7 +229,7 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
           date: format(holidayForm.date, 'yyyy-MM-dd'),
           is_company_holiday: holidayForm.is_company_holiday,
           is_national_holiday: holidayForm.is_national_holiday,
-          agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000',
+          agency_id: await getAgencyId(profile, user?.id) || undefined,
           created_at: new Date().toISOString()
         });
 

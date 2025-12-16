@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Check, X, ExternalLink, Clock, AlertTriangle, Info, CheckCircle } from 'lucide-react';
+import { Bell, Check, X, ExternalLink, Clock, AlertTriangle, Info, CheckCircle, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Link } from 'react-router-dom';
 import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { LoadingSpinner } from './LoadingSpinner';
@@ -192,7 +193,7 @@ export const NotificationCenter: React.FC = () => {
         </Button>
       </PopoverTrigger>
       
-      <PopoverContent className="w-96 p-0" align="end">
+      <PopoverContent className="w-[90vw] sm:w-96 max-w-sm p-0" align="end">
         <Card className="border-0 shadow-none">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -216,12 +217,34 @@ export const NotificationCenter: React.FC = () => {
           
           <CardContent className="p-0">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-4 mb-2 mx-3">
-                <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
-                <TabsTrigger value="unread" className="text-xs">Unread</TabsTrigger>
-                <TabsTrigger value="approval" className="text-xs">Approval</TabsTrigger>
-                <TabsTrigger value="alert" className="text-xs">Alerts</TabsTrigger>
-              </TabsList>
+              <div className="px-2 sm:px-3 pt-2 pb-2 border-b">
+                <TabsList className="grid grid-cols-4 w-full h-auto p-0.5 bg-muted/50 gap-0.5">
+                  <TabsTrigger 
+                    value="all" 
+                    className="text-[10px] sm:text-xs px-1 sm:px-2 py-1.5 whitespace-nowrap truncate"
+                  >
+                    All
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="unread" 
+                    className="text-[10px] sm:text-xs px-1 sm:px-2 py-1.5 whitespace-nowrap truncate"
+                  >
+                    Unread
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="approval" 
+                    className="text-[10px] sm:text-xs px-1 sm:px-2 py-1.5 whitespace-nowrap truncate"
+                  >
+                    Approval
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="alert" 
+                    className="text-[10px] sm:text-xs px-1 sm:px-2 py-1.5 whitespace-nowrap truncate"
+                  >
+                    Alerts
+                  </TabsTrigger>
+                </TabsList>
+              </div>
               
               <ScrollArea className="h-96">
                 <TabsContent value={activeTab} className="mt-0">
@@ -291,6 +314,15 @@ export const NotificationCenter: React.FC = () => {
                 </TabsContent>
               </ScrollArea>
             </Tabs>
+            
+            <div className="border-t p-3">
+              <Button variant="ghost" className="w-full" asChild>
+                <Link to="/notifications">
+                  View All Notifications
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </PopoverContent>

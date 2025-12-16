@@ -30,12 +30,24 @@ export function AdvancedPermissions() {
 
   const fetchFeatureFlags = async () => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('feature_flags')
         .select('*')
         .order('name');
 
-      if (error) throw error;
+      // Handle missing table gracefully
+      if (error) {
+        const errorMessage = error.message || String(error);
+        // Check for missing table error (42P01 is PostgreSQL error code for "undefined_table")
+        if (errorMessage.includes('does not exist') || errorMessage.includes('42P01') || 
+            (errorMessage.includes('Database API error') && errorMessage.includes('relation'))) {
+          console.warn('feature_flags table does not exist yet - feature not implemented');
+          setFeatureFlags([]);
+          setFlagsLoading(false);
+          return;
+        }
+        throw error;
+      }
       setFeatureFlags(data || []);
     } catch (error) {
       console.error('Error fetching feature flags:', error);
@@ -53,7 +65,7 @@ export function AdvancedPermissions() {
     if (!canManagePermissions) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('feature_flags')
         .update({ is_enabled: enabled })
         .eq('id', flagId);

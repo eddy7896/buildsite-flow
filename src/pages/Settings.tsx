@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { selectOne, updateRecord, insertRecord } from '@/services/api/postgresql-service';
 import { useCurrency } from "@/hooks/useCurrency";
 import { useAgencySettings } from "@/hooks/useAgencySettings";
+import { getAgencyId } from '@/utils/agencyUtils';
 import { compressImage } from "@/utils/imageCompression";
 import { 
   Save, Bell, Shield, User, Building, Upload, X, DollarSign, 
@@ -524,7 +525,7 @@ const Settings = () => {
         await insertRecord('profiles', {
           ...profileToSave,
           user_id: user.id,
-          agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000',
+          agency_id: await getAgencyId(profile, user?.id) || undefined,
           is_active: true,
         }, user.id);
       }

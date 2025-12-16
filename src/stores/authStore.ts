@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AppRole } from '@/utils/roleUtils';
 
-// Local type definitions (replacing Supabase types)
+// Local type definitions for authentication
 interface User {
   id: string;
   email: string;

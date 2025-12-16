@@ -1,5 +1,5 @@
-// Database Query Builder - Supabase-compatible API
-// This provides a familiar API for components migrating from Supabase
+// Database Query Builder - PostgreSQL API
+// This provides a familiar query builder API for PostgreSQL database operations
 
 import { selectRecords, selectOne, insertRecord, updateRecord, deleteRecord } from '@/services/api/postgresql-service';
 import { generateUUID } from './uuid';
@@ -156,7 +156,7 @@ function createQueryBuilder<T = any>(table: string): QueryBuilder<T> {
     },
 
     or(filters: string) {
-      // Parse Supabase-style OR filter string like "col1.eq.val1,col2.eq.val2"
+      // Parse OR filter string like "col1.eq.val1,col2.eq.val2"
       // Store as special OR filter that will be handled in the execution
       state._filters.push({ column: '__or__', operator: 'eq', value: filters });
       return builder;
@@ -199,11 +199,17 @@ function createQueryBuilder<T = any>(table: string): QueryBuilder<T> {
         },
         async then(onfulfilled) {
           try {
+            // Get agency_id from localStorage if available
+            let agencyId: string | null = null;
+            if (typeof window !== 'undefined') {
+              agencyId = localStorage.getItem('agency_id') || null;
+            }
+            
             const dataArray = Array.isArray(state._insertData) ? state._insertData : [state._insertData];
             const results: T[] = [];
             
             for (const item of dataArray) {
-              const result = await insertRecord<T>(state._table, item);
+              const result = await insertRecord<T>(state._table, item, undefined, agencyId);
               results.push(result);
             }
             
@@ -454,7 +460,7 @@ function generatePassword(): string {
   return password;
 }
 
-// Auth interface for Supabase compatibility
+// Auth interface for authentication compatibility
 const auth = {
   async signUp(options: {
     email: string;
@@ -690,7 +696,7 @@ const storage = {
   }
 };
 
-// Main database interface - Supabase-compatible
+// Main database interface - PostgreSQL query builder
 export const db = {
   from<T = any>(table: string): QueryBuilder<T> {
     return createQueryBuilder<T>(table);
@@ -723,7 +729,7 @@ export const db = {
   deleteRecord,
 };
 
-// Supabase removed - use db instead
+// Export database instance
 
 export default db;
 

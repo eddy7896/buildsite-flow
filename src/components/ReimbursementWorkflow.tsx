@@ -15,6 +15,8 @@ import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { useAsyncOperation } from '@/hooks/useAsyncOperation';
 import { LoadingSpinner } from './LoadingSpinner';
+import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface ReimbursementRequest {
   id: string;
@@ -71,6 +73,7 @@ export const ReimbursementWorkflow: React.FC<ReimbursementWorkflowProps> = ({
   requestId, 
   onStatusChange 
 }) => {
+  const { user, profile } = useAuth();
   const [request, setRequest] = useState<ReimbursementRequest | null>(null);
   const [workflowStates, setWorkflowStates] = useState<WorkflowState[]>([]);
   const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
@@ -91,7 +94,7 @@ export const ReimbursementWorkflow: React.FC<ReimbursementWorkflowProps> = ({
   });
 
   const fetchRequest = async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('reimbursement_requests')
       .select(`
         *,
@@ -107,7 +110,7 @@ export const ReimbursementWorkflow: React.FC<ReimbursementWorkflowProps> = ({
   };
 
   const fetchWorkflow = async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('reimbursement_workflow_states')
       .select(`
         *,
@@ -140,19 +143,25 @@ export const ReimbursementWorkflow: React.FC<ReimbursementWorkflowProps> = ({
     }
 
     return submitAction(async () => {
+      if (!user?.id) throw new Error('User not authenticated');
+      
+      const agencyId = await getAgencyId(profile, user.id);
+      if (!agencyId) throw new Error('Agency ID not found');
+      
       // Create workflow state entry
-      const { error: workflowError } = await supabase
+      const { error: workflowError } = await db
         .from('reimbursement_workflow_states')
         .insert({
           request_id: requestId,
           state: nextState,
+          actor_id: user.id,
           comments: comments || null
         });
 
       if (workflowError) throw workflowError;
 
       // Update request status
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from('reimbursement_requests')
         .update({ status: nextState })
         .eq('id', requestId);

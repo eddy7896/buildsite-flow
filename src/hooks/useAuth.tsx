@@ -86,8 +86,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           };
           setUser(mockUser);
           
-          // Fetch profile and role
-          if (decoded.userId) {
+          // Prefer stored role from previous real login if available
+          const storedRole = localStorage.getItem('user_role') as AppRole | null;
+          if (storedRole) {
+            setUserRole(storedRole);
+          } else if (decoded.userId) {
+            // Fallback to client-side DB lookup for legacy/mock flows
             fetchUserProfile(decoded.userId);
             fetchUserRole(decoded.userId);
           }
@@ -186,11 +190,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
+      // Get agency_id from current user's profile or localStorage
+      let agencyId: string | null = null;
+      if (profile?.agency_id) {
+        agencyId = profile.agency_id;
+      } else if (typeof window !== 'undefined') {
+        agencyId = localStorage.getItem('agency_id') || null;
+      }
+      
+      if (!agencyId) {
+        throw new Error('Agency ID not found. Please ensure you are logged in to an agency account or provide an agency ID.');
+      }
+      
       const result = await registerUser({
         email,
         password,
         fullName,
-        agencyId: '550e8400-e29b-41d4-a716-446655440000' // Default agency
+        agencyId
       });
 
       // Store token
@@ -263,6 +279,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(mockSession.user);
         setSession(mockSession);
         
+        // Get agency_id from localStorage if available, otherwise null
+        const agencyId = typeof window !== 'undefined' 
+          ? localStorage.getItem('agency_id') || null 
+          : null;
+
         // Create mock profile
         const mockProfile: Profile = {
           id: `profile${mockUser.userId}`,
@@ -274,7 +295,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           hire_date: null,
           avatar_url: null,
           is_active: true,
-          agency_id: '550e8400-e29b-41d4-a716-446655440000'
+          agency_id: agencyId
         };
         
         setProfile(mockProfile);
@@ -297,19 +318,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Try real database login
+    // Try real database login (multi-tenant agency-aware)
     try {
       const result = await loginUser({ email, password });
       
       // Store token
       localStorage.setItem('auth_token', result.token);
       
-      // Set user state
+      // Set user state from server response
       setUser(result.user as any);
-      
-      // Fetch profile and role
-      fetchUserProfile(result.user.id);
-      fetchUserRole(result.user.id);
+
+      // If profile came back from server, use it directly
+      const serverProfile = (result.user as any).profile;
+      if (serverProfile) {
+        setProfile(serverProfile as any);
+      } else {
+        // Fallback to DB lookup if profile not included
+        fetchUserProfile(result.user.id);
+      }
+
+      // Prefer roles returned by the server (agency DB) to avoid main-DB mismatch
+      const serverRoles = ((result.user as any).roles || []) as Array<{ role: AppRole }>;
+      if (serverRoles.length > 0) {
+        // Same hierarchy rules as fetchUserRole
+        const roleHierarchy: Record<AppRole, number> = {
+          'super_admin': 1,
+          'ceo': 2,
+          'cto': 3,
+          'cfo': 4,
+          'coo': 5,
+          'admin': 6,
+          'operations_manager': 7,
+          'department_head': 8,
+          'team_lead': 9,
+          'project_manager': 10,
+          'hr': 11,
+          'finance_manager': 12,
+          'sales_manager': 13,
+          'marketing_manager': 14,
+          'quality_assurance': 15,
+          'it_support': 16,
+          'legal_counsel': 17,
+          'business_analyst': 18,
+          'customer_success': 19,
+          'employee': 20,
+          'contractor': 21,
+          'intern': 22
+        };
+
+        const highestRole = serverRoles
+          .map(r => r.role)
+          .reduce((highest, current) => {
+            const currentPriority = roleHierarchy[current] || 99;
+            const highestPriority = roleHierarchy[highest] || 99;
+            return currentPriority < highestPriority ? current : highest;
+          });
+
+        setUserRole(highestRole);
+        // Persist role for future reloads so we don't have to guess
+        localStorage.setItem('user_role', highestRole);
+      } else {
+        // Fallback: derive role from database if server didn't include it
+        fetchUserRole(result.user.id);
+      }
 
       toast({
         title: "Login successful",
@@ -330,6 +401,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     try {
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_role');
+      localStorage.removeItem('agency_id');
+      localStorage.removeItem('agency_database');
       setUser(null);
       setSession(null);
       setProfile(null);

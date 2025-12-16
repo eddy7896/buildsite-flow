@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/database';
 import { useAuth } from '@/hooks/useAuth';
 import { generateUUID } from '@/lib/uuid';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface Lead {
   id?: string;
@@ -112,8 +113,17 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
     setLoading(true);
 
     try {
-      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
-      const userId = user?.id || '550e8400-e29b-41d4-a716-446655440011';
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId || !user?.id) {
+        toast({
+          title: 'Error',
+          description: 'Agency ID or User ID not found. Please ensure you are logged in.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+      const userId = user.id;
 
       if (lead?.id) {
         const { data, error } = await db

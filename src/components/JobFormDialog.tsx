@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { insertRecord, updateRecord, selectRecords } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
+import { X } from 'lucide-react';
 
 interface Job {
   id?: string;
@@ -37,8 +38,10 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
   const { toast } = useToast();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true);
   const [clients, setClients] = useState<any[]>([]);
   const [jobCategories, setJobCategories] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [formData, setFormData] = useState<Job>({
     title: job?.title || '',
     description: job?.description || '',
@@ -56,49 +59,71 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
 
   useEffect(() => {
     if (isOpen) {
-      fetchClients();
-      fetchJobCategories();
-      if (job) {
-        setFormData({
-          title: job.title || '',
-          description: job.description || '',
-          client_id: job.client_id || '',
-          category_id: job.category_id || '',
-          status: job.status || 'planning',
-          start_date: job.start_date || '',
-          end_date: job.end_date || '',
-          estimated_hours: job.estimated_hours || 0,
-          estimated_cost: job.estimated_cost || 0,
-          budget: job.budget || 0,
-          profit_margin: job.profit_margin || 0,
-          assigned_to: job.assigned_to || '',
-        });
-      } else {
-        setFormData({
-          title: '',
-          description: '',
-          client_id: '',
-          category_id: '',
-          status: 'planning',
-          start_date: '',
-          end_date: '',
-          estimated_hours: 0,
-          estimated_cost: 0,
-          budget: 0,
-          profit_margin: 0,
-          assigned_to: '',
-        });
-      }
+      // Reset form data first
+      setFormData({
+        title: '',
+        description: '',
+        client_id: '',
+        category_id: '',
+        status: 'planning',
+        start_date: '',
+        end_date: '',
+        estimated_hours: 0,
+        estimated_cost: 0,
+        budget: 0,
+        profit_margin: 0,
+        assigned_to: '',
+      });
+      
+      // Fetch data first, then set form data after data is loaded
+      const loadData = async () => {
+        setDataLoading(true);
+        try {
+          await Promise.all([
+            fetchClients(),
+            fetchJobCategories(),
+            fetchEmployees(),
+          ]);
+          
+          // After data is loaded, set form data if editing
+          if (job) {
+            setFormData({
+              title: job.title || '',
+              description: job.description || '',
+              client_id: job.client_id || '',
+              category_id: job.category_id || '',
+              status: job.status || 'planning',
+              start_date: job.start_date || '',
+              end_date: job.end_date || '',
+              estimated_hours: job.estimated_hours || 0,
+              estimated_cost: job.estimated_cost || 0,
+              budget: job.budget || 0,
+              profit_margin: job.profit_margin || 0,
+              assigned_to: job.assigned_to || '',
+            });
+          }
+        } finally {
+          setDataLoading(false);
+        }
+      };
+      
+      loadData();
     }
   }, [isOpen, job]);
 
   const fetchClients = async () => {
     try {
-      if (!user?.id) return;
+      if (!user?.id) {
+        setClients([]);
+        return;
+      }
       // Get agency_id from profile
       const { selectOne } = await import('@/services/api/postgresql-service');
       const profile = await selectOne('profiles', { user_id: user.id });
-      if (!profile?.agency_id) return;
+      if (!profile?.agency_id) {
+        setClients([]);
+        return;
+      }
       
       const clientsData = await selectRecords('clients', {
         where: { agency_id: profile.agency_id },
@@ -107,6 +132,7 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
       setClients(clientsData || []);
     } catch (error) {
       console.error('Error fetching clients:', error);
+      setClients([]);
     }
   };
 
@@ -118,6 +144,49 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
       setJobCategories(categoriesData || []);
     } catch (error) {
       console.error('Error fetching job categories:', error);
+      setJobCategories([]);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      if (!user?.id) {
+        setEmployees([]);
+        return;
+      }
+      const { selectOne } = await import('@/services/api/postgresql-service');
+      const profile = await selectOne('profiles', { user_id: user.id });
+      if (!profile?.agency_id) {
+        setEmployees([]);
+        return;
+      }
+
+      // Fetch employee details
+      const employeeDetails = await selectRecords('employee_details', {
+        where: { is_active: true },
+        orderBy: 'first_name ASC, last_name ASC',
+      });
+
+      // Fetch profiles for names
+      const userIds = employeeDetails.map((e: any) => e.user_id).filter(Boolean);
+      let profiles: any[] = [];
+      if (userIds.length > 0) {
+        profiles = await selectRecords('profiles', {
+          filters: [{ column: 'user_id', operator: 'in', value: userIds }],
+        });
+      }
+
+      const profileMap = new Map(profiles.map((p: any) => [p.user_id, p.full_name]));
+      
+      const employeesWithNames = employeeDetails.map((emp: any) => ({
+        id: emp.user_id,
+        name: profileMap.get(emp.user_id) || `${emp.first_name} ${emp.last_name}`.trim() || 'Unknown',
+      }));
+
+      setEmployees(employeesWithNames || []);
+    } catch (error) {
+      console.error('Error fetching employees:', error);
+      setEmployees([]);
     }
   };
 
@@ -256,41 +325,91 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="client_id">Client</Label>
-              <Select 
-                value={formData.client_id || ''} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, client_id: value || '' }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select client (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">None</SelectItem>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.company_name || client.name || client.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {dataLoading ? (
+                <Input disabled placeholder="Loading clients..." />
+              ) : (
+                <div className="flex gap-2">
+                  <Select 
+                    value={
+                      formData.client_id && clients.some(c => c.id === formData.client_id) 
+                        ? formData.client_id 
+                        : undefined
+                    } 
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, client_id: value }))}
+                    onOpenChange={(open) => {
+                      if (!open && formData.client_id && !clients.some(c => c.id === formData.client_id)) {
+                        // Clear invalid value when closing
+                        setFormData(prev => ({ ...prev, client_id: '' }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select client (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.company_name || client.name || client.id}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formData.client_id && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setFormData(prev => ({ ...prev, client_id: '' }))}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="category_id">Category</Label>
-              <Select 
-                value={formData.category_id || ''} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value || '' }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">None</SelectItem>
-                  {jobCategories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {dataLoading ? (
+                <Input disabled placeholder="Loading categories..." />
+              ) : (
+                <div className="flex gap-2">
+                  <Select 
+                    value={
+                      formData.category_id && jobCategories.some(c => c.id === formData.category_id) 
+                        ? formData.category_id 
+                        : undefined
+                    } 
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, category_id: value }))}
+                    onOpenChange={(open) => {
+                      if (!open && formData.category_id && !jobCategories.some(c => c.id === formData.category_id)) {
+                        // Clear invalid value when closing
+                        setFormData(prev => ({ ...prev, category_id: '' }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select category (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {jobCategories.map((category) => (
+                        <SelectItem key={category.id} value={category.id}>
+                          {category.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formData.category_id && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setFormData(prev => ({ ...prev, category_id: '' }))}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -355,6 +474,51 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
                 onChange={(e) => setFormData(prev => ({ ...prev, profit_margin: Number(e.target.value) }))}
               />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="assigned_to">Assigned To</Label>
+            {dataLoading ? (
+              <Input disabled placeholder="Loading employees..." />
+            ) : (
+              <div className="flex gap-2">
+                <Select 
+                  value={
+                    formData.assigned_to && employees.some(e => e.id === formData.assigned_to) 
+                      ? formData.assigned_to 
+                      : undefined
+                  } 
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value }))}
+                  onOpenChange={(open) => {
+                    if (!open && formData.assigned_to && !employees.some(e => e.id === formData.assigned_to)) {
+                      // Clear invalid value when closing
+                      setFormData(prev => ({ ...prev, assigned_to: '' }));
+                    }
+                  }}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select employee (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((employee) => (
+                      <SelectItem key={employee.id} value={employee.id}>
+                        {employee.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {formData.assigned_to && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setFormData(prev => ({ ...prev, assigned_to: '' }))}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter>

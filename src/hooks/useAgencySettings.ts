@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { selectOne, updateRecord, insertRecord } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 export interface AgencySettings {
   id?: string;
@@ -38,7 +39,7 @@ const DEFAULT_SETTINGS: Omit<AgencySettings, 'id' | 'agency_id' | 'created_at' |
 };
 
 export const useAgencySettings = () => {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const [settings, setSettings] = useState<AgencySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +109,7 @@ export const useAgencySettings = () => {
         // No settings found, use defaults
         setSettings({
           ...DEFAULT_SETTINGS,
-          agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000',
+          agency_id: await getAgencyId(profile, user?.id) || undefined,
         } as AgencySettings);
       }
     } catch (err: any) {
@@ -117,7 +118,7 @@ export const useAgencySettings = () => {
       // Use defaults on error
       setSettings({
         ...DEFAULT_SETTINGS,
-        agency_id: profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000',
+        agency_id: await getAgencyId(profile, user?.id) || undefined,
       } as AgencySettings);
     } finally {
       setLoading(false);
@@ -193,7 +194,7 @@ export const useAgencySettings = () => {
         // Insert new settings
         const inserted = await insertRecord<AgencySettings>('agency_settings', {
           ...settingsToSave,
-          agency_id: profile?.agency_id || settings?.agency_id || '550e8400-e29b-41d4-a716-446655440000',
+          agency_id: await getAgencyId(profile, user?.id) || settings?.agency_id || undefined,
         });
         setSettings(inserted);
       }

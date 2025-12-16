@@ -180,7 +180,7 @@ export default function Pricing() {
               <Link to="/auth">
                 <Button variant="ghost" className="hidden sm:inline-flex">Sign In</Button>
               </Link>
-              <Link to="/signup">
+              <Link to="/agency-signup">
                 <Button>Get Started <ArrowRight className="ml-2 h-4 w-4" /></Button>
               </Link>
             </div>
@@ -252,7 +252,7 @@ export default function Pricing() {
                     ))}
                   </ul>
                   <div className="pt-6">
-                    <Link to={`/signup?plan=${plan.name.toLowerCase()}&source=pricing`}>
+                    <Link to={`/agency-signup?plan=${plan.name.toLowerCase()}&source=pricing`}>
                       <Button className={`w-full ${plan.popular ? '' : 'variant-outline'}`}>
                         Start Free Trial
                       </Button>
@@ -324,7 +324,7 @@ export default function Pricing() {
                 Join thousands of agencies already using BuildFlow to streamline their operations and accelerate growth.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link to="/signup?source=pricing-cta">
+                <Link to="/agency-signup?source=pricing-cta">
                   <Button size="lg" variant="secondary" className="w-full sm:w-auto">
                     Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>

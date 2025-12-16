@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface Department {
   id: string;
@@ -96,11 +97,18 @@ export function DepartmentFormDialog({
 
   const fetchDepartments = async () => {
     try {
-      const { data, error } = await db
+      const agencyId = profile?.agency_id;
+      
+      let query = db
         .from("departments")
         .select("id, name")
-        .eq("is_active", true)
-        .order("name");
+        .eq("is_active", true);
+      
+      if (agencyId) {
+        query = query.eq("agency_id", agencyId);
+      }
+      
+      const { data, error } = await query.order("name");
 
       if (error) throw error;
       if (data) {
@@ -113,11 +121,18 @@ export function DepartmentFormDialog({
 
   const fetchProfiles = async () => {
     try {
-      const { data, error } = await db
+      const agencyId = profile?.agency_id;
+      
+      let query = db
         .from("profiles")
         .select("user_id, full_name")
-        .eq("is_active", true)
-        .order("full_name");
+        .eq("is_active", true);
+      
+      if (agencyId) {
+        query = query.eq("agency_id", agencyId);
+      }
+      
+      const { data, error } = await query.order("full_name");
 
       if (error) throw error;
       if (data) {
@@ -133,8 +148,17 @@ export function DepartmentFormDialog({
     setLoading(true);
 
     try {
-      // Get agency_id from profile, or use a default for development
-      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
+      // Get agency_id from profile or fetch from database
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        toast({
+          title: 'Error',
+          description: 'Agency ID not found. Please ensure you are logged in to an agency account.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
 
       const departmentData: any = {
         name: formData.name.trim(),
@@ -177,7 +201,7 @@ export function DepartmentFormDialog({
       onOpenChange(false);
     } catch (error: any) {
       console.error("Error saving department:", error);
-      const errorMessage = error?.message || error?.detail || "Failed to save department";
+      const errorMessage = (error as any)?.message || (error as any)?.detail || "Failed to save department";
       toast({
         title: "Error",
         description: errorMessage,

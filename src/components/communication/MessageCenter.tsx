@@ -17,6 +17,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/database';
 import { toast } from 'sonner';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface MessageThread {
   id: string;
@@ -53,12 +54,13 @@ interface ThreadParticipant {
 }
 
 export function MessageCenter() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [activeThread, setActiveThread] = useState<MessageThread | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [agencyId, setAgencyId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewThreadDialog, setShowNewThreadDialog] = useState(false);
   const [threadForm, setThreadForm] = useState({
@@ -70,7 +72,9 @@ export function MessageCenter() {
 
   const fetchThreads = async () => {
     try {
-      const { data, error } = await supabase
+      if (!agencyId) return;
+      
+      const { data, error } = await db
         .from('message_threads')
         .select(`
           *,
@@ -79,6 +83,7 @@ export function MessageCenter() {
             user:user_id(full_name, email)
           )
         `)
+        .eq('agency_id', agencyId)
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
@@ -91,7 +96,7 @@ export function MessageCenter() {
 
   const fetchMessages = async (threadId: string) => {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from('messages')
         .select(`
           *,
@@ -114,12 +119,18 @@ export function MessageCenter() {
   };
 
   useEffect(() => {
-    const loadData = async () => {
-      await fetchThreads();
+    const initializeAgency = async () => {
+      const id = await getAgencyId(profile, user?.id);
+      setAgencyId(id);
+      if (id) {
+        await fetchThreads();
+      }
       setLoading(false);
     };
-    loadData();
-  }, []);
+    if (user?.id) {
+      initializeAgency();
+    }
+  }, [user?.id, profile?.agency_id]);
 
   useEffect(() => {
     if (activeThread) {
@@ -135,7 +146,7 @@ export function MessageCenter() {
     if (!newMessage.trim() || !activeThread || !user) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('messages')
         .insert({
           thread_id: activeThread.id,
@@ -150,7 +161,7 @@ export function MessageCenter() {
       fetchMessages(activeThread.id);
       
       // Update thread's updated_at timestamp
-      await supabase
+      await db
         .from('message_threads')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', activeThread.id);
@@ -163,18 +174,18 @@ export function MessageCenter() {
   };
 
   const handleCreateThread = async () => {
-    if (!user || !threadForm.title) {
+    if (!user || !threadForm.title || !agencyId) {
       toast.error('Please provide a thread title');
       return;
     }
 
     try {
-      const { data: threadData, error: threadError } = await supabase
+      const { data: threadData, error: threadError } = await db
         .from('message_threads')
         .insert({
           ...threadForm,
           created_by: user.id,
-          agency_id: 'temp-agency-id'
+          agency_id: agencyId
         })
         .select()
         .single();
@@ -182,7 +193,7 @@ export function MessageCenter() {
       if (threadError) throw threadError;
 
       // Add current user as participant
-      const { error: participantError } = await supabase
+      const { error: participantError } = await db
         .from('thread_participants')
         .insert({
           thread_id: threadData.id,

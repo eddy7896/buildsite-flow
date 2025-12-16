@@ -25,24 +25,48 @@ export function usePermissions() {
 
   const fetchPermissions = async () => {
     try {
-      const { data: permissionsData, error: permissionsError } = await supabase
+      const { data: permissionsData, error: permissionsError } = await db
         .from('permissions')
         .select('*')
         .eq('is_active', true)
         .order('category, name');
 
-      if (permissionsError) throw permissionsError;
+      // Handle missing table gracefully
+      if (permissionsError) {
+        const errorMessage = permissionsError.message || String(permissionsError);
+        // Check for missing table error (42P01 is PostgreSQL error code for "undefined_table")
+        if (errorMessage.includes('does not exist') || errorMessage.includes('42P01') || 
+            (errorMessage.includes('Database API error') && errorMessage.includes('relation'))) {
+          console.warn('permissions table does not exist yet - feature not implemented');
+          setPermissions([]);
+          setRolePermissions([]);
+          setLoading(false);
+          return;
+        }
+        throw permissionsError;
+      }
       setPermissions(permissionsData || []);
 
       // Fetch role permissions for current user's role
       if (userRole) {
-        const { data: rolePermData, error: rolePermError } = await supabase
+        const { data: rolePermData, error: rolePermError } = await db
           .from('role_permissions')
           .select('*')
           .eq('role', userRole);
 
-        if (rolePermError) throw rolePermError;
-        setRolePermissions(rolePermData || []);
+        // Handle missing table gracefully
+        if (rolePermError) {
+          const errorMessage = rolePermError.message || String(rolePermError);
+          if (errorMessage.includes('does not exist') || errorMessage.includes('42P01') || 
+              (errorMessage.includes('Database API error') && errorMessage.includes('relation'))) {
+            console.warn('role_permissions table does not exist yet - feature not implemented');
+            setRolePermissions([]);
+          } else {
+            throw rolePermError;
+          }
+        } else {
+          setRolePermissions(rolePermData || []);
+        }
       }
     } catch (error) {
       console.error('Error fetching permissions:', error);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Users2, Phone, Mail, Target, TrendingUp, Edit, Trash2, Calendar } from 'lucide-react';
+import { Plus, Search, Filter, Users2, Phone, Mail, Target, TrendingUp, Edit, Trash2, Calendar, UserCheck, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,9 +12,12 @@ import { db } from '@/lib/database';
 import LeadFormDialog from '@/components/LeadFormDialog';
 import ActivityFormDialog from '@/components/ActivityFormDialog';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
+import ConvertLeadToClientDialog from '@/components/ConvertLeadToClientDialog';
+import { useNavigate } from 'react-router-dom';
 
 const CRM = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -24,8 +27,10 @@ const CRM = () => {
   const [activitiesLoading, setActivitiesLoading] = useState(false);
   const [leadFormOpen, setLeadFormOpen] = useState(false);
   const [activityFormOpen, setActivityFormOpen] = useState(false);
+  const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [selectedActivity, setSelectedActivity] = useState<any>(null);
+  const [leadToConvert, setLeadToConvert] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [activityDeleteDialogOpen, setActivityDeleteDialogOpen] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<any>(null);
@@ -163,6 +168,43 @@ const CRM = () => {
 
   const handleActivityDeleted = () => {
     fetchActivities();
+  };
+
+  const handleConvertToClient = (lead: any) => {
+    setLeadToConvert(lead);
+    setConvertDialogOpen(true);
+  };
+
+  const handleLeadConverted = () => {
+    fetchLeads();
+    setLeadToConvert(null);
+  };
+
+  const handleCreateQuotation = async (lead: any) => {
+    try {
+      // First check if lead has been converted to client
+      // For now, we'll navigate to quotations page with a note to create client first if needed
+      // In a full implementation, we'd check for existing client or convert first
+      navigate('/quotations', { 
+        state: { 
+          fromLead: true, 
+          leadData: {
+            company_name: lead.company_name,
+            contact_name: lead.contact_name,
+            email: lead.email,
+            phone: lead.phone,
+            estimated_value: lead.estimated_value,
+            notes: lead.notes,
+          }
+        } 
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create quotation',
+        variant: 'destructive',
+      });
+    }
   };
 
   // Calculate stats from real data
@@ -452,6 +494,7 @@ const CRM = () => {
           <TabsTrigger value="leads">Leads</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
         </TabsList>
         
         <TabsContent value="leads" className="space-y-4">
@@ -524,6 +567,18 @@ const CRM = () => {
                             <Plus className="h-4 w-4 mr-1" />
                             Add Activity
                           </Button>
+                          {lead.status !== 'won' && lead.status !== 'lost' && (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => handleConvertToClient(lead)} className="w-full sm:w-auto">
+                                <UserCheck className="h-4 w-4 mr-1" />
+                                Convert
+                              </Button>
+                              <Button variant="outline" size="sm" onClick={() => handleCreateQuotation(lead)} className="w-full sm:w-auto">
+                                <FileText className="h-4 w-4 mr-1" />
+                                Quote
+                              </Button>
+                            </>
+                          )}
                           <Button variant="outline" size="sm" onClick={() => handleDeleteLead(lead)} className="w-full sm:w-auto">
                             <Trash2 className="h-4 w-4 mr-1" />
                             Delete
@@ -687,6 +742,162 @@ const CRM = () => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="reports" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>CRM Reports & Analytics</CardTitle>
+              <p className="text-muted-foreground">View insights and performance metrics for your CRM</p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Lead Source Performance */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Lead Source Performance</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? (
+                      <div className="text-center py-4">Loading...</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {(() => {
+                          const sourceStats: Record<string, { count: number; value: number }> = {};
+                          leads.forEach(lead => {
+                            const sourceId = lead.lead_source_id || 'unknown';
+                            if (!sourceStats[sourceId]) {
+                              sourceStats[sourceId] = { count: 0, value: 0 };
+                            }
+                            sourceStats[sourceId].count++;
+                            sourceStats[sourceId].value += lead.estimated_value || 0;
+                          });
+                          return Object.entries(sourceStats).map(([sourceId, stats]) => (
+                            <div key={sourceId} className="flex justify-between items-center p-2 border rounded">
+                              <span className="text-sm font-medium">
+                                {sourceId === 'unknown' ? 'Unknown Source' : `Source ${sourceId.slice(0, 8)}`}
+                              </span>
+                              <div className="text-right">
+                                <div className="text-sm font-semibold">{stats.count} leads</div>
+                                <div className="text-xs text-muted-foreground">
+                                  ₹{stats.value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                </div>
+                              </div>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Conversion Funnel */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Conversion Funnel</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? (
+                      <div className="text-center py-4">Loading...</div>
+                    ) : (
+                      <div className="space-y-3">
+                        {pipelineStages.map(stage => {
+                          const stageLeads = leads.filter(l => l.status === stage.status);
+                          const percentage = leads.length > 0 ? (stageLeads.length / leads.length) * 100 : 0;
+                          return (
+                            <div key={stage.status} className="space-y-1">
+                              <div className="flex justify-between text-sm">
+                                <span className="font-medium">{stage.name}</span>
+                                <span>{stageLeads.length} ({percentage.toFixed(1)}%)</span>
+                              </div>
+                              <Progress value={percentage} className="h-2" />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Activity Summary */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Activity Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {activitiesLoading ? (
+                      <div className="text-center py-4">Loading...</div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex justify-between p-2 border rounded">
+                          <span className="text-sm">Total Activities</span>
+                          <span className="font-semibold">{activities.length}</span>
+                        </div>
+                        <div className="flex justify-between p-2 border rounded">
+                          <span className="text-sm">Pending</span>
+                          <span className="font-semibold">
+                            {activities.filter(a => a.status === 'pending').length}
+                          </span>
+                        </div>
+                        <div className="flex justify-between p-2 border rounded">
+                          <span className="text-sm">Completed</span>
+                          <span className="font-semibold">
+                            {activities.filter(a => a.status === 'completed').length}
+                          </span>
+                        </div>
+                        <div className="flex justify-between p-2 border rounded">
+                          <span className="text-sm">In Progress</span>
+                          <span className="font-semibold">
+                            {activities.filter(a => a.status === 'in_progress').length}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Top Leads by Value */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Top Leads by Value</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? (
+                      <div className="text-center py-4">Loading...</div>
+                    ) : (
+                      <div className="space-y-2">
+                        {leads
+                          .filter(l => l.estimated_value && l.estimated_value > 0)
+                          .sort((a, b) => (b.estimated_value || 0) - (a.estimated_value || 0))
+                          .slice(0, 5)
+                          .map(lead => (
+                            <div key={lead.id} className="flex justify-between items-center p-2 border rounded">
+                              <div>
+                                <div className="text-sm font-medium">{lead.company_name}</div>
+                                <div className="text-xs text-muted-foreground">{lead.lead_number}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-sm font-semibold">
+                                  ₹{(lead.estimated_value || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                                </div>
+                                <Badge className={getStatusColor(lead.status)} variant="outline" style={{ fontSize: '10px' }}>
+                                  {lead.status}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        {leads.filter(l => l.estimated_value && l.estimated_value > 0).length === 0 && (
+                          <div className="text-center py-4 text-muted-foreground text-sm">
+                            No leads with estimated value
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       <LeadFormDialog
@@ -725,6 +936,16 @@ const CRM = () => {
         itemName={activityToDelete?.subject || ''}
         itemId={activityToDelete?.id || ''}
         tableName="crm_activities"
+      />
+
+      <ConvertLeadToClientDialog
+        isOpen={convertDialogOpen}
+        onClose={() => {
+          setConvertDialogOpen(false);
+          setLeadToConvert(null);
+        }}
+        lead={leadToConvert}
+        onConverted={handleLeadConverted}
       />
     </div>
   );

@@ -19,7 +19,9 @@ const Pricing = React.lazy(() => import("./pages/Pricing"));
 const Auth = React.lazy(() => import("./pages/Auth"));
 const SignupSuccess = React.lazy(() => import("./pages/SignupSuccess"));
 const AgencyDashboard = React.lazy(() => import("./pages/AgencyDashboard"));
-const SignUp = React.lazy(() => import("./pages/SignUp"));
+const AgencyOnboardingWizard = React.lazy(() => import("./components/AgencyOnboardingWizard"));
+const AgencySetup = React.lazy(() => import("./pages/AgencySetup"));
+const SuperAdminDashboard = React.lazy(() => import("./pages/SuperAdminDashboard"));
 const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 const EmployeeManagement = React.lazy(() => import("./pages/EmployeeManagement"));
@@ -35,6 +37,7 @@ const MyProfile = React.lazy(() => import("./pages/MyProfile"));
 const MyAttendance = React.lazy(() => import("./pages/MyAttendance"));
 const MyLeave = React.lazy(() => import("./pages/MyLeave"));
 const Ledger = React.lazy(() => import("./pages/Ledger"));
+const CreateJournalEntry = React.lazy(() => import("./pages/CreateJournalEntry"));
 const Clients = React.lazy(() => import("./pages/Clients"));
 const Reports = React.lazy(() => import("./pages/Reports"));
 const Analytics = React.lazy(() => import("./pages/Analytics"));
@@ -54,6 +57,7 @@ const SystemDashboard = React.lazy(() => import("./pages/SystemDashboard"));
 const Calendar = React.lazy(() => import("./pages/Calendar"));
 const HolidayManagement = React.lazy(() => import('./pages/HolidayManagement'));
 const CentralizedReports = React.lazy(() => import("./pages/CentralizedReports"));
+const Notifications = React.lazy(() => import("./pages/Notifications"));
 
 // Lazy load component modules
 const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
@@ -95,22 +99,34 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
   </SidebarProvider>
 );
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <ErrorBoundary>
-        <AuthProvider>
-          <BrowserRouter>
-            <AuthRedirect />
-            <Routes>
+const App = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <ErrorBoundary>
+          <AuthProvider>
+            <BrowserRouter>
+              <AuthRedirect />
+              <Routes>
               <Route path="/" element={<SuspenseRoute><Landing /></SuspenseRoute>} />
               <Route path="/pricing" element={<SuspenseRoute><Pricing /></SuspenseRoute>} />
               <Route path="/auth" element={<SuspenseRoute><Auth /></SuspenseRoute>} />
-              <Route path="/signup" element={<SuspenseRoute><SignUp /></SuspenseRoute>} />
+              <Route path="/agency-signup" element={<SuspenseRoute><AgencyOnboardingWizard /></SuspenseRoute>} />
               <Route path="/signup-success" element={<SuspenseRoute><SignupSuccess /></SuspenseRoute>} />
               <Route path="/forgot-password" element={<SuspenseRoute><ForgotPassword /></SuspenseRoute>} />
+              
+              <Route 
+                path="/agency-setup" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><AgencySetup /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
               
               <Route 
                 path="/dashboard" 
@@ -286,6 +302,17 @@ const App = () => (
                   <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Ledger /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/ledger/create-entry" 
+                element={
+                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><CreateJournalEntry /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 
@@ -489,6 +516,17 @@ const App = () => (
                 } 
               />
               
+              <Route
+                path="/agency/:agencyId/super-admin-dashboard"
+                element={
+                  <ProtectedRoute requiredRole="super_admin">
+                    <DashboardLayout>
+                      <SuspenseRoute><SuperAdminDashboard /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
               <Route 
                 path="/system" 
                 element={
@@ -555,13 +593,25 @@ const App = () => (
                 } 
               />
               
+              <Route 
+                path="/notifications" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><Notifications /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
               <Route path="*" element={<SuspenseRoute><NotFound /></SuspenseRoute>} />
-            </Routes>
-          </BrowserRouter>
-        </AuthProvider>
-      </ErrorBoundary>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+              </Routes>
+            </BrowserRouter>
+          </AuthProvider>
+        </ErrorBoundary>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
 
 export default App;

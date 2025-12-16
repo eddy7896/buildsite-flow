@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
 import { 
   Settings, 
   FileText, 
@@ -11,16 +12,57 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  Plus
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  Search,
+  Filter
 } from 'lucide-react';
-import { useGST, GSTReturn } from '@/hooks/useGST';
+import { useGST, GSTReturn, GSTTransaction } from '@/hooks/useGST';
 import { GSTSettingsDialog } from './GSTSettingsDialog';
+import { GSTTransactionDialog } from './GSTTransactionDialog';
+import { GSTReturnDialog } from './GSTReturnDialog';
 import { useAuth } from '@/hooks/useAuth';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export const GSTDashboard: React.FC = () => {
-  const { settings, returns, liability, loading, saveSettings, fetchLiability, isAuthenticated } = useGST();
+  const { 
+    settings, 
+    returns, 
+    transactions,
+    liability, 
+    loading, 
+    saveSettings, 
+    fetchLiability,
+    fetchTransactions,
+    createTransaction,
+    updateTransaction,
+    deleteTransaction,
+    generateReturn,
+    updateReturn,
+    isAuthenticated 
+  } = useGST();
   const { user, loading: authLoading } = useAuth();
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [showTransactionDialog, setShowTransactionDialog] = useState(false);
+  const [showReturnDialog, setShowReturnDialog] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<GSTTransaction | null>(null);
+  const [deletingTransaction, setDeletingTransaction] = useState<GSTTransaction | null>(null);
+  const [viewingReturn, setViewingReturn] = useState<GSTReturn | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [transactionFilter, setTransactionFilter] = useState<string>('all');
   
   // Simple currency formatter
   const formatCurrency = (amount: number, currency: string = 'INR'): string => {
@@ -31,27 +73,29 @@ export const GSTDashboard: React.FC = () => {
       maximumFractionDigits: 2
     }).format(amount || 0);
   };
+  
   const [selectedPeriod, setSelectedPeriod] = useState(() => {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     // Only fetch liability if user is authenticated and has selected a period
     if (isAuthenticated && selectedPeriod) {
       const [year, month] = selectedPeriod.split('-');
       const startDate = `${year}-${month}-01`;
       const endDate = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0];
       fetchLiability(startDate, endDate);
+      fetchTransactions({ start_date: startDate, end_date: endDate });
     }
-  }, [selectedPeriod, fetchLiability, isAuthenticated]);
+  }, [selectedPeriod, fetchLiability, fetchTransactions, isAuthenticated]);
 
   const getStatusColor = (status: GSTReturn['status']) => {
     switch (status) {
-      case 'filed': return 'bg-success text-success-foreground';
-      case 'pending': return 'bg-warning text-warning-foreground';
-      case 'late': return 'bg-destructive text-destructive-foreground';
-      default: return 'bg-muted text-muted-foreground';
+      case 'filed': return 'bg-green-500 text-white';
+      case 'pending': return 'bg-yellow-500 text-white';
+      case 'late': return 'bg-red-500 text-white';
+      default: return 'bg-gray-500 text-white';
     }
   };
 
@@ -63,6 +107,47 @@ export const GSTDashboard: React.FC = () => {
       default: return <FileText className="h-4 w-4" />;
     }
   };
+
+  const handleCreateTransaction = async (transaction: Omit<GSTTransaction, 'id' | 'agency_id' | 'created_at' | 'updated_at'>) => {
+    await createTransaction(transaction);
+    setShowTransactionDialog(false);
+    setEditingTransaction(null);
+  };
+
+  const handleUpdateTransaction = async (transaction: Omit<GSTTransaction, 'id' | 'agency_id' | 'created_at' | 'updated_at'>) => {
+    if (editingTransaction?.id) {
+      await updateTransaction(editingTransaction.id, transaction);
+      setShowTransactionDialog(false);
+      setEditingTransaction(null);
+    }
+  };
+
+  const handleDeleteTransaction = async () => {
+    if (deletingTransaction?.id) {
+      await deleteTransaction(deletingTransaction.id);
+      setDeletingTransaction(null);
+    }
+  };
+
+  const handleMarkReturnAsFiled = async (returnItem: GSTReturn) => {
+    if (returnItem.id) {
+      await updateReturn(returnItem.id, {
+        status: 'filed',
+        filed_date: new Date().toISOString()
+      });
+    }
+  };
+
+  const filteredTransactions = transactions.filter(t => {
+    const matchesSearch = !searchTerm || 
+      t.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      t.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.description && t.description.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    const matchesFilter = transactionFilter === 'all' || t.transaction_type === transactionFilter;
+    
+    return matchesSearch && matchesFilter;
+  });
 
   // Show loading state while auth is loading or GST data is loading
   if (authLoading || loading) {
@@ -189,12 +274,12 @@ export const GSTDashboard: React.FC = () => {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Filed Returns</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Transactions</p>
                 <p className="text-2xl font-bold">
-                  {returns.filter(r => r.status === 'filed').length}
+                  {transactions.length}
                 </p>
               </div>
-              <CheckCircle className="h-8 w-8 text-muted-foreground" />
+              <FileText className="h-8 w-8 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
@@ -211,7 +296,7 @@ export const GSTDashboard: React.FC = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>GST Returns</CardTitle>
-              <Button size="sm">
+              <Button size="sm" onClick={() => setShowReturnDialog(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Generate Return
               </Button>
@@ -224,7 +309,7 @@ export const GSTDashboard: React.FC = () => {
                   <p className="text-muted-foreground mb-4">
                     Start by generating your first GST return
                   </p>
-                  <Button>
+                  <Button onClick={() => setShowReturnDialog(true)}>
                     <Plus className="mr-2 h-4 w-4" />
                     Generate Return
                   </Button>
@@ -243,22 +328,40 @@ export const GSTDashboard: React.FC = () => {
                           <div className="text-sm text-muted-foreground">
                             Due: {new Date(returnItem.due_date).toLocaleDateString()}
                           </div>
+                          {returnItem.filed_date && (
+                            <div className="text-sm text-muted-foreground">
+                              Filed: {new Date(returnItem.filed_date).toLocaleDateString()}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-right">
                           <div className="font-medium">
-                            {formatCurrency(returnItem.total_tax_amount, 'INR')}
+                            {formatCurrency(returnItem.total_tax_amount || 0, 'INR')}
                           </div>
                           <div className="text-sm text-muted-foreground">
-                            {formatCurrency(returnItem.total_taxable_value, 'INR')} taxable
+                            {formatCurrency(returnItem.total_taxable_value || 0, 'INR')} taxable
                           </div>
                         </div>
                         <Badge className={getStatusColor(returnItem.status)}>
                           {returnItem.status}
                         </Badge>
-                        <Button variant="outline" size="sm">
-                          View
+                        {returnItem.status === 'pending' && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleMarkReturnAsFiled(returnItem)}
+                          >
+                            Mark as Filed
+                          </Button>
+                        )}
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setViewingReturn(returnItem)}
+                        >
+                          <Eye className="h-4 w-4" />
                         </Button>
                       </div>
                     </div>
@@ -272,13 +375,13 @@ export const GSTDashboard: React.FC = () => {
         <TabsContent value="liability" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Tax Liability Summary</CardTitle>
-              <div className="flex gap-2">
-                <input
+              <div className="flex items-center justify-between">
+                <CardTitle>Tax Liability Summary</CardTitle>
+                <Input
                   type="month"
                   value={selectedPeriod}
                   onChange={(e) => setSelectedPeriod(e.target.value)}
-                  className="px-3 py-1 border rounded"
+                  className="w-48"
                 />
               </div>
             </CardHeader>
@@ -327,28 +430,125 @@ export const GSTDashboard: React.FC = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>GST Transactions</CardTitle>
-              <Button size="sm">
+              <Button size="sm" onClick={() => {
+                setEditingTransaction(null);
+                setShowTransactionDialog(true);
+              }}>
                 <Plus className="mr-2 h-4 w-4" />
                 Add Transaction
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-12">
-                <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="font-semibold mb-2">No Transactions</h3>
-                <p className="text-muted-foreground mb-4">
-                  Start by adding your first GST transaction
-                </p>
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Transaction
-                </Button>
+              <div className="space-y-4">
+                {/* Search and Filter */}
+                <div className="flex gap-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search by invoice number, customer name, or description..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  <select
+                    value={transactionFilter}
+                    onChange={(e) => setTransactionFilter(e.target.value)}
+                    className="px-3 py-2 border rounded-md"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="sale">Sale</option>
+                    <option value="purchase">Purchase</option>
+                    <option value="credit_note">Credit Note</option>
+                    <option value="debit_note">Debit Note</option>
+                  </select>
+                </div>
+
+                {filteredTransactions.length === 0 ? (
+                  <div className="text-center py-12">
+                    <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="font-semibold mb-2">No Transactions Found</h3>
+                    <p className="text-muted-foreground mb-4">
+                      {transactions.length === 0 
+                        ? 'Start by adding your first GST transaction'
+                        : 'No transactions match your search criteria'}
+                    </p>
+                    {transactions.length === 0 && (
+                      <Button onClick={() => {
+                        setEditingTransaction(null);
+                        setShowTransactionDialog(true);
+                      }}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Transaction
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredTransactions.map((transaction) => (
+                      <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline">{transaction.transaction_type}</Badge>
+                            <div className="font-medium">{transaction.invoice_number}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {new Date(transaction.invoice_date).toLocaleDateString()}
+                            </div>
+                          </div>
+                          <div className="text-sm text-muted-foreground mt-1">
+                            {transaction.customer_name}
+                            {transaction.customer_gstin && ` (${transaction.customer_gstin})`}
+                          </div>
+                          {transaction.description && (
+                            <div className="text-sm text-muted-foreground mt-1">
+                              {transaction.description}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <div className="font-medium">
+                              {formatCurrency(transaction.total_amount || 0, 'INR')}
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              Tax: {formatCurrency(
+                                (transaction.cgst_amount || 0) + 
+                                (transaction.sgst_amount || 0) + 
+                                (transaction.igst_amount || 0) + 
+                                (transaction.cess_amount || 0), 
+                                'INR'
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingTransaction(transaction);
+                              setShowTransactionDialog(true);
+                            }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDeletingTransaction(transaction)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
+      {/* Dialogs */}
       <GSTSettingsDialog
         open={showSettingsDialog}
         onOpenChange={setShowSettingsDialog}
@@ -356,6 +556,111 @@ export const GSTDashboard: React.FC = () => {
         onSave={saveSettings}
         loading={loading}
       />
+
+      <GSTTransactionDialog
+        open={showTransactionDialog}
+        onOpenChange={(open) => {
+          setShowTransactionDialog(open);
+          if (!open) setEditingTransaction(null);
+        }}
+        existingTransaction={editingTransaction}
+        onSave={editingTransaction ? handleUpdateTransaction : handleCreateTransaction}
+        loading={loading}
+      />
+
+      <GSTReturnDialog
+        open={showReturnDialog}
+        onOpenChange={setShowReturnDialog}
+        onGenerate={generateReturn}
+        loading={loading}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deletingTransaction} onOpenChange={(open) => !open && setDeletingTransaction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Transaction</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete transaction {deletingTransaction?.invoice_number}? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTransaction} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* View Return Dialog */}
+      {viewingReturn && (
+        <Dialog open={!!viewingReturn} onOpenChange={(open) => !open && setViewingReturn(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>GST Return Details - {viewingReturn.return_type}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm text-muted-foreground">Filing Period</Label>
+                  <p className="font-medium">
+                    {new Date(viewingReturn.filing_period).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm text-muted-foreground">Due Date</Label>
+                  <p className="font-medium">{new Date(viewingReturn.due_date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-muted-foreground">Status</Label>
+                  <Badge className={getStatusColor(viewingReturn.status)}>
+                    {viewingReturn.status}
+                  </Badge>
+                </div>
+                {viewingReturn.filed_date && (
+                  <div>
+                    <Label className="text-sm text-muted-foreground">Filed Date</Label>
+                    <p className="font-medium">{new Date(viewingReturn.filed_date).toLocaleDateString()}</p>
+                  </div>
+                )}
+                {viewingReturn.acknowledgment_number && (
+                  <div className="col-span-2">
+                    <Label className="text-sm text-muted-foreground">Acknowledgment Number</Label>
+                    <p className="font-medium">{viewingReturn.acknowledgment_number}</p>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-4 border-t">
+                <div>
+                  <Label className="text-sm text-muted-foreground">Taxable Value</Label>
+                  <p className="text-xl font-bold">{formatCurrency(viewingReturn.total_taxable_value || 0, 'INR')}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-muted-foreground">Total Tax</Label>
+                  <p className="text-xl font-bold text-primary">{formatCurrency(viewingReturn.total_tax_amount || 0, 'INR')}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-muted-foreground">CGST</Label>
+                  <p className="font-medium">{formatCurrency(viewingReturn.cgst_amount || 0, 'INR')}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-muted-foreground">SGST</Label>
+                  <p className="font-medium">{formatCurrency(viewingReturn.sgst_amount || 0, 'INR')}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-muted-foreground">IGST</Label>
+                  <p className="font-medium">{formatCurrency(viewingReturn.igst_amount || 0, 'INR')}</p>
+                </div>
+                <div>
+                  <Label className="text-sm text-muted-foreground">Cess</Label>
+                  <p className="font-medium">{formatCurrency(viewingReturn.cess_amount || 0, 'INR')}</p>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 };

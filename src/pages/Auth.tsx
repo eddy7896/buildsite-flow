@@ -323,8 +323,8 @@ const Auth = () => {
                 </div>
               </div>
 
-              {/* Create Account Link */}
-              <Link to="/signup">
+              {/* Create Agency Account Link */}
+              <Link to="/agency-signup">
                 <Button 
                   variant="outline" 
                   className="w-full h-11 border-slate-700/50 bg-transparent text-slate-300 hover:bg-slate-800/50 hover:text-white hover:border-slate-600 transition-all"

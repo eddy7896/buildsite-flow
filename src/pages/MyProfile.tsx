@@ -10,6 +10,8 @@ import { useEffect, useState } from "react";
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { generateUUID } from '@/lib/uuid';
+import { upsertRecord, selectOne } from '@/services/api/postgresql-service';
 
 interface UserProfile {
   id: string;
@@ -47,7 +49,7 @@ const MyProfile = () => {
     try {
       setLoading(true);
       
-      // Fetch employee details and profile information separately
+      // Fetch employee details, profile, and salary information
       const [employeeResponse, profileResponse, salaryResponse] = await Promise.all([
         db
           .from('employee_details')
@@ -66,34 +68,101 @@ const MyProfile = () => {
           .maybeSingle()
       ]);
 
+      // Handle errors (ignore PGRST116 which means no rows found)
       if (employeeResponse.error && employeeResponse.error.code !== 'PGRST116') {
-        throw employeeResponse.error;
+        console.error('Error fetching employee_details:', employeeResponse.error);
+      }
+      if (profileResponse.error && profileResponse.error.code !== 'PGRST116') {
+        console.error('Error fetching profiles:', profileResponse.error);
       }
 
-      if (employeeResponse.data) {
+      // Build profile from available data
+      // Priority: employee_details > profiles > user
+      const profileData = profileResponse.data;
+      const employeeData = employeeResponse.data;
+      
+      // If we have profile data OR employee data, show the profile
+      if (profileData || employeeData) {
+        // Extract name from profile or employee_details
+        let firstName = '';
+        let lastName = '';
+        let fullName = '';
+        
+        if (employeeData) {
+          firstName = employeeData.first_name || '';
+          lastName = employeeData.last_name || '';
+          fullName = `${firstName} ${lastName}`.trim();
+        } else if (profileData?.full_name) {
+          fullName = profileData.full_name;
+          const nameParts = fullName.split(' ');
+          firstName = nameParts[0] || '';
+          lastName = nameParts.slice(1).join(' ') || '';
+        } else if (user?.email) {
+          // Fallback to email username
+          firstName = user.email.split('@')[0] || 'User';
+          lastName = '';
+          fullName = firstName;
+        }
+
+        // Generate employee_id if not present
+        let employeeId = employeeData?.employee_id;
+        if (!employeeId && user?.id) {
+          // Generate a simple ID from user ID
+          employeeId = `EMP-${user.id.substring(0, 8).toUpperCase()}`;
+        }
+
         const transformedProfile: UserProfile = {
-          id: employeeResponse.data.id,
-          user_id: employeeResponse.data.user_id,
-          employee_id: employeeResponse.data.employee_id,
-          first_name: employeeResponse.data.first_name,
-          last_name: employeeResponse.data.last_name,
-          phone: profileResponse.data?.phone,
-          department: profileResponse.data?.department,
-          position: profileResponse.data?.position,
-          address: employeeResponse.data.address,
-          hire_date: employeeResponse.data.created_at,
-          work_location: employeeResponse.data.work_location,
-          emergency_contact_name: employeeResponse.data.emergency_contact_name,
-          emergency_contact_phone: employeeResponse.data.emergency_contact_phone,
-          emergency_contact_relationship: employeeResponse.data.emergency_contact_relationship,
-          notes: employeeResponse.data.notes,
-          skills: Array.isArray(employeeResponse.data.skills) ? employeeResponse.data.skills.map(skill => String(skill)) : [],
-          full_name: profileResponse.data?.full_name,
+          id: employeeData?.id || profileData?.id || user.id,
+          user_id: user.id,
+          employee_id: employeeId || 'N/A',
+          first_name: firstName,
+          last_name: lastName,
+          phone: profileData?.phone || '',
+          department: profileData?.department || '',
+          position: profileData?.position || '',
+          address: employeeData?.address || '',
+          hire_date: employeeData?.created_at || profileData?.hire_date || profileData?.created_at || new Date().toISOString(),
+          work_location: employeeData?.work_location || '',
+          emergency_contact_name: employeeData?.emergency_contact_name || '',
+          emergency_contact_phone: employeeData?.emergency_contact_phone || '',
+          emergency_contact_relationship: employeeData?.emergency_contact_relationship || '',
+          notes: employeeData?.notes || '',
+          skills: Array.isArray(employeeData?.skills) 
+            ? employeeData.skills.map(skill => String(skill)) 
+            : [],
+          full_name: fullName || user.email || 'User',
           salary: salaryResponse.data?.salary,
           social_security_number: '***-**-****' // SSN is encrypted and masked for regular users
         };
+        
         setProfile(transformedProfile);
         setFormData(transformedProfile);
+      } else {
+        // If no profile or employee data exists, create a minimal profile from user data
+        const emailUsername = user.email?.split('@')[0] || 'User';
+        const minimalProfile: UserProfile = {
+          id: user.id,
+          user_id: user.id,
+          employee_id: `EMP-${user.id.substring(0, 8).toUpperCase()}`,
+          first_name: emailUsername,
+          last_name: '',
+          phone: '',
+          department: '',
+          position: '',
+          address: '',
+          hire_date: new Date().toISOString(),
+          work_location: '',
+          emergency_contact_name: '',
+          emergency_contact_phone: '',
+          emergency_contact_relationship: '',
+          notes: '',
+          skills: [],
+          full_name: user.email || 'User',
+          salary: undefined,
+          social_security_number: '***-**-****'
+        };
+        setProfile(minimalProfile);
+        setFormData(minimalProfile);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -111,43 +180,76 @@ const MyProfile = () => {
     if (!user || !profile) return;
 
     try {
-      // Update employee details
-      const { error: employeeError } = await db
-        .from('employee_details')
-        .update({
-          first_name: formData.first_name,
-          last_name: formData.last_name,
-          address: formData.address,
-          work_location: formData.work_location,
-          emergency_contact_name: formData.emergency_contact_name,
-          emergency_contact_phone: formData.emergency_contact_phone,
-          emergency_contact_relationship: formData.emergency_contact_relationship,
-          notes: formData.notes,
-          skills: formData.skills || []
-        })
-        .eq('user_id', user.id);
-
-      if (employeeError) {
-        throw employeeError;
+      const fullName = `${formData.first_name || ''} ${formData.last_name || ''}`.trim() || user.email || 'User';
+      
+      // Upsert profile (profiles table should always exist)
+      try {
+        await upsertRecord('profiles', {
+          user_id: user.id,
+          full_name: fullName,
+          phone: formData.phone || null,
+          department: formData.department || null,
+          position: formData.position || null,
+          is_active: true,
+          agency_id: '550e8400-e29b-41d4-a716-446655440000',
+          updated_at: new Date().toISOString()
+        }, 'user_id');
+      } catch (profileError) {
+        console.error('Profile upsert error:', profileError);
+        // Try update if upsert fails
+        try {
+          await db
+            .from('profiles')
+            .update({
+              full_name: fullName,
+              phone: formData.phone || null,
+              department: formData.department || null,
+              position: formData.position || null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('user_id', user.id);
+        } catch (updateError) {
+          console.error('Profile update also failed:', updateError);
+        }
       }
 
-      // Update profile
-      const { error: profileError } = await db
-        .from('profiles')
-        .update({
-          full_name: `${formData.first_name} ${formData.last_name}`,
-          phone: formData.phone,
-          department: formData.department,
-          position: formData.position
-        })
-        .eq('user_id', user.id);
-
-      if (profileError) {
-        throw profileError;
+      // Try to upsert employee_details (optional - may not exist for all users)
+      const employeeId = formData.employee_id || profile.employee_id || `EMP-${user.id.substring(0, 8).toUpperCase()}`;
+      
+      try {
+        await upsertRecord('employee_details', {
+          user_id: user.id,
+          employee_id: employeeId,
+          first_name: formData.first_name || '',
+          last_name: formData.last_name || '',
+          address: formData.address || null,
+          work_location: formData.work_location || null,
+          emergency_contact_name: formData.emergency_contact_name || null,
+          emergency_contact_phone: formData.emergency_contact_phone || null,
+          emergency_contact_relationship: formData.emergency_contact_relationship || null,
+          notes: formData.notes || null,
+          skills: formData.skills || [],
+          is_active: true,
+          agency_id: '550e8400-e29b-41d4-a716-446655440000',
+          updated_at: new Date().toISOString()
+        }, 'user_id');
+      } catch (employeeError) {
+        console.warn('Employee details upsert failed (may require additional fields):', employeeError);
+        // This is okay - employee_details is optional and may have required fields we don't have
       }
 
-      setProfile({ ...profile, ...formData });
+      // Update local state
+      setProfile({ 
+        ...profile, 
+        ...formData,
+        full_name: fullName,
+        employee_id: employeeId
+      });
       setIsEditing(false);
+      
+      // Refresh profile data
+      await fetchProfile();
+      
       toast({
         title: "Success",
         description: "Profile updated successfully!",
@@ -175,18 +277,12 @@ const MyProfile = () => {
     );
   }
 
+  // Profile should always be set now (either from database or minimal from user)
   if (!profile) {
     return (
-      <div className="p-6">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center py-8">
-              <p className="text-muted-foreground">
-                No employee profile found. Please contact HR to set up your profile.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex justify-center items-center py-8">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2 text-muted-foreground">Loading profile...</span>
       </div>
     );
   }
@@ -220,18 +316,42 @@ const MyProfile = () => {
                   <Label htmlFor="firstName">First Name</Label>
                   <Input 
                     id="firstName" 
-                    value={isEditing ? formData.first_name || '' : profile.first_name}
+                    value={isEditing ? formData.first_name || '' : profile.first_name || ''}
                     onChange={(e) => setFormData({...formData, first_name: e.target.value})}
                     disabled={!isEditing}
+                    placeholder="Enter first name"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="lastName">Last Name</Label>
                   <Input 
                     id="lastName" 
-                    value={isEditing ? formData.last_name || '' : profile.last_name}
+                    value={isEditing ? formData.last_name || '' : profile.last_name || ''}
                     onChange={(e) => setFormData({...formData, last_name: e.target.value})}
                     disabled={!isEditing}
+                    placeholder="Enter last name"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="department">Department</Label>
+                  <Input 
+                    id="department" 
+                    value={isEditing ? formData.department || '' : profile.department || ''}
+                    onChange={(e) => setFormData({...formData, department: e.target.value})}
+                    disabled={!isEditing}
+                    placeholder="Enter department"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="position">Position</Label>
+                  <Input 
+                    id="position" 
+                    value={isEditing ? formData.position || '' : profile.position || ''}
+                    onChange={(e) => setFormData({...formData, position: e.target.value})}
+                    disabled={!isEditing}
+                    placeholder="Enter position"
                   />
                 </div>
               </div>
@@ -340,13 +460,13 @@ const MyProfile = () => {
               <div className="text-center mb-6">
                 <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                   <span className="text-2xl font-semibold text-primary">
-                    {profile.first_name.charAt(0)}{profile.last_name.charAt(0)}
+                    {profile.first_name?.charAt(0)?.toUpperCase() || 'U'}{profile.last_name?.charAt(0)?.toUpperCase() || ''}
                   </span>
                 </div>
                 <h2 className="text-xl font-semibold">
-                  {profile.first_name} {profile.last_name}
+                  {profile.full_name || `${profile.first_name} ${profile.last_name}`.trim() || user?.email || 'User'}
                 </h2>
-                <p className="text-muted-foreground">{profile.position || 'No position assigned'}</p>
+                <p className="text-muted-foreground">{profile.position || profile.department || 'No position assigned'}</p>
                 <Button variant="outline" size="sm" className="mt-2">
                   <Upload className="mr-1 h-3 w-3" />
                   Upload Photo

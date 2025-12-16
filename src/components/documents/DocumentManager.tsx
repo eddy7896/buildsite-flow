@@ -16,6 +16,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/database';
 import { toast } from 'sonner';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface DocumentFolder {
   id: string;
@@ -66,11 +67,12 @@ interface DocumentPermission {
 }
 
 export function DocumentManager() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [folders, setFolders] = useState<DocumentFolder[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [agencyId, setAgencyId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showFolderDialog, setShowFolderDialog] = useState(false);
@@ -84,9 +86,12 @@ export function DocumentManager() {
 
   const fetchFolders = async () => {
     try {
-      const { data, error } = await supabase
+      if (!agencyId) return;
+      
+      const { data, error } = await db
         .from('document_folders')
         .select('*')
+        .eq('agency_id', agencyId)
         .order('name');
 
       if (error) throw error;
@@ -99,9 +104,12 @@ export function DocumentManager() {
 
   const fetchDocuments = async () => {
     try {
-      let query = supabase
+      if (!agencyId) return;
+      
+      let query = db
         .from('documents')
-        .select('*');
+        .select('*')
+        .eq('agency_id', agencyId);
 
       if (currentFolder) {
         query = query.eq('folder_id', currentFolder);
@@ -120,27 +128,33 @@ export function DocumentManager() {
   };
 
   useEffect(() => {
-    const loadData = async () => {
-      await Promise.all([fetchFolders(), fetchDocuments()]);
+    const initializeAgency = async () => {
+      const id = await getAgencyId(profile, user?.id);
+      setAgencyId(id);
+      if (id) {
+        await Promise.all([fetchFolders(), fetchDocuments()]);
+      }
       setLoading(false);
     };
-    loadData();
-  }, [currentFolder]);
+    if (user?.id) {
+      initializeAgency();
+    }
+  }, [user?.id, profile?.agency_id, currentFolder]);
 
   const handleCreateFolder = async () => {
-    if (!user || !folderForm.name) {
+    if (!user || !folderForm.name || !agencyId) {
       toast.error('Please provide a folder name');
       return;
     }
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from('document_folders')
         .insert({
           ...folderForm,
           parent_folder_id: currentFolder,
           created_by: user.id,
-          agency_id: 'temp-agency-id'
+          agency_id: agencyId
         });
 
       if (error) throw error;
@@ -160,7 +174,11 @@ export function DocumentManager() {
     if (!file || !user) return;
 
     try {
-      // Upload file to Supabase Storage
+      if (!agencyId) {
+        throw new Error('Agency ID not found');
+      }
+      
+      // Upload file to file storage
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
       const filePath = `documents/${fileName}`;
@@ -172,7 +190,7 @@ export function DocumentManager() {
       if (uploadError) throw uploadError;
 
       // Save document metadata
-      const { error: dbError } = await supabase
+      const { error: dbError } = await db
         .from('documents')
         .insert({
           name: file.name,
@@ -181,7 +199,7 @@ export function DocumentManager() {
           file_type: file.type,
           uploaded_by: user.id,
           folder_id: currentFolder,
-          agency_id: 'temp-agency-id',
+          agency_id: agencyId,
           tags: [],
           is_public: false
         });
@@ -215,7 +233,7 @@ export function DocumentManager() {
       URL.revokeObjectURL(url);
 
       // Update download count
-      await supabase
+      await db
         .from('documents')
         .update({ download_count: document.download_count + 1 })
         .eq('id', document.id);

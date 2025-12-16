@@ -11,6 +11,7 @@ import {
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 import { HolidayFormDialog } from './HolidayFormDialog';
 import { selectRecords, deleteRecord } from '@/services/api/postgresql-service';
 import {
@@ -53,7 +54,12 @@ export function HolidayManagement() {
   const fetchHolidays = async () => {
     try {
       setLoading(true);
-      const agencyId = profile?.agency_id || '550e8400-e29b-41d4-a716-446655440000';
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        console.warn('No agency_id available, cannot fetch holidays');
+        setLoading(false);
+        return;
+      }
       
       // Fetch holidays from database using PostgreSQL service
       const data = await selectRecords<Holiday>('holidays', {

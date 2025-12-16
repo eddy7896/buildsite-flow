@@ -1,6 +1,6 @@
 # PostgreSQL Integration
 
-This directory contains the PostgreSQL database integration for BuildFlow Agency Management System, replacing the previous Supabase implementation.
+This directory contains the PostgreSQL database integration for BuildFlow Agency Management System.
 
 ## Overview
 
@@ -326,29 +326,6 @@ In production:
 - Audit logging is enabled
 - Row-level security is available
 
-## Migration from Supabase
-
-### Before (Supabase)
-```typescript
-import { supabase } from '@/integrations/supabase/client';
-
-const { data, error } = await supabase
-  .from('users')
-  .select('*')
-  .eq('id', userId);
-```
-
-### After (PostgreSQL)
-```typescript
-import { queryOne } from '@/integrations/postgresql/client';
-import type { User } from '@/integrations/postgresql/types';
-
-const user = await queryOne<User>(
-  'SELECT * FROM users WHERE id = $1',
-  [userId]
-);
-```
-
 ## Related Services
 
 - **Authentication:** `src/services/api/auth-postgresql.ts`
@@ -357,10 +334,9 @@ const user = await queryOne<User>(
 
 ## Documentation
 
-- **Quick Start:** `POSTGRESQL_QUICK_START.md`
-- **Complete Guide:** `POSTGRESQL_MIGRATION_COMPLETE.md`
-- **Schema Documentation:** `CORE_AUTH_SCHEMA_DOCUMENTATION.md`
-- **Migration Plan:** `SUPABASE_TO_POSTGRESQL_MIGRATION_PLAN.md`
+- **Database Schema:** `database/migrations/README.md`
+- **API Documentation:** `docs/api.md`
+- **Development Guide:** `docs/development.md`
 
 ## Support
 

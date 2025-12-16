@@ -183,15 +183,29 @@ export class BaseApiService {
     options: ApiOptions = {}
   ): Promise<ApiResponse<T>> {
     return this.execute(async () => {
-      const columns = Object.keys(data);
-      const values = Object.values(data);
+      // Filter out null values and prepare data
+      const filteredData: Record<string, any> = {};
+      Object.keys(data).forEach(key => {
+        if (data[key] !== undefined) {
+          filteredData[key] = data[key];
+        }
+      });
+
+      const columns = Object.keys(filteredData);
+      const values = Object.values(filteredData);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
+      // Ensure table name has schema prefix if not already present
+      const tableName = table.includes('.') ? table : `public.${table}`;
+
       const query = `
-        INSERT INTO ${table} (${columns.join(', ')})
+        INSERT INTO ${tableName} (${columns.join(', ')})
         VALUES (${placeholders})
         RETURNING *
       `;
+
+      console.log('Insert query:', query);
+      console.log('Insert values:', values);
 
       const result = await pgClient.query(query, values);
       return result.rows[0] as T;

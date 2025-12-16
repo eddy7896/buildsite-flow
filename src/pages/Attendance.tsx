@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Clock, Calendar as CalendarIcon, Users, TrendingUp, Loader2, Download, AlertTriangle, TrendingDown, BarChart3, PieChart, Activity, ArrowUp, ArrowDown, Building2 } from "lucide-react";
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
@@ -60,6 +61,12 @@ const Attendance = () => {
   const { toast } = useToast();
   const { userRole } = useAuth();
   const { settings: agencySettings } = useAgencySettings();
+  const [searchParams] = useSearchParams();
+  
+  // Get department filter from URL
+  const urlDepartmentId = searchParams.get('department');
+  const urlDepartmentName = searchParams.get('name');
+  
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [loading, setLoading] = useState(true);
   const [attendanceStats, setAttendanceStats] = useState<AttendanceStats>({
@@ -101,7 +108,7 @@ const Attendance = () => {
         generateInsights();
       }
     }
-  }, [date, isAdminView, selectedPeriod]);
+  }, [date, isAdminView, selectedPeriod, urlDepartmentId]);
 
   const fetchAttendanceData = async (selectedDate: Date) => {
     try {
@@ -110,20 +117,48 @@ const Attendance = () => {
       // Format date for query (YYYY-MM-DD)
       const dateStr = selectedDate.toISOString().split('T')[0];
       
+      // If filtering by department, get user IDs in that department
+      let departmentUserIds: string[] = [];
+      if (urlDepartmentId) {
+        const { data: assignments } = await db
+          .from('team_assignments')
+          .select('user_id')
+          .eq('department_id', urlDepartmentId)
+          .eq('is_active', true);
+        
+        if (assignments) {
+          departmentUserIds = assignments.map((ta: any) => ta.user_id).filter(Boolean);
+        }
+      }
+      
       // Fetch attendance records for the selected date
-      const { data: attendanceData, error: attendanceError } = await db
+      let attendanceQuery = db
         .from('attendance')
         .select('*')
-        .eq('date', dateStr)
+        .eq('date', dateStr);
+      
+      // Filter by department if specified
+      if (urlDepartmentId && departmentUserIds.length > 0) {
+        attendanceQuery = attendanceQuery.in('employee_id', departmentUserIds);
+      }
+      
+      const { data: attendanceData, error: attendanceError } = await attendanceQuery
         .order('check_in_time', { ascending: true });
 
       if (attendanceError) throw attendanceError;
 
       // Fetch all active employees to check who's absent
-      const { data: employeesData, error: employeesError } = await db
+      let employeesQuery = db
         .from('employee_details')
         .select('user_id, first_name, last_name, is_active')
         .eq('is_active', true);
+      
+      // Filter by department if specified
+      if (urlDepartmentId && departmentUserIds.length > 0) {
+        employeesQuery = employeesQuery.in('user_id', departmentUserIds);
+      }
+      
+      const { data: employeesData, error: employeesError } = await employeesQuery;
 
       if (employeesError) throw employeesError;
 
@@ -436,18 +471,29 @@ const Attendance = () => {
       
       const dateStr = date.toISOString().split('T')[0];
       
-      // Fetch all employees with departments
+      // Fetch all active employees with their user_ids
       const { data: employeesData } = await db
         .from('employee_details')
-        .select('user_id, department_id, is_active')
+        .select('user_id, is_active')
         .eq('is_active', true);
       
-      // Fetch departments
-      const { data: departmentsData } = await db
-        .from('departments')
-        .select('id, name');
+      if (!employeesData || employeesData.length === 0) {
+        setDepartmentStats([]);
+        return;
+      }
       
-      const deptMap = new Map<string, string>(departmentsData?.map((d: any) => [d.id as string, d.name as string]) || []);
+      // Fetch profiles to get department information
+      const userIds = employeesData.map((emp: any) => emp.user_id);
+      const { data: profilesData } = await db
+        .from('profiles')
+        .select('user_id, department')
+        .in('user_id', userIds)
+        .eq('is_active', true);
+      
+      // Create a map of user_id to department
+      const userDeptMap = new Map<string, string>(
+        profilesData?.map((p: any) => [p.user_id as string, (p.department as string) || 'Unassigned']) || []
+      );
       
       // Fetch attendance for the date
       const { data: attendanceData } = await db
@@ -461,8 +507,9 @@ const Attendance = () => {
       const deptStatsMap = new Map<string, { present: number; absent: number; late: number; total: number }>();
       
       employeesData?.forEach((emp: any) => {
-        const deptId = emp.department_id as string | undefined;
-        const deptName = (deptId ? deptMap.get(deptId) : null) || 'Unassigned';
+        const empId = emp.user_id as string;
+        const deptName = userDeptMap.get(empId) || 'Unassigned';
+        
         if (!deptStatsMap.has(deptName)) {
           deptStatsMap.set(deptName, { present: 0, absent: 0, late: 0, total: 0 });
         }
@@ -470,7 +517,6 @@ const Attendance = () => {
         const stats = deptStatsMap.get(deptName)!;
         stats.total++;
         
-        const empId = emp.user_id as string;
         const attendance = attendanceMap.get(empId) as any;
         if (attendance) {
           if (attendance.check_in_time) {
@@ -497,6 +543,11 @@ const Attendance = () => {
       setDepartmentStats(stats.sort((a, b) => b.attendanceRate - a.attendanceRate));
     } catch (error) {
       console.error('Error fetching department stats:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch department statistics',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -610,8 +661,20 @@ const Attendance = () => {
       <div className="p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">Attendance Dashboard</h1>
-            <p className="text-sm sm:text-base text-muted-foreground">Overview and insights for {date ? date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'today'}</p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl font-bold">Attendance Dashboard</h1>
+              {urlDepartmentName && (
+                <Badge variant="secondary" className="text-sm">
+                  <Building2 className="h-3 w-3 mr-1" />
+                  {decodeURIComponent(urlDepartmentName)}
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              {urlDepartmentName 
+                ? `Attendance for ${decodeURIComponent(urlDepartmentName)} department - ${date ? date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'today'}`
+                : `Overview and insights for ${date ? date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'today'}`}
+            </p>
           </div>
           <div className="flex gap-2">
             <Select value={selectedPeriod} onValueChange={(value: 'week' | 'month') => setSelectedPeriod(value)}>
@@ -737,7 +800,7 @@ const Attendance = () => {
                   <CardDescription>Today's attendance breakdown</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
+                  <ResponsiveContainer width="100%" height={350}>
                     <RechartsPieChart>
                       <Pie
                         data={[
@@ -747,12 +810,14 @@ const Attendance = () => {
                           { name: 'On Leave', value: attendanceStats.onLeave, color: COLORS[3] }
                         ]}
                         cx="50%"
-                        cy="50%"
+                        cy="45%"
                         labelLine={false}
-                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        label={false}
                         outerRadius={80}
+                        innerRadius={25}
                         fill="#8884d8"
                         dataKey="value"
+                        paddingAngle={3}
                       >
                         {[
                           { name: 'Present', value: attendanceStats.present },
@@ -763,7 +828,25 @@ const Attendance = () => {
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip 
+                        formatter={(value: any, name: string) => {
+                          const total = attendanceStats.present + attendanceStats.late + attendanceStats.absent + attendanceStats.onLeave;
+                          const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                          return [`${value} (${percent}%)`, name];
+                        }}
+                      />
+                      <Legend 
+                        verticalAlign="bottom" 
+                        height={80}
+                        iconType="circle"
+                        wrapperStyle={{ paddingTop: '20px' }}
+                        formatter={(value, entry: any) => {
+                          const total = attendanceStats.present + attendanceStats.late + attendanceStats.absent + attendanceStats.onLeave;
+                          const itemValue = entry.payload?.value || 0;
+                          const percent = total > 0 ? ((itemValue / total) * 100).toFixed(1) : 0;
+                          return `${value}: ${itemValue} (${percent}%)`;
+                        }}
+                      />
                     </RechartsPieChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -930,19 +1013,21 @@ const Attendance = () => {
                   </CardContent>
                 </Card>
               </div>
-              <div>
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg sm:text-xl">Calendar</CardTitle>
+              <div className="w-full">
+                <Card className="h-fit">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base sm:text-lg">Calendar</CardTitle>
                     <CardDescription className="text-xs sm:text-sm">Select a date to view attendance</CardDescription>
                   </CardHeader>
-                  <CardContent className="flex justify-center sm:block">
-                    <Calendar
-                      mode="single"
-                      selected={date}
-                      onSelect={setDate}
-                      className="rounded-md border w-full"
-                    />
+                  <CardContent className="p-2 sm:p-4 overflow-visible">
+                    <div className="w-full flex justify-center">
+                      <Calendar
+                        mode="single"
+                        selected={date}
+                        onSelect={setDate}
+                        className="rounded-md border w-full max-w-full"
+                      />
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -1179,13 +1264,15 @@ const Attendance = () => {
               <CardTitle className="text-lg sm:text-xl">Calendar</CardTitle>
               <CardDescription className="text-xs sm:text-sm">Select a date to view attendance</CardDescription>
             </CardHeader>
-            <CardContent className="flex justify-center sm:block">
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={setDate}
-                className="rounded-md border w-full"
-              />
+            <CardContent className="flex justify-center sm:block overflow-hidden">
+              <div className="w-full max-w-full overflow-x-auto">
+                <Calendar
+                  mode="single"
+                  selected={date}
+                  onSelect={setDate}
+                  className="rounded-md border w-full min-w-[280px] mx-auto"
+                />
+              </div>
             </CardContent>
           </Card>
         </div>
