@@ -46,7 +46,9 @@ import {
   SlidersHorizontal
 } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/hooks/useAuth';
+import { Info, HelpCircle } from 'lucide-react';
 
 interface AgencyFormData {
   // Step 1-3: Agency Information
@@ -188,7 +190,7 @@ const PLANS = [
       'Basic features'
     ],
     maxUsers: 5,
-    color: 'from-blue-500 to-cyan-500',
+    color: 'slate',
     savings: null
   },
   {
@@ -207,7 +209,7 @@ const PLANS = [
       'API access'
     ],
     maxUsers: 25,
-    color: 'from-emerald-500 to-teal-500',
+    color: 'slate',
     popular: true,
     savings: 'Most Popular'
   },
@@ -228,7 +230,7 @@ const PLANS = [
       'SSO & advanced security'
     ],
     maxUsers: 1000,
-    color: 'from-amber-500 to-orange-500',
+    color: 'slate',
     savings: 'Best Value'
   }
 ];
@@ -295,8 +297,6 @@ export default function AgencyOnboardingWizard() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [domainAvailable, setDomainAvailable] = useState<boolean | null>(null);
-  const [userCount, setUserCount] = useState(1247); // Social proof
-  const [timeRemaining, setTimeRemaining] = useState(3600); // Urgency timer
   
   const [formData, setFormData] = useState<AgencyFormData>({
     agencyName: '',
@@ -321,28 +321,31 @@ export default function AgencyOnboardingWizard() {
     subscriptionPlan: 'professional',
   });
 
-  // Social proof - increment user count
+  // Load draft from localStorage on mount
   useEffect(() => {
-    const interval = setInterval(() => {
-      setUserCount(prev => prev + Math.floor(Math.random() * 3));
-    }, 30000); // Every 30 seconds
-    return () => clearInterval(interval);
+    const savedDraft = localStorage.getItem('agency_onboarding_draft');
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft);
+        setFormData(parsed.formData || formData);
+        setCurrentStep(parsed.currentStep || 1);
+        setCompletedSteps(parsed.completedSteps || []);
+      } catch (error) {
+        console.error('Error loading draft:', error);
+      }
+    }
   }, []);
 
-  // Urgency timer
+  // Save draft to localStorage whenever form data changes
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeRemaining(prev => Math.max(0, prev - 1));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+    const draftData = {
+      formData,
+      currentStep,
+      completedSteps,
+      timestamp: new Date().toISOString(),
+    };
+    localStorage.setItem('agency_onboarding_draft', JSON.stringify(draftData));
+  }, [formData, currentStep, completedSteps]);
 
   // Update company preview as user types
   useEffect(() => {
@@ -553,6 +556,9 @@ export default function AgencyOnboardingWizard() {
         throw new Error(result.error || 'Failed to create agency');
       }
 
+      // Clear draft from localStorage on successful submission
+      localStorage.removeItem('agency_onboarding_draft');
+
       // Automatically sign in the new SUPER_ADMIN and redirect to Super Admin Dashboard
       try {
         const { error } = await signIn(formData.adminEmail, formData.adminPassword);
@@ -563,16 +569,11 @@ export default function AgencyOnboardingWizard() {
 
         toast({
           title: '🎉 Workspace Ready!',
-          description: 'Your agency workspace is live. You now have full Super Admin access to configure your agency.',
+          description: 'Your agency workspace is live. Complete the setup to get started.',
         });
 
-        const agencyId = result.agency?.id;
-        if (agencyId) {
-          navigate(`/agency/${agencyId}/super-admin-dashboard`);
-        } else {
-          // Fallback if agency id is missing for any reason
-          navigate('/dashboard');
-        }
+        // Redirect to setup progress page to track and complete agency setup
+        navigate('/agency-setup-progress');
       } catch (authError: any) {
         console.error('Auto sign-in after agency creation failed:', authError);
         // Do NOT redirect away; keep them here and ask them to log in manually
@@ -598,205 +599,263 @@ export default function AgencyOnboardingWizard() {
   const CurrentStepIcon = currentStepData?.icon || Building2;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 relative overflow-hidden">
-      {/* Enhanced animated gradient background (sizes tuned for better performance) */}
+    <div 
+      className="min-h-screen bg-slate-50 dark:bg-slate-950 relative overflow-hidden"
+      role="main"
+      aria-label="Agency Onboarding Wizard"
+    >
+      {/* Sophisticated subtle background pattern */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-0 w-[520px] h-[520px] bg-gradient-to-br from-emerald-500/30 via-teal-500/20 to-cyan-500/20 rounded-full filter blur-[160px] animate-pulse" />
-        <div className="absolute bottom-0 right-0 w-[520px] h-[520px] bg-gradient-to-br from-blue-600/25 via-indigo-600/20 to-purple-600/15 rounded-full filter blur-[150px] animate-pulse" style={{ animationDelay: '1s' }} />
-        <div className="absolute top-1/2 left-1/3 w-[420px] h-[420px] bg-gradient-to-br from-emerald-600/15 via-teal-600/10 to-cyan-600/10 rounded-full filter blur-[120px] animate-pulse" style={{ animationDelay: '2s' }} />
+        {/* Subtle mesh overlay */}
+        <div className="absolute inset-0 bg-slate-50/30 dark:bg-slate-950/30" />
+        
+        {/* Subtle grid overlay */}
+        <div 
+          className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
+          style={{
+            backgroundImage: `linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px)`,
+            backgroundSize: '24px 24px'
+          }}
+        />
+        
+        {/* Subtle accent - very minimal */}
+        <div className="absolute top-0 right-0 w-96 h-96 bg-slate-200/20 dark:bg-slate-800/20 rounded-full" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-slate-200/20 dark:bg-slate-800/20 rounded-full" />
       </div>
 
-      {/* Enhanced grid pattern */}
-      <div 
-        className="absolute inset-0 opacity-[0.04] pointer-events-none"
-        style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.2) 1px, transparent 0)`,
-          backgroundSize: '40px 40px'
-        }}
-      />
-
-      <div className="relative z-10 min-h-screen flex flex-col p-2 sm:p-3 lg:p-4 overflow-x-hidden">
-        <div className="w-full max-w-7xl mx-auto flex flex-col">
-          {/* Enhanced Header Section */}
-          <div className="mb-2 sm:mb-3 flex-shrink-0">
-            {/* Mobile Logo */}
-            <div className="lg:hidden text-center mb-2">
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 via-teal-400 to-cyan-400 shadow-2xl shadow-emerald-500/40 mb-1 transition-transform hover:scale-110">
-                <Building2 className="h-5 w-5 text-white" />
-              </div>
-              <h1 className="text-xl font-bold text-white mb-0.5">
-                Build<span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Flow</span>
-              </h1>
-              <p className="text-xs text-slate-400">Agency Setup</p>
-            </div>
-
-            {/* Desktop Header */}
-            <div className="hidden lg:flex items-center justify-between mb-2">
+      <div className="relative z-10 min-h-screen flex flex-col">
+        {/* Professional Header */}
+        <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-50">
+          <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 via-teal-400 to-cyan-400 flex items-center justify-center shadow-2xl shadow-emerald-500/40 transition-transform hover:scale-110 cursor-pointer">
-                  <Building2 className="h-5 w-5 text-white" />
+                <div className="w-9 h-9 rounded-lg bg-slate-900 dark:bg-white flex items-center justify-center shadow-sm">
+                  <Building2 className="h-5 w-5 text-white dark:text-slate-900" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-white leading-tight">
-                    Build<span className="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">Flow</span>
+                  <h1 className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight">
+                    BuildFlow
                   </h1>
-                  <p className="text-xs text-slate-400">Company Setup</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Workspace Setup</p>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent transition-all duration-300 hover:scale-110 inline-block">
-                  {Math.round(progress)}%
-                </div>
-                <div className="text-xs text-slate-500 uppercase tracking-wide">
-                  Complete
-                </div>
-              </div>
-            </div>
-            
-            {/* Social Proof Banner */}
-            <div className="mb-2 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 border border-emerald-500/20 rounded-lg px-3 py-1.5 flex items-center justify-center gap-2 text-xs">
-              <Users className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-slate-300">
-                <span className="font-semibold text-emerald-400">{userCount.toLocaleString()}+</span> companies onboarded in the last 30 days
-              </span>
-            </div>
-            
-            {/* Enhanced Progress Bar */}
-            <div className="relative mb-2">
-              <div className="h-1.5 bg-slate-800/50 rounded-full overflow-hidden backdrop-blur-sm">
-                <div 
-                  className="h-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 transition-all duration-700 ease-out shadow-lg shadow-emerald-500/40 relative overflow-hidden"
-                  style={{ width: `${progress}%` }}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+              <div className="hidden sm:flex items-center gap-6">
+                <div className="text-right">
+                  <div className="text-sm font-medium text-slate-900 dark:text-white">
+                    {Math.round(progress)}% Complete
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Step {currentStep} of {STEPS.length}
+                  </div>
                 </div>
               </div>
             </div>
-            
-            {/* Enhanced Step Indicators */}
-            <div className="flex justify-between relative">
-              <div className="absolute top-5 left-0 right-0 h-px bg-slate-800/50 -z-10 hidden sm:block" />
-              <div 
-                className="absolute top-5 left-0 h-px bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 transition-all duration-700 -z-10 hidden sm:block"
-                style={{ width: `${((currentStep - 1) / (STEPS.length - 1)) * 100}%` }}
-              />
-              
-              {STEPS.map((step) => {
+          </div>
+        </header>
+
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
+          {/* Modern Step Progress Indicator */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              {STEPS.map((step, index) => {
                 const StepIcon = step.icon;
                 const isCompleted = completedSteps.includes(step.id);
                 const isCurrent = step.id === currentStep;
                 const isPast = step.id < currentStep;
+                const stepNumber = step.id;
                 
                 return (
-                  <div 
-                    key={step.id} 
-                    className="flex flex-col items-center relative z-10 bg-transparent px-0.5 sm:px-1 flex-1 max-w-[100px] sm:max-w-none cursor-pointer group"
-                    onClick={() => {
-                      if (isPast || isCompleted) {
-                        setCurrentStep(step.id);
-                      }
-                    }}
-                  >
-                    <div className={`relative mb-1.5 transition-all duration-300 ${
-                      isCurrent ? 'scale-110' : 'group-hover:scale-105'
-                    }`}>
-                      <div className={`h-10 w-10 sm:h-12 sm:w-12 rounded-full border-2 flex items-center justify-center transition-all duration-300 shadow-lg ${
-                        isCompleted
-                          ? 'bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 border-emerald-400 shadow-emerald-500/40'
-                          : isCurrent
-                          ? 'bg-slate-800/90 border-emerald-400 border-2 backdrop-blur-sm shadow-emerald-500/30'
-                          : isPast
-                          ? 'bg-gradient-to-br from-emerald-500/80 via-teal-500/80 to-cyan-500/80 border-emerald-400/50'
-                          : 'bg-slate-800/50 border-slate-700/50 backdrop-blur-sm'
-                      }`}>
+                  <div key={step.id} className="flex items-center flex-1">
+                    <div className="flex flex-col items-center flex-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isPast || isCompleted) {
+                            setCurrentStep(step.id);
+                          }
+                        }}
+                        disabled={!isPast && !isCompleted}
+                        className={`relative flex items-center justify-center w-10 h-10 rounded-lg border-2 transition-all duration-200 ${
+                          isCompleted
+                            ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-sm'
+                            : isCurrent
+                            ? 'bg-white dark:bg-slate-800 border-slate-900 dark:border-slate-200 text-slate-900 dark:text-white shadow-md ring-2 ring-slate-900/10 dark:ring-white/10'
+                            : 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'
+                        } ${(isPast || isCompleted) ? 'cursor-pointer hover:scale-105' : 'cursor-not-allowed'}`}
+                        aria-label={`Step ${stepNumber}: ${step.title}`}
+                      >
                         {isCompleted ? (
-                          <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+                          <CheckCircle2 className="h-5 w-5" />
                         ) : (
-                          <StepIcon className={`h-5 w-5 sm:h-6 sm:w-6 ${
-                            isCurrent ? 'text-emerald-400' : isPast ? 'text-white' : 'text-slate-500'
-                          }`} />
+                          <span className="text-sm font-semibold">{stepNumber}</span>
                         )}
+                        {isCurrent && (
+                          <div className="absolute -inset-1 rounded-lg bg-slate-900/5 dark:bg-white/5 animate-pulse" />
+                        )}
+                      </button>
+                      <div className="mt-2 text-center max-w-[80px] sm:max-w-none">
+                        <div className={`text-xs font-medium transition-colors ${
+                          isCurrent 
+                            ? 'text-slate-900 dark:text-white' 
+                            : isCompleted 
+                            ? 'text-slate-700 dark:text-slate-300' 
+                            : 'text-slate-400 dark:text-slate-600'
+                        }`}>
+                          {step.title}
+                        </div>
                       </div>
-                      {isCurrent && (
-                        <div className="absolute inset-0 rounded-full border-2 border-emerald-400 animate-ping opacity-30" />
-                      )}
                     </div>
-                    
-                    <div className="text-center w-full">
-                      <div className={`text-xs sm:text-sm font-semibold transition-all leading-tight ${
-                        isCurrent ? 'text-white' : isPast ? 'text-slate-300' : 'text-slate-500'
-                      }`}>
-                        {step.title.split(' ')[0]}
-                      </div>
-                    </div>
+                    {index < STEPS.length - 1 && (
+                      <div className={`flex-1 h-0.5 mx-2 transition-colors ${
+                        isPast || isCompleted
+                          ? 'bg-slate-900 dark:bg-white'
+                          : 'bg-slate-200 dark:bg-slate-700'
+                      }`} />
+                    )}
                   </div>
                 );
               })}
             </div>
+            
+            {/* Subtle progress bar */}
+            <div className="h-1 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-slate-900 dark:bg-white transition-all duration-500 ease-out"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
 
           {/* Main Content Area */}
-          <div className="grid lg:grid-cols-3 gap-2 sm:gap-3 lg:gap-4 mt-2">
+          <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
             {/* Left Column - Form */}
             <div className="lg:col-span-2">
-              <Card className="border-slate-800/50 bg-slate-900/60 backdrop-blur-xl shadow-2xl flex flex-col transition-all duration-300 hover:shadow-emerald-500/20">
-                <CardHeader className="border-b border-slate-800/50 bg-gradient-to-r from-slate-800/40 to-slate-800/20 flex-shrink-0 py-3 sm:py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/30 transition-transform hover:scale-110 hover:rotate-3">
-                      <CurrentStepIcon className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+              <Card 
+                className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm"
+                role="region"
+                aria-labelledby="step-title"
+                aria-describedby="step-description"
+              >
+                <CardHeader className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 py-6">
+                  <div className="flex items-start gap-4">
+                    <div 
+                      className="h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700 flex-shrink-0"
+                      aria-hidden="true"
+                    >
+                      <CurrentStepIcon className="h-6 w-6 text-slate-700 dark:text-slate-300" />
                     </div>
-                    <div>
-                      <CardTitle className="text-lg sm:text-xl font-semibold text-white leading-tight">
+                    <div className="flex-1 min-w-0">
+                      <CardTitle 
+                        id="step-title"
+                        className="text-xl font-semibold text-slate-900 dark:text-white mb-1.5"
+                      >
                         {currentStepData?.title}
                       </CardTitle>
-                      <CardDescription className="text-xs sm:text-sm text-slate-400 mt-1 leading-tight">
+                      <CardDescription 
+                        id="step-description"
+                        className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed"
+                      >
                         {currentStepData?.description}
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="p-4 sm:p-6">
+                <CardContent className="p-6 sm:p-8">
                   {/* Step 1: Agency Essentials */}
                   {currentStep === 1 && (
                     <div className="animate-fade-in h-full flex flex-col space-y-4">
-                      <div className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-2 flex-shrink-0">
-                        {currentStepData?.businessContext}
+                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl p-5 mb-6">
+                        <div className="flex items-start gap-4">
+                          <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0 border border-blue-200 dark:border-blue-800">
+                            <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Agency Essentials</h4>
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-2">
+                              {currentStepData?.businessContext}
+                            </p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                              This information establishes your agency's identity in the system. The company name will appear on invoices, reports, and throughout your workspace. The domain identifier creates a unique workspace address that cannot be changed after setup.
+                            </p>
+                          </div>
+                        </div>
                       </div>
 
                       <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 auto-rows-min">
                         <div className="space-y-2 group sm:col-span-2">
-                          <Label htmlFor="agencyName" className="text-xs sm:text-sm font-medium text-slate-300 transition-colors group-focus-within:text-emerald-400">
-                            Legal Company Name <span className="text-emerald-400">*</span>
-                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor="agencyName" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Legal Company Name <span className="text-red-500">*</span>
+                            </Label>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button type="button" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                                    <HelpCircle className="h-4 w-4" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-xs">
+                                  <p className="text-sm">
+                                    Enter your company's legal registered name as it appears on official documents. This name will be used on invoices, contracts, and legal documents generated by the system.
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
                           <Input
                             id="agencyName"
                             placeholder="Enter company name"
                             value={formData.agencyName}
                             onChange={(e) => handleAgencyNameChange(e.target.value)}
-                            className={`h-11 sm:h-12 text-sm bg-slate-800/60 border-slate-700/50 text-white placeholder:text-slate-500 transition-all duration-200 ${
+                            className={`h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all duration-200 ${
                               errors.agencyName 
-                                ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20 shake' 
-                                : 'focus:border-emerald-500/50 focus:ring-emerald-500/20 hover:border-slate-600'
-                            } ${formData.agencyName && !errors.agencyName ? 'border-emerald-500/40' : ''}`}
+                                ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' 
+                                : 'focus:border-slate-900 dark:focus:border-slate-200 focus:ring-slate-900/10 dark:focus:ring-slate-200/10 hover:border-slate-400 dark:hover:border-slate-600'
+                            } ${formData.agencyName && !errors.agencyName ? 'border-green-500/50' : ''}`}
                           />
                           {errors.agencyName && (
-                            <p className="text-xs text-red-400 mt-1 flex items-center gap-1">
-                              <span>⚠</span>
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-2 flex items-center gap-1.5">
+                              <span className="text-red-500">•</span>
                               <span>{errors.agencyName}</span>
                             </p>
                           )}
                           {formData.agencyName && !errors.agencyName && (
-                            <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1 animate-fade-in">
-                              <CheckCircle2 className="h-3 w-3 animate-scale-in" />
-                              Valid company name
+                            <p className="text-sm text-green-600 dark:text-green-400 mt-2 flex items-center gap-1.5">
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span>Valid company name</span>
                             </p>
                           )}
                         </div>
 
                         <div className="space-y-2 group sm:col-span-2">
-                          <Label htmlFor="domain" className="text-xs sm:text-sm font-medium text-slate-300 transition-colors group-focus-within:text-emerald-400">
-                            Domain Identifier <span className="text-emerald-400">*</span>
-                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor="domain" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Domain Identifier <span className="text-red-500">*</span>
+                            </Label>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button type="button" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                                    <HelpCircle className="h-4 w-4" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-xs">
+                                  <div className="space-y-2 text-sm">
+                                    <p className="font-semibold">What is a domain identifier?</p>
+                                    <p>The domain identifier creates a unique workspace address for your agency (e.g., yourcompany.buildflow.app). It's used for:</p>
+                                    <ul className="list-disc list-inside space-y-1 ml-2">
+                                      <li>System routing and database identification</li>
+                                      <li>Secure data isolation between agencies</li>
+                                      <li>Workspace access URLs</li>
+                                    </ul>
+                                    <p className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                                      <strong>Important:</strong> This cannot be changed after setup. Choose carefully and ensure it's unique.
+                                    </p>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
                           <DomainChecker domain={formData.domain} onAvailable={handleDomainAvailable} />
                           <div className="flex items-center gap-2">
                             <div className="relative flex-1">
@@ -808,25 +867,25 @@ export default function AgencyOnboardingWizard() {
                                   setFormData(prev => ({ ...prev, domain: e.target.value }));
                                   setDomainAvailable(null);
                                 }}
-                                className={`h-11 sm:h-12 text-sm bg-slate-800/60 border-slate-700/50 text-white placeholder:text-slate-500 font-mono transition-all duration-200 ${
+                                className={`h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-mono transition-all duration-200 ${
                                   errors.domain 
-                                    ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20 shake' 
+                                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' 
                                     : domainAvailable === true
-                                    ? 'border-emerald-500/50 focus:border-emerald-500 focus:ring-emerald-500/20'
-                                    : 'focus:border-emerald-500/50 focus:ring-emerald-500/20 hover:border-slate-600'
+                                    ? 'border-green-500/50 focus:border-green-500 focus:ring-green-500/20'
+                                    : 'focus:border-slate-900 dark:focus:border-slate-200 focus:ring-slate-900/10 dark:focus:ring-slate-200/10 hover:border-slate-400 dark:hover:border-slate-600'
                                 }`}
                               />
                               {formData.domain && domainAvailable === true && !errors.domain && (
-                                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-400 animate-scale-in" />
+                                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600 dark:text-green-400" />
                               )}
                               {formData.domain && domainAvailable === false && (
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-red-400">✕</span>
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-red-500">✕</span>
                               )}
                             </div>
-                            <span className="text-xs sm:text-sm text-slate-400 whitespace-nowrap font-mono px-3 py-3 bg-slate-800/40 border border-slate-700/50 rounded-md">.buildflow.app</span>
+                            <span className="text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap font-mono px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">.buildflow.app</span>
                           </div>
                           {errors.domain && (
-                            <p className="text-xs text-red-400 mt-1">{errors.domain}</p>
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-2">{errors.domain}</p>
                           )}
                           {!errors.domain && suggestedDomain && suggestedDomain !== formData.domain && (
                             <button
@@ -835,24 +894,25 @@ export default function AgencyOnboardingWizard() {
                                 setFormData(prev => ({ ...prev, domain: suggestedDomain }));
                                 setDomainAvailable(null);
                               }}
-                              className="mt-1 inline-flex items-center gap-1 text-[11px] text-emerald-300 hover:text-emerald-200 underline-offset-2 hover:underline"
+                              className="mt-2 inline-flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline-offset-2 hover:underline transition-colors"
                             >
-                              <Sparkles className="h-3 w-3" />
+                              <Sparkles className="h-4 w-4" />
                               <span>
-                                Use suggested ID:{' '}
-                                <span className="font-mono">{suggestedDomain}</span>
+                                Use suggested: <span className="font-mono font-medium">{suggestedDomain}</span>
                               </span>
                             </button>
                           )}
                           {formData.domain && domainAvailable === true && !errors.domain && (
-                            <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-                              <CheckCircle2 className="h-3 w-3" />
-                              Domain available
+                            <p className="text-sm text-green-600 dark:text-green-400 mt-2 flex items-center gap-1.5">
+                              <CheckCircle2 className="h-4 w-4" />
+                              <span>Domain available</span>
                             </p>
                           )}
-                          <p className="text-xs text-slate-500 mt-1">
-                            Used for system routing and database identification. Cannot be changed after setup.
-                          </p>
+                          <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg p-4 mt-4">
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                              <strong className="text-slate-900 dark:text-white">Security & Data Isolation:</strong> Each agency has a completely isolated database. Your data is encrypted and separated from other agencies, ensuring maximum security and compliance with data protection regulations.
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -860,18 +920,56 @@ export default function AgencyOnboardingWizard() {
 
                   {/* Step 2: Profile & Focus */}
                   {currentStep === 2 && (
-                    <div className="animate-fade-in h-full flex flex-col space-y-4">
-                      <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-2 flex-shrink-0">
-                        {currentStepData?.businessContext}
-                      </p>
+                    <div className="animate-fade-in h-full flex flex-col space-y-6">
+                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl p-5 mb-2">
+                        <div className="flex items-start gap-4">
+                          <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0 border border-blue-200 dark:border-blue-800">
+                            <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Profile & Focus</h4>
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-2">
+                              {currentStepData?.businessContext}
+                            </p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                              Your industry selection helps us customize default workflows, reporting templates, and feature recommendations. The positioning statement helps tailor dashboards and insights to your specific business model.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
 
                       <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 auto-rows-min">
                         {/* Industry Selection - Clickable Cards */}
-                        <div className="space-y-2 group sm:col-span-2">
-                          <Label className="text-xs sm:text-sm font-medium text-slate-300 transition-colors">
-                            Industry <span className="text-emerald-400">*</span>
-                          </Label>
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="space-y-3 group sm:col-span-2">
+                          <div className="flex items-center gap-2">
+                            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Industry <span className="text-red-500">*</span>
+                            </Label>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button type="button" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                                    <HelpCircle className="h-4 w-4" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-xs">
+                                  <div className="space-y-2 text-xs">
+                                    <p className="font-semibold">How industry selection affects your workspace:</p>
+                                    <ul className="list-disc list-inside space-y-1 ml-2">
+                                      <li>Pre-configured default workflows and templates</li>
+                                      <li>Industry-specific reporting and KPIs</li>
+                                      <li>Recommended features and modules</li>
+                                      <li>Compliance and regulatory defaults</li>
+                                    </ul>
+                                    <p className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                                      You can customize all settings later, but this gives you a head start with best practices for your industry.
+                                    </p>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {INDUSTRIES.map((industry) => {
                               const IndustryIcon = industry.icon;
                               const isSelected = formData.industry === industry.value;
@@ -880,17 +978,21 @@ export default function AgencyOnboardingWizard() {
                                   key={industry.value}
                                   type="button"
                                   onClick={() => setFormData(prev => ({ ...prev, industry: industry.value }))}
-                                  className={`p-3 rounded-lg border-2 transition-all duration-200 flex flex-col items-center gap-2 group/btn ${
+                                  className={`p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2.5 group/btn ${
                                     isSelected
-                                      ? 'border-emerald-500 bg-emerald-500/20 shadow-lg shadow-emerald-500/20 scale-105'
-                                      : 'border-slate-700/50 bg-slate-800/40 hover:border-emerald-500/50 hover:bg-slate-800/60 hover:scale-102'
+                                      ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md'
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
                                   }`}
                                 >
-                                  <IndustryIcon className={`h-5 w-5 ${
-                                    isSelected ? 'text-emerald-400' : 'text-slate-400 group-hover/btn:text-emerald-400'
+                                  <IndustryIcon className={`h-6 w-6 ${
+                                    isSelected 
+                                      ? 'text-white dark:text-slate-900' 
+                                      : 'text-slate-500 dark:text-slate-400 group-hover/btn:text-slate-700 dark:group-hover/btn:text-slate-300'
                                   }`} />
-                                  <span className={`text-xs font-medium ${
-                                    isSelected ? 'text-emerald-400' : 'text-slate-300'
+                                  <span className={`text-xs font-medium text-center ${
+                                    isSelected 
+                                      ? 'text-white dark:text-slate-900' 
+                                      : 'text-slate-700 dark:text-slate-300'
                                   }`}>
                                     {industry.label}
                                   </span>
@@ -899,16 +1001,16 @@ export default function AgencyOnboardingWizard() {
                             })}
                           </div>
                           {errors.industry && (
-                            <p className="text-xs text-red-400 mt-1">{errors.industry}</p>
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-2">{errors.industry}</p>
                           )}
                         </div>
 
                         {/* Company Size Selection - Clickable Cards */}
-                        <div className="space-y-2 group sm:col-span-2">
-                          <Label className="text-xs sm:text-sm font-medium text-slate-300 transition-colors">
-                            Organization Size <span className="text-emerald-400">*</span>
+                        <div className="space-y-3 group sm:col-span-2">
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Organization Size <span className="text-red-500">*</span>
                           </Label>
-                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                             {COMPANY_SIZES.map((size) => {
                               const SizeIcon = size.icon;
                               const isSelected = formData.companySize === size.value;
@@ -917,17 +1019,21 @@ export default function AgencyOnboardingWizard() {
                                   key={size.value}
                                   type="button"
                                   onClick={() => setFormData(prev => ({ ...prev, companySize: size.value }))}
-                                  className={`p-3 rounded-lg border-2 transition-all duration-200 flex flex-col items-center gap-2 group/btn ${
+                                  className={`p-4 rounded-xl border-2 transition-all duration-200 flex flex-col items-center gap-2.5 group/btn ${
                                     isSelected
-                                      ? 'border-emerald-500 bg-emerald-500/20 shadow-lg shadow-emerald-500/20 scale-105'
-                                      : 'border-slate-700/50 bg-slate-800/40 hover:border-emerald-500/50 hover:bg-slate-800/60 hover:scale-102'
+                                      ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-md'
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
                                   }`}
                                 >
-                                  <SizeIcon className={`h-5 w-5 ${
-                                    isSelected ? 'text-emerald-400' : 'text-slate-400 group-hover/btn:text-emerald-400'
+                                  <SizeIcon className={`h-6 w-6 ${
+                                    isSelected 
+                                      ? 'text-white dark:text-slate-900' 
+                                      : 'text-slate-500 dark:text-slate-400 group-hover/btn:text-slate-700 dark:group-hover/btn:text-slate-300'
                                   }`} />
                                   <span className={`text-xs font-medium text-center ${
-                                    isSelected ? 'text-emerald-400' : 'text-slate-300'
+                                    isSelected 
+                                      ? 'text-white dark:text-slate-900' 
+                                      : 'text-slate-700 dark:text-slate-300'
                                   }`}>
                                     {size.label}
                                   </span>
@@ -936,26 +1042,50 @@ export default function AgencyOnboardingWizard() {
                             })}
                           </div>
                           {errors.companySize && (
-                            <p className="text-xs text-red-400 mt-1">{errors.companySize}</p>
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-2">{errors.companySize}</p>
                           )}
                         </div>
 
                         {/* Positioning */}
                         <div className="space-y-2 group sm:col-span-2">
-                          <Label htmlFor="positioning" className="text-xs sm:text-sm font-medium text-slate-300 transition-colors group-focus-within:text-emerald-400">
-                            How would you describe your agency? <span className="text-slate-500">(optional)</span>
-                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor="positioning" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              How would you describe your agency? <span className="text-slate-500 dark:text-slate-400 font-normal">(optional)</span>
+                            </Label>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button type="button" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                                    <HelpCircle className="h-4 w-4" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-xs">
+                                  <div className="space-y-2 text-xs">
+                                    <p className="font-semibold">Positioning Statement Examples:</p>
+                                    <ul className="list-disc list-inside space-y-1 ml-2">
+                                      <li>"Design-first construction consultancy focused on residential projects"</li>
+                                      <li>"Full-service engineering firm specializing in sustainable infrastructure"</li>
+                                      <li>"Boutique architecture studio with expertise in commercial spaces"</li>
+                                    </ul>
+                                    <p className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                                      This helps us customize dashboards, recommendations, and feature highlights to match your business focus.
+                                    </p>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
                           <div className="relative">
-                            <Globe className="absolute left-3 top-3 h-4 w-4 text-slate-500 transition-colors group-focus-within:text-emerald-400" />
+                            <Globe className="absolute left-3 top-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
                             <Input
                               id="positioning"
                               placeholder="e.g. Design-first construction consultancy focused on residential projects"
                               value={formData.positioning}
                               onChange={(e) => setFormData(prev => ({ ...prev, positioning: e.target.value }))}
-                              className="pl-10 h-11 sm:h-12 text-sm bg-slate-800/60 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-all duration-200 hover:border-slate-600"
+                              className="pl-10 h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-slate-900 dark:focus:border-slate-200 focus:ring-slate-900/10 dark:focus:ring-slate-200/10 transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-600"
                             />
                           </div>
-                          <p className="text-[11px] text-slate-500">
+                          <p className="text-sm text-slate-600 dark:text-slate-400">
                             This helps us tailor dashboards and recommendations. You can refine it later.
                           </p>
                         </div>
@@ -965,34 +1095,47 @@ export default function AgencyOnboardingWizard() {
 
                   {/* Step 3: Contact & Location */}
                   {currentStep === 3 && (
-                    <div className="animate-fade-in h-full flex flex-col space-y-4">
-                      <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-2 flex-shrink-0">
-                        {currentStepData?.businessContext}
-                      </p>
+                    <div className="animate-fade-in h-full flex flex-col space-y-6">
+                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl p-5 mb-2">
+                        <div className="flex items-start gap-4">
+                          <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0 border border-blue-200 dark:border-blue-800">
+                            <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Contact Details</h4>
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-2">
+                              {currentStepData?.businessContext}
+                            </p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                              This information appears on invoices, quotes, and official documents. You can update these details at any time from your workspace settings. All information is encrypted and stored securely in compliance with data protection regulations.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
 
                       <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 auto-rows-min">
                         <div className="space-y-2 group sm:col-span-2">
-                          <Label htmlFor="address" className="text-xs sm:text-sm font-medium text-slate-300 transition-colors group-focus-within:text-emerald-400">
-                            Business Address <span className="text-slate-500">(optional)</span>
+                          <Label htmlFor="address" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Business Address <span className="text-slate-500 dark:text-slate-400 font-normal">(optional)</span>
                           </Label>
                           <div className="relative">
-                            <MapPin className="absolute left-3 top-3 h-4 w-4 text-slate-500 transition-colors group-focus-within:text-emerald-400" />
+                            <MapPin className="absolute left-3 top-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
                             <Input
                               id="address"
                               placeholder="Street, city, country"
                               value={formData.address}
                               onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
-                              className="pl-10 h-11 sm:h-12 text-sm bg-slate-800/60 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-all duration-200 hover:border-slate-600"
+                              className="pl-10 h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-slate-900 dark:focus:border-slate-200 focus:ring-slate-900/10 dark:focus:ring-slate-200/10 transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-600"
                             />
                           </div>
                         </div>
 
                         <div className="space-y-2 group sm:col-span-2">
-                          <Label htmlFor="phone" className="text-xs sm:text-sm font-medium text-slate-300 transition-colors group-focus-within:text-emerald-400">
-                            Contact Number <span className="text-slate-500">(optional)</span>
+                          <Label htmlFor="phone" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Contact Number <span className="text-slate-500 dark:text-slate-400 font-normal">(optional)</span>
                           </Label>
                           <div className="relative">
-                            <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-500 transition-colors group-focus-within:text-emerald-400" />
+                            <Phone className="absolute left-3 top-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
                             <Input
                               id="phone"
                               type="tel"
@@ -1008,9 +1151,9 @@ export default function AgencyOnboardingWizard() {
                                   });
                                 }
                               }}
-                              className={`pl-10 h-11 sm:h-12 text-sm bg-slate-800/60 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-all duration-200 hover:border-slate-600 ${
+                              className={`pl-10 h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-slate-900 dark:focus:border-slate-200 focus:ring-slate-900/10 dark:focus:ring-slate-200/10 transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-600 ${
                                 errors.phone 
-                                  ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20 shake' 
+                                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' 
                                   : ''
                               }`}
                             />
@@ -1033,10 +1176,10 @@ export default function AgencyOnboardingWizard() {
                                     };
                                   });
                                 }}
-                                className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${
+                                className={`px-3 py-1 rounded-lg text-xs border transition-colors ${
                                   (formData.phone || '').startsWith(code)
-                                    ? 'border-emerald-500 text-emerald-300 bg-emerald-500/10'
-                                    : 'border-slate-700/70 text-slate-300 hover:border-emerald-500/60 hover:bg-slate-800/70'
+                                    ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white text-white dark:text-slate-900'
+                                    : 'border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
                                 }`}
                               >
                                 {code}
@@ -1044,14 +1187,16 @@ export default function AgencyOnboardingWizard() {
                             ))}
                           </div>
                           {errors.phone && (
-                            <p className="text-xs text-red-400 mt-1 flex items-center gap-1 animate-fade-in">
-                              <span>⚠</span>
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-2 flex items-center gap-1.5">
+                              <span>•</span>
                               <span>{errors.phone}</span>
                             </p>
                           )}
-                          <p className="text-[11px] text-slate-500 mt-1">
-                            We recommend adding a number so clients and your team can reach you quickly.
-                          </p>
+                          <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg p-4 mt-4">
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                              <strong className="text-slate-900 dark:text-white">Privacy & Data Usage:</strong> Your contact information is used solely for business communications and document generation. We never share your data with third parties. You can update or remove this information at any time from your workspace settings.
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1059,60 +1204,73 @@ export default function AgencyOnboardingWizard() {
 
                   {/* Step 4: Administrative Access */}
                   {currentStep === 4 && (
-                    <div className="animate-fade-in h-full flex flex-col space-y-4">
-                      <p className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-2 flex-shrink-0">
-                        {currentStepData?.businessContext}
-                      </p>
+                    <div className="animate-fade-in h-full flex flex-col space-y-6">
+                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl p-5 mb-2">
+                        <div className="flex items-start gap-4">
+                          <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0 border border-blue-200 dark:border-blue-800">
+                            <Shield className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Administrative Access</h4>
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-2">
+                              {currentStepData?.businessContext}
+                            </p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                              This account will have full system access to manage users, permissions, billing, and all workspace settings. Choose a strong password and keep your credentials secure. You can enable multi-factor authentication after setup.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
 
                       <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-4 auto-rows-min">
                         <div className="space-y-2 group sm:col-span-2">
-                          <Label htmlFor="adminName" className="text-xs sm:text-sm font-medium text-slate-300 transition-colors group-focus-within:text-emerald-400">
-                            Administrator Name <span className="text-emerald-400">*</span>
+                          <Label htmlFor="adminName" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Administrator Name <span className="text-red-500">*</span>
                           </Label>
                           <div className="relative">
-                            <User className="absolute left-3 top-3 h-4 w-4 text-slate-500 transition-colors group-focus-within:text-emerald-400" />
+                            <User className="absolute left-3 top-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
                             <Input
                               id="adminName"
                               placeholder="Full legal name"
                               value={formData.adminName}
                               onChange={(e) => setFormData(prev => ({ ...prev, adminName: e.target.value }))}
-                              className={`pl-10 h-11 sm:h-12 text-sm bg-slate-800/60 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-all duration-200 hover:border-slate-600 ${
+                              className={`pl-10 h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-slate-900 dark:focus:border-slate-200 focus:ring-slate-900/10 dark:focus:ring-slate-200/10 transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-600 ${
                                 errors.adminName 
-                                  ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20 shake' 
+                                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' 
                                   : ''
                               }`}
                             />
                           </div>
                           {errors.adminName && (
-                            <p className="text-xs text-red-400 mt-1 animate-fade-in">{errors.adminName}</p>
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-2">{errors.adminName}</p>
                           )}
                         </div>
 
                         <div className="space-y-2 group sm:col-span-2">
-                          <Label htmlFor="adminEmail" className="text-xs sm:text-sm font-medium text-slate-300 transition-colors group-focus-within:text-emerald-400">
-                            Email Address <span className="text-emerald-400">*</span>
+                          <Label htmlFor="adminEmail" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Email Address <span className="text-red-500">*</span>
                           </Label>
                           <div className="relative">
-                            <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-500 transition-colors group-focus-within:text-emerald-400" />
+                            <Mail className="absolute left-3 top-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
                             <Input
                               id="adminEmail"
                               type="email"
                               placeholder="admin@company.com"
                               value={formData.adminEmail}
                               onChange={(e) => setFormData(prev => ({ ...prev, adminEmail: e.target.value }))}
-                              className={`pl-10 h-11 sm:h-12 text-sm bg-slate-800/60 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-all duration-200 hover:border-slate-600 ${
+                              className={`pl-10 h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-slate-900 dark:focus:border-slate-200 focus:ring-slate-900/10 dark:focus:ring-slate-200/10 transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-600 ${
                                 errors.adminEmail 
-                                  ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20 shake' 
+                                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' 
                                   : ''
                               }`}
                             />
                           </div>
                           {errors.adminEmail && (
-                            <p className="text-xs text-red-400 mt-1 animate-fade-in">{errors.adminEmail}</p>
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-2">{errors.adminEmail}</p>
                           )}
                           {!errors.adminEmail && suggestedAdminEmail && (
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
-                              <span>Suggested:</span>
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                              <span className="text-slate-600 dark:text-slate-400">Suggested:</span>
                               <button
                                 type="button"
                                 onClick={() =>
@@ -1121,7 +1279,7 @@ export default function AgencyOnboardingWizard() {
                                     adminEmail: suggestedAdminEmail,
                                   }))
                                 }
-                                className="px-2 py-0.5 rounded-full border border-emerald-500/70 text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors font-mono"
+                                className="px-3 py-1 rounded-lg border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-950/50 transition-colors font-mono text-xs"
                               >
                                 {suggestedAdminEmail}
                               </button>
@@ -1129,59 +1287,56 @@ export default function AgencyOnboardingWizard() {
                           )}
                         </div>
 
-                        <div className="grid sm:grid-cols-2 gap-4">
+                        <div className="grid sm:grid-cols-2 gap-6">
                           <div className="space-y-2 group">
-                            <Label htmlFor="adminPassword" className="text-xs sm:text-sm font-medium text-slate-300 transition-colors group-focus-within:text-emerald-400">
-                              Password <span className="text-emerald-400">*</span>
+                            <Label htmlFor="adminPassword" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Password <span className="text-red-500">*</span>
                             </Label>
                             <div className="relative">
-                              <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500 transition-colors group-focus-within:text-emerald-400" />
+                              <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
                               <Input
                                 id="adminPassword"
                                 type="password"
                                 placeholder="Min 8 characters"
                                 value={formData.adminPassword}
                                 onChange={(e) => setFormData(prev => ({ ...prev, adminPassword: e.target.value }))}
-                                className={`pl-10 h-11 sm:h-12 text-sm bg-slate-800/60 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-all duration-200 hover:border-slate-600 ${
+                                className={`pl-10 h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-slate-900 dark:focus:border-slate-200 focus:ring-slate-900/10 dark:focus:ring-slate-200/10 transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-600 ${
                                   errors.adminPassword 
-                                    ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20 shake' 
+                                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' 
                                     : ''
-                                } ${formData.adminPassword && formData.adminPassword.length >= 8 && !errors.adminPassword ? 'border-emerald-500/40' : ''}`}
+                                } ${formData.adminPassword && formData.adminPassword.length >= 8 && !errors.adminPassword ? 'border-green-500/50' : ''}`}
                               />
                               {formData.adminPassword && formData.adminPassword.length >= 8 && !errors.adminPassword && (
-                                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-400 animate-scale-in" />
+                                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600 dark:text-green-400" />
                               )}
                             </div>
                             {errors.adminPassword && (
-                              <p className="text-xs text-red-400 mt-1 animate-fade-in">{errors.adminPassword}</p>
+                              <p className="text-sm text-red-600 dark:text-red-400 mt-2">{errors.adminPassword}</p>
                             )}
                             {formData.adminPassword && (
-                              <div className="flex gap-1.5 mt-2">
+                              <div className="flex gap-1.5 mt-3">
                                 {[1, 2, 3, 4].map((level) => (
                                   <div
                                     key={level}
                                     className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
                                       formData.adminPassword.length >= level * 2
                                         ? formData.adminPassword.length >= 8
-                                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                                          ? 'bg-green-600 dark:bg-green-500'
                                           : 'bg-amber-500'
-                                        : 'bg-slate-700/50'
+                                        : 'bg-slate-200 dark:bg-slate-700'
                                     }`}
                                   />
                                 ))}
                               </div>
                             )}
-                          <p className="mt-1 text-[11px] text-slate-500">
-                            Your password is securely hashed and can be changed later from your account settings.
-                          </p>
                           </div>
 
                           <div className="space-y-2 group">
-                            <Label htmlFor="confirmPassword" className="text-xs sm:text-sm font-medium text-slate-300 transition-colors group-focus-within:text-emerald-400">
-                              Confirm Password <span className="text-emerald-400">*</span>
+                            <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Confirm Password <span className="text-red-500">*</span>
                             </Label>
                             <div className="relative">
-                              <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-500 transition-colors group-focus-within:text-emerald-400" />
+                              <Lock className="absolute left-3 top-3 h-4 w-4 text-slate-400 dark:text-slate-500" />
                               <Input
                                 id="confirmPassword"
                                 type="password"
@@ -1197,23 +1352,38 @@ export default function AgencyOnboardingWizard() {
                                     });
                                   }
                                 }}
-                                className={`pl-10 h-11 sm:h-12 text-sm bg-slate-800/60 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20 transition-all duration-200 hover:border-slate-600 ${
+                                className={`pl-10 h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:border-slate-900 dark:focus:border-slate-200 focus:ring-slate-900/10 dark:focus:ring-slate-200/10 transition-all duration-200 hover:border-slate-400 dark:hover:border-slate-600 ${
                                   errors.confirmPassword 
-                                    ? 'border-red-500/50 focus:border-red-500 focus:ring-red-500/20 shake' 
+                                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' 
                                     : ''
-                                } ${formData.confirmPassword && formData.adminPassword === formData.confirmPassword && !errors.confirmPassword ? 'border-emerald-500/40' : ''}`}
+                                } ${formData.confirmPassword && formData.adminPassword === formData.confirmPassword && !errors.confirmPassword ? 'border-green-500/50' : ''}`}
                               />
                               {formData.confirmPassword && formData.adminPassword === formData.confirmPassword && !errors.confirmPassword && (
-                                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-emerald-400 animate-scale-in" />
+                                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600 dark:text-green-400" />
                               )}
                             </div>
                             {errors.confirmPassword && (
-                              <p className="text-xs text-red-400 mt-1 flex items-center gap-1 animate-fade-in">
-                                <span>⚠</span>
+                              <p className="text-sm text-red-600 dark:text-red-400 mt-2 flex items-center gap-1.5">
+                                <span>•</span>
                                 <span>{errors.confirmPassword}</span>
                               </p>
                             )}
                           </div>
+                        </div>
+                        
+                        <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg p-4 mt-4">
+                          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-3">
+                            <strong className="text-slate-900 dark:text-white">Security Best Practices:</strong>
+                          </p>
+                          <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-1.5 list-disc list-inside ml-1">
+                            <li>Use a unique password not used elsewhere</li>
+                            <li>Include uppercase, lowercase, numbers, and special characters</li>
+                            <li>Minimum 8 characters (12+ recommended for better security)</li>
+                            <li>Consider using a password manager</li>
+                          </ul>
+                          <p className="text-sm text-slate-600 dark:text-slate-400 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+                            Your password is encrypted using industry-standard hashing. You can change it anytime from account settings, and we recommend enabling multi-factor authentication for additional security.
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -1221,18 +1391,31 @@ export default function AgencyOnboardingWizard() {
 
                   {/* Step 5: Workflows & Modules */}
                   {currentStep === 5 && (
-                    <div className="animate-fade-in h-full flex flex-col space-y-4">
-                      <div className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-2 flex-shrink-0">
-                        {currentStepData?.businessContext}
+                    <div className="animate-fade-in h-full flex flex-col space-y-6">
+                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl p-5 mb-2">
+                        <div className="flex items-start gap-4">
+                          <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0 border border-blue-200 dark:border-blue-800">
+                            <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Workflows & Modules</h4>
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-2">
+                              {currentStepData?.businessContext}
+                            </p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                              Select which modules you want to start with. All modules can be enabled or disabled at any time from your workspace settings. Your primary focus selection helps us prioritize features and shortcuts in your dashboard.
+                            </p>
+                          </div>
+                        </div>
                       </div>
 
                       <div className="flex-1 space-y-4">
                         {/* Primary focus */}
-                        <div className="space-y-2">
-                          <Label className="text-xs sm:text-sm font-medium text-slate-300 transition-colors">
+                        <div className="space-y-3">
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                             What do you want to get under control first?
                           </Label>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-2 gap-3">
                             {[
                               { id: 'projects', label: 'Projects & Jobs', description: 'Track jobs, timelines, and delivery.', icon: Briefcase },
                               { id: 'finance', label: 'Finance & Billing', description: 'Invoices, cash flow, and margins.', icon: BarChart3 },
@@ -1246,23 +1429,37 @@ export default function AgencyOnboardingWizard() {
                                   key={item.id}
                                   type="button"
                                   onClick={() => setFormData(prev => ({ ...prev, primaryFocus: item.id }))}
-                                  className={`p-3 rounded-lg border-2 text-left transition-all duration-200 flex flex-col gap-1 group/btn ${
+                                  className={`p-4 rounded-xl border-2 text-left transition-all duration-200 flex flex-col gap-2 group/btn ${
                                     isSelected
-                                      ? 'border-emerald-500 bg-emerald-500/15 shadow-lg shadow-emerald-500/20 scale-[1.02]'
-                                      : 'border-slate-700/60 bg-slate-800/40 hover:border-emerald-500/50 hover:bg-slate-800/60'
+                                      ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white shadow-md'
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
                                   }`}
                                 >
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-7 w-7 rounded-md bg-emerald-500/20 flex items-center justify-center border border-emerald-500/40">
-                                      <ItemIcon className="h-4 w-4 text-emerald-400" />
+                                  <div className="flex items-center gap-3">
+                                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center border flex-shrink-0 ${
+                                      isSelected
+                                        ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                                        : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
+                                    }`}>
+                                      <ItemIcon className={`h-5 w-5 ${
+                                        isSelected 
+                                          ? 'text-slate-900 dark:text-white' 
+                                          : 'text-slate-600 dark:text-slate-400'
+                                      }`} />
                                     </div>
-                                    <span className={`text-xs font-semibold ${
-                                      isSelected ? 'text-emerald-300' : 'text-slate-100'
+                                    <span className={`text-sm font-semibold ${
+                                      isSelected 
+                                        ? 'text-slate-900 dark:text-white' 
+                                        : 'text-slate-900 dark:text-slate-100'
                                     }`}>
                                       {item.label}
                                     </span>
                                   </div>
-                                  <span className="text-[11px] text-slate-400">
+                                  <span className={`text-xs ${
+                                    isSelected 
+                                      ? 'text-slate-700 dark:text-slate-300' 
+                                      : 'text-slate-600 dark:text-slate-400'
+                                  }`}>
                                     {item.description}
                                   </span>
                                 </button>
@@ -1275,11 +1472,11 @@ export default function AgencyOnboardingWizard() {
                         </div>
 
                         {/* GST preference */}
-                        <div className="space-y-2">
-                          <Label className="text-xs sm:text-sm font-medium text-slate-300 transition-colors">
+                        <div className="space-y-3">
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
                             Do you need GST compliance in this workspace?
                           </Label>
-                          <div className="flex flex-col sm:flex-row gap-2">
+                          <div className="grid sm:grid-cols-2 gap-3">
                             {[
                               { value: true, label: 'Yes, enable GST', description: 'Set up GST-led invoicing, reports, and checks.', icon: CheckCircle2 },
                               { value: false, label: 'Not right now', description: 'You can turn GST on later in settings.', icon: ToggleLeft },
@@ -1291,22 +1488,36 @@ export default function AgencyOnboardingWizard() {
                                   key={String(option.value)}
                                   type="button"
                                   onClick={() => setFormData(prev => ({ ...prev, enableGST: option.value }))}
-                                  className={`flex-1 p-3 rounded-lg border-2 transition-all duration-200 flex items-start gap-2 text-left group/btn ${
+                                  className={`p-4 rounded-xl border-2 transition-all duration-200 flex items-start gap-3 text-left group/btn ${
                                     isSelected
-                                      ? 'border-emerald-500 bg-emerald-500/15 shadow-lg shadow-emerald-500/20 scale-[1.02]'
-                                      : 'border-slate-700/60 bg-slate-800/40 hover:border-emerald-500/50 hover:bg-slate-800/60'
+                                      ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white shadow-md'
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
                                   }`}
                                 >
-                                  <div className="h-7 w-7 rounded-md bg-emerald-500/20 flex items-center justify-center border border-emerald-500/40 mt-0.5">
-                                    <Icon className="h-4 w-4 text-emerald-400" />
+                                  <div className={`h-9 w-9 rounded-lg flex items-center justify-center border flex-shrink-0 ${
+                                    isSelected
+                                      ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                                      : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
+                                  }`}>
+                                    <Icon className={`h-5 w-5 ${
+                                      isSelected 
+                                        ? 'text-slate-900 dark:text-white' 
+                                        : 'text-slate-600 dark:text-slate-400'
+                                    }`} />
                                   </div>
-                                  <div>
-                                    <div className={`text-xs font-semibold ${
-                                      isSelected ? 'text-emerald-300' : 'text-slate-100'
+                                  <div className="flex-1 min-w-0">
+                                    <div className={`text-sm font-semibold mb-1 ${
+                                      isSelected 
+                                        ? 'text-slate-900 dark:text-white' 
+                                        : 'text-slate-900 dark:text-slate-100'
                                     }`}>
                                       {option.label}
                                     </div>
-                                    <div className="text-[11px] text-slate-400">
+                                    <div className={`text-xs ${
+                                      isSelected 
+                                        ? 'text-slate-700 dark:text-slate-300' 
+                                        : 'text-slate-600 dark:text-slate-400'
+                                    }`}>
                                       {option.description}
                                     </div>
                                   </div>
@@ -1317,11 +1528,36 @@ export default function AgencyOnboardingWizard() {
                         </div>
 
                         {/* Modules toggles */}
-                        <div className="space-y-2">
-                          <Label className="text-xs sm:text-sm font-medium text-slate-300 transition-colors">
-                            Modules to start with <span className="text-slate-500">(you can change this any time)</span>
-                          </Label>
-                          <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Modules to start with <span className="text-slate-500 dark:text-slate-400 font-normal">(you can change this any time)</span>
+                            </Label>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button type="button" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+                                    <HelpCircle className="h-4 w-4" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-xs">
+                                  <div className="space-y-2 text-xs">
+                                    <p className="font-semibold">Module Capabilities:</p>
+                                    <ul className="list-disc list-inside space-y-1 ml-2">
+                                      <li><strong>Projects:</strong> Job tracking, task management, timelines, deliverables</li>
+                                      <li><strong>Finance:</strong> Invoicing, payments, cash flow, financial reporting</li>
+                                      <li><strong>People:</strong> Team management, roles, responsibilities, HR functions</li>
+                                      <li><strong>Reports:</strong> KPIs, dashboards, analytics, executive insights</li>
+                                    </ul>
+                                    <p className="pt-1 border-t border-slate-700/50">
+                                      Enable modules based on your immediate needs. You can activate additional modules later without any data loss.
+                                    </p>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
                             {[
                               { key: 'projects' as const, label: 'Projects', description: 'Jobs, tasks, and delivery.', icon: Briefcase },
                               { key: 'finance' as const, label: 'Finance', description: 'Invoices & payments.', icon: BarChart3 },
@@ -1343,39 +1579,47 @@ export default function AgencyOnboardingWizard() {
                                       },
                                     }))
                                   }
-                                  className={`p-3 rounded-lg border-2 transition-all duration-200 flex items-center justify-between gap-2 group/btn ${
+                                  className={`p-4 rounded-xl border-2 transition-all duration-200 flex items-center justify-between gap-3 group/btn ${
                                     enabled
-                                      ? 'border-emerald-500 bg-emerald-500/15 shadow-lg shadow-emerald-500/20'
-                                      : 'border-slate-700/60 bg-slate-800/40 hover:border-emerald-500/50 hover:bg-slate-800/60'
+                                      ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white shadow-md'
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
                                   }`}
                                 >
-                                  <div className="flex items-center gap-2">
-                                    <div className="h-7 w-7 rounded-md bg-emerald-500/15 flex items-center justify-center border border-emerald-500/40">
-                                      <Icon className="h-4 w-4 text-emerald-400" />
+                                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center border flex-shrink-0 ${
+                                      enabled
+                                        ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+                                        : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
+                                    }`}>
+                                      <Icon className={`h-5 w-5 ${
+                                        enabled 
+                                          ? 'text-slate-900 dark:text-white' 
+                                          : 'text-slate-600 dark:text-slate-400'
+                                      }`} />
                                     </div>
-                                    <div>
-                                      <div className={`text-xs font-semibold ${
-                                        enabled ? 'text-emerald-300' : 'text-slate-100'
+                                    <div className="flex-1 min-w-0">
+                                      <div className={`text-sm font-semibold mb-0.5 ${
+                                        enabled 
+                                          ? 'text-slate-900 dark:text-white' 
+                                          : 'text-slate-900 dark:text-slate-100'
                                       }`}>
                                         {mod.label}
                                       </div>
-                                      <div className="text-[11px] text-slate-400">
+                                      <div className={`text-xs ${
+                                        enabled 
+                                          ? 'text-slate-700 dark:text-slate-300' 
+                                          : 'text-slate-600 dark:text-slate-400'
+                                      }`}>
                                         {mod.description}
                                       </div>
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-1">
-                                    {enabled ? (
-                                      <>
-                                        <ToggleRight className="h-4 w-4 text-emerald-400" />
-                                        <span className="text-[11px] text-emerald-300">On</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <ToggleLeft className="h-4 w-4 text-slate-500" />
-                                        <span className="text-[11px] text-slate-400">Off</span>
-                                      </>
-                                    )}
+                                  <div className={`px-2.5 py-1 rounded-md text-xs font-medium flex-shrink-0 ${
+                                    enabled
+                                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
+                                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                                  }`}>
+                                    {enabled ? 'On' : 'Off'}
                                   </div>
                                 </button>
                               );
@@ -1388,21 +1632,22 @@ export default function AgencyOnboardingWizard() {
 
                   {/* Step 6: Service Tier Selection */}
                   {currentStep === 6 && (
-                    <div className="animate-fade-in h-full flex flex-col space-y-4">
-                      <div className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-2 flex-shrink-0">
-                        {currentStepData?.businessContext}
-                      </div>
-
-                      {/* Urgency Banner */}
-                      <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-red-500/20 border border-amber-500/30 rounded-lg p-3 flex items-center justify-between flex-shrink-0">
-                        <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4 text-amber-400" />
-                          <span className="text-xs text-slate-300">
-                            Onboarding bonus pricing ends in{' '}
-                            <span className="font-bold text-amber-400">{formatTime(timeRemaining)}</span>
-                          </span>
+                    <div className="animate-fade-in h-full flex flex-col space-y-6">
+                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl p-5 mb-2">
+                        <div className="flex items-start gap-4">
+                          <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0 border border-blue-200 dark:border-blue-800">
+                            <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Choose Your Service Tier</h4>
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-2">
+                              {currentStepData?.businessContext}
+                            </p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                              Select the tier that best matches your organization's scale and needs. You can upgrade or downgrade at any time from your workspace settings. All tiers include secure data storage, regular backups, and access to our support team.
+                            </p>
+                          </div>
                         </div>
-                        <Gift className="h-4 w-4 text-emerald-400" />
                       </div>
 
                       <RadioGroup
@@ -1417,49 +1662,73 @@ export default function AgencyOnboardingWizard() {
                           return (
                             <label key={plan.id} className="cursor-pointer group">
                               <RadioGroupItem value={plan.id} className="sr-only" />
-                              <Card className={`h-full transition-all duration-300 border-2 flex flex-col relative overflow-hidden ${
+                              <Card className={`h-full transition-all duration-200 border-2 flex flex-col relative overflow-hidden ${
                                 isSelected 
-                                  ? `border-emerald-500 bg-gradient-to-br from-slate-800/60 to-slate-800/40 shadow-2xl shadow-emerald-500/30 scale-[1.03] ring-2 ring-emerald-500/30` 
-                                  : 'border-slate-700/50 bg-slate-800/40 hover:border-emerald-500/50 hover:bg-slate-800/50 hover:shadow-xl hover:scale-[1.01]'
-                              } ${plan.popular ? 'border-emerald-500/40' : ''}`}>
+                                  ? `border-slate-900 dark:border-white bg-slate-900 dark:bg-white shadow-lg` 
+                                  : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-600 hover:shadow-md'
+                              } ${plan.popular ? 'ring-2 ring-blue-500/20 dark:ring-blue-400/20' : ''}`}>
                                 {plan.popular && (
-                                  <div className="absolute top-0 right-0 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg">
-                                    ⭐ MOST POPULAR
+                                  <div className="absolute top-0 right-0 bg-blue-600 dark:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-bl-xl">
+                                    Most Popular
                                   </div>
                                 )}
                                 {plan.savings && !plan.popular && (
-                                  <div className="absolute top-0 right-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg">
+                                  <div className="absolute top-0 right-0 bg-amber-600 dark:bg-amber-500 text-white text-xs font-semibold px-3 py-1.5 rounded-bl-xl">
                                     {plan.savings}
                                   </div>
                                 )}
-                                <CardContent className="p-4 flex flex-col flex-1">
-                                  <div className="mb-4">
-                                    <div className={`h-12 w-12 rounded-xl bg-gradient-to-br ${plan.color} flex items-center justify-center mb-3 shadow-lg transition-all duration-300 ${
-                                      isSelected ? 'scale-110 rotate-3' : 'group-hover:scale-105'
+                                <CardContent className="p-6 flex flex-col flex-1">
+                                  <div className="mb-5">
+                                    <div className={`h-12 w-12 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4 border border-slate-200 dark:border-slate-700 transition-all duration-200 ${
+                                      isSelected ? 'scale-105' : 'group-hover:scale-105'
                                     }`}>
-                                      <PlanIcon className="h-6 w-6 text-white" />
+                                      <PlanIcon className="h-6 w-6 text-slate-700 dark:text-slate-300" />
                                     </div>
-                                    <h4 className="font-bold text-lg text-white mb-1 transition-colors group-hover:text-emerald-400">{plan.name}</h4>
-                                    <p className="text-xs text-slate-400 leading-tight">{plan.description}</p>
+                                    <h4 className={`font-semibold text-lg mb-1.5 ${
+                                      isSelected 
+                                        ? 'text-slate-900 dark:text-white' 
+                                        : 'text-slate-900 dark:text-white'
+                                    }`}>{plan.name}</h4>
+                                    <p className={`text-sm ${
+                                      isSelected 
+                                        ? 'text-slate-600 dark:text-slate-400' 
+                                        : 'text-slate-600 dark:text-slate-400'
+                                    } leading-relaxed`}>{plan.description}</p>
                                   </div>
-                                  <div className="mb-4 pb-4 border-b border-slate-700/50">
+                                  <div className="mb-5 pb-5 border-b border-slate-200 dark:border-slate-700">
                                     <div className="flex items-baseline gap-1">
-                                      <span className="text-3xl font-bold text-white">${plan.price}</span>
-                                      <span className="text-sm text-slate-500">/{plan.period}</span>
+                                      <span className={`text-3xl font-bold ${
+                                        isSelected 
+                                          ? 'text-slate-900 dark:text-white' 
+                                          : 'text-slate-900 dark:text-white'
+                                      }`}>${plan.price}</span>
+                                      <span className={`text-sm ${
+                                        isSelected 
+                                          ? 'text-slate-600 dark:text-slate-400' 
+                                          : 'text-slate-500 dark:text-slate-500'
+                                      }`}>/{plan.period}</span>
                                     </div>
                                   </div>
-                                  <ul className="space-y-2 mb-4 flex-1">
+                                  <ul className="space-y-2.5 mb-5 flex-1">
                                     {plan.features.map((feature, idx) => (
-                                      <li key={idx} className="flex items-start gap-2 text-xs text-slate-300 leading-tight">
-                                        <Check className="h-4 w-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                                      <li key={idx} className={`flex items-start gap-2.5 text-sm leading-relaxed ${
+                                        isSelected 
+                                          ? 'text-slate-700 dark:text-slate-300' 
+                                          : 'text-slate-600 dark:text-slate-400'
+                                      }`}>
+                                        <Check className={`h-4 w-4 flex-shrink-0 mt-0.5 ${
+                                          isSelected 
+                                            ? 'text-slate-900 dark:text-white' 
+                                            : 'text-slate-500 dark:text-slate-500'
+                                        }`} />
                                         <span>{feature}</span>
                                       </li>
                                     ))}
                                   </ul>
                                   {isSelected && (
-                                    <div className="mt-auto pt-3 border-t border-slate-700/50 animate-fade-in">
-                                      <div className="flex items-center gap-2 text-emerald-400 font-semibold text-sm">
-                                        <CheckCircle2 className="h-4 w-4 animate-scale-in" />
+                                    <div className="mt-auto pt-4 border-t border-slate-200 dark:border-slate-700">
+                                      <div className="flex items-center gap-2 text-slate-900 dark:text-white font-medium text-sm">
+                                        <CheckCircle2 className="h-4 w-4" />
                                         <span>Selected</span>
                                       </div>
                                     </div>
@@ -1471,96 +1740,121 @@ export default function AgencyOnboardingWizard() {
                         })}
                       </RadioGroup>
                       {errors.subscriptionPlan && (
-                        <p className="text-sm text-red-400 text-center mt-2">{errors.subscriptionPlan}</p>
+                        <p className="text-sm text-red-600 dark:text-red-400 text-center mt-2">{errors.subscriptionPlan}</p>
                       )}
                     </div>
                   )}
 
                   {/* Step 7: Final Review & Activation */}
                   {currentStep === 7 && (
-                    <div className="animate-fade-in h-full flex flex-col space-y-4">
-                      <div className="text-xs sm:text-sm text-slate-400 leading-relaxed mb-2 flex-shrink-0">
-                        {currentStepData?.businessContext}
-                      </div>
-
-                      {/* Review Summary */}
-                      <div className="bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-cyan-500/20 border border-emerald-500/40 rounded-lg p-4 mb-4 backdrop-blur-sm transition-all duration-300 hover:border-emerald-500/60 hover:shadow-lg hover:shadow-emerald-500/20 flex-shrink-0">
-                        <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center flex-shrink-0 shadow-lg shadow-emerald-500/40">
-                            <CheckCircle2 className="h-5 w-5 text-white" />
+                    <div className="animate-fade-in h-full flex flex-col space-y-6">
+                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl p-5 mb-2">
+                        <div className="flex items-start gap-4">
+                          <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0 border border-blue-200 dark:border-blue-800">
+                            <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                           </div>
-                          <div>
-                            <p className="text-sm font-semibold text-white">Ready for Activation</p>
-                            <p className="text-xs text-slate-300">Review your information below</p>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Final Review & Activation</h4>
+                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-3">
+                              {currentStepData?.businessContext}
+                            </p>
+                            <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                              <p><strong className="text-slate-900 dark:text-white">What happens during activation:</strong></p>
+                              <ul className="list-disc list-inside space-y-1 ml-2">
+                                <li>Creation of a secure, isolated database for your agency</li>
+                                <li>Seeding of core tables for users, roles, and settings</li>
+                                <li>Application of audit and compliance defaults</li>
+                                <li>Setup of your administrative account</li>
+                              </ul>
+                              <p className="pt-2 border-t border-blue-200 dark:border-blue-800">
+                                <strong className="text-slate-900 dark:text-white">Expected setup time:</strong> Usually less than 10 seconds. You'll be redirected automatically when everything is ready.
+                              </p>
+                              <p>
+                                <strong className="text-slate-900 dark:text-white">Next steps:</strong> After activation, you'll be taken to your workspace setup page where you can complete additional configuration, add team members, and customize your workspace.
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
 
-                      <div className="space-y-3 flex-1 overflow-y-auto">
-                        <Card className="border border-slate-800/50 bg-slate-800/40 backdrop-blur-sm transition-all duration-300 hover:border-slate-700/50">
-                          <CardHeader className="bg-slate-800/50 border-b border-slate-800/50 py-2 px-4">
-                            <CardTitle className="text-xs sm:text-sm font-semibold text-white flex items-center gap-2">
-                              <Building2 className="h-4 w-4 text-emerald-400" />
+                      {/* Review Summary */}
+                      <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/50 rounded-xl p-5 mb-4">
+                        <div className="flex items-center gap-4">
+                          <div className="h-10 w-10 rounded-lg bg-green-100 dark:bg-green-900/50 flex items-center justify-center flex-shrink-0 border border-green-200 dark:border-green-800">
+                            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900 dark:text-white">Ready for Activation</p>
+                            <p className="text-sm text-slate-600 dark:text-slate-400">Review your information below</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4 flex-1 overflow-y-auto">
+                        <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                          <CardHeader className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 py-4 px-6">
+                            <CardTitle className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2.5">
+                              <Building2 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                               Company Foundation
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="p-4">
-                            <div className="grid sm:grid-cols-2 gap-3">
+                          <CardContent className="p-6">
+                            <div className="grid sm:grid-cols-2 gap-4">
                               <div>
-                                <div className="text-xs text-slate-500 mb-1.5">Company Name</div>
-                                <p className="text-sm font-medium text-white">{formData.agencyName}</p>
+                                <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Company Name</div>
+                                <p className="text-sm font-medium text-slate-900 dark:text-white">{formData.agencyName}</p>
                               </div>
                               <div>
-                                <div className="text-xs text-slate-500 mb-1.5">Domain</div>
-                                <p className="text-sm font-medium text-white font-mono">
+                                <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Domain</div>
+                                <p className="text-sm font-medium text-slate-900 dark:text-white font-mono">
                                   {formData.domain}.buildflow.app
                                 </p>
                               </div>
                               <div>
-                                <div className="text-xs text-slate-500 mb-1.5">Industry</div>
-                                <p className="text-sm font-medium text-white capitalize">{formData.industry}</p>
+                                <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Industry</div>
+                                <p className="text-sm font-medium text-slate-900 dark:text-white capitalize">{formData.industry}</p>
                               </div>
                               <div>
-                                <div className="text-xs text-slate-500 mb-1.5">Organization Size</div>
-                                <p className="text-sm font-medium text-white">{formData.companySize}</p>
+                                <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Organization Size</div>
+                                <p className="text-sm font-medium text-slate-900 dark:text-white">{formData.companySize}</p>
                               </div>
                             </div>
                           </CardContent>
                         </Card>
 
-                        <Card className="border border-slate-800/50 bg-slate-800/40 backdrop-blur-sm transition-all duration-300 hover:border-slate-700/50">
-                          <CardHeader className="bg-slate-800/50 border-b border-slate-800/50 py-2 px-4">
-                            <CardTitle className="text-xs sm:text-sm font-semibold text-white flex items-center gap-2">
-                              <Shield className="h-4 w-4 text-emerald-400" />
+                        <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                          <CardHeader className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 py-4 px-6">
+                            <CardTitle className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2.5">
+                              <Shield className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                               Administrative Access
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="p-4">
-                            <div className="grid sm:grid-cols-2 gap-3">
+                          <CardContent className="p-6">
+                            <div className="grid sm:grid-cols-2 gap-4">
                               <div>
-                                <div className="text-xs text-slate-500 mb-1.5">Administrator Name</div>
-                                <p className="text-sm font-medium text-white">{formData.adminName}</p>
+                                <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Administrator Name</div>
+                                <p className="text-sm font-medium text-slate-900 dark:text-white">{formData.adminName}</p>
                               </div>
                               <div>
-                                <div className="text-xs text-slate-500 mb-1.5">Email Address</div>
-                                <p className="text-sm font-medium text-white">{formData.adminEmail}</p>
+                                <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Email Address</div>
+                                <p className="text-sm font-medium text-slate-900 dark:text-white">{formData.adminEmail}</p>
                               </div>
                             </div>
                           </CardContent>
                         </Card>
 
                         {/* Workflows & Modules Summary */}
-                        <Card className="border border-slate-800/50 bg-slate-800/40 backdrop-blur-sm transition-all duration-300 hover:border-slate-700/50">
-                          <CardHeader className="bg-slate-800/50 border-b border-slate-800/50 py-2 px-4">
-                            <CardTitle className="text-xs sm:text-sm font-semibold text-white flex items-center gap-2">
-                              <SlidersHorizontal className="h-4 w-4 text-emerald-400" />
+                        <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                          <CardHeader className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 py-4 px-6">
+                            <CardTitle className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2.5">
+                              <SlidersHorizontal className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                               Workflows & Modules
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="p-4 space-y-3">
+                          <CardContent className="p-6 space-y-4">
                             <div>
-                              <div className="text-xs text-slate-500 mb-1.5">Primary Focus</div>
-                              <p className="text-sm font-medium text-white">
+                              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Primary Focus</div>
+                              <p className="text-sm font-medium text-slate-900 dark:text-white">
                                 {formData.primaryFocus
                                   ? formData.primaryFocus === 'projects'
                                     ? 'Projects & Jobs'
@@ -1573,20 +1867,20 @@ export default function AgencyOnboardingWizard() {
                               </p>
                             </div>
                             <div>
-                              <div className="text-xs text-slate-500 mb-1.5">GST</div>
-                              <p className="text-sm font-medium text-white">
+                              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">GST</div>
+                              <p className="text-sm font-medium text-slate-900 dark:text-white">
                                 {formData.enableGST ? 'Enabled for this workspace' : 'Not enabled (can be turned on later)'}
                               </p>
                             </div>
                             <div>
-                              <div className="text-xs text-slate-500 mb-1.5">Modules on Day 1</div>
-                              <div className="flex flex-wrap gap-1.5">
+                              <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Modules on Day 1</div>
+                              <div className="flex flex-wrap gap-2">
                                 {(['projects', 'finance', 'people', 'reports'] as const)
                                   .filter((key) => formData.modules[key])
                                   .map((key) => (
                                     <span
                                       key={key}
-                                      className="px-2 py-0.5 rounded-full text-[11px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/40"
+                                      className="px-3 py-1 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
                                     >
                                       {key === 'projects'
                                         ? 'Projects'
@@ -1598,7 +1892,7 @@ export default function AgencyOnboardingWizard() {
                                     </span>
                                   ))}
                                 {Object.values(formData.modules).every((v) => !v) && (
-                                  <span className="text-[11px] text-slate-400">
+                                  <span className="text-sm text-slate-500 dark:text-slate-400">
                                     No modules selected yet (defaults will be applied).
                                   </span>
                                 )}
@@ -1607,14 +1901,14 @@ export default function AgencyOnboardingWizard() {
                           </CardContent>
                         </Card>
 
-                        <Card className="border border-slate-800/50 bg-slate-800/40 backdrop-blur-sm transition-all duration-300 hover:border-slate-700/50">
-                          <CardHeader className="bg-slate-800/50 border-b border-slate-800/50 py-2 px-4">
-                            <CardTitle className="text-xs sm:text-sm font-semibold text-white flex items-center gap-2">
-                              <Layers className="h-4 w-4 text-emerald-400" />
+                        <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+                          <CardHeader className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 py-4 px-6">
+                            <CardTitle className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2.5">
+                              <Layers className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                               Service Tier
                             </CardTitle>
                           </CardHeader>
-                          <CardContent className="p-4">
+                          <CardContent className="p-6">
                             {(() => {
                               const plan = PLANS.find(p => p.id === formData.subscriptionPlan);
                               if (!plan) return null;
@@ -1622,17 +1916,17 @@ export default function AgencyOnboardingWizard() {
                               return (
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-4">
-                                    <div className={`h-14 w-14 rounded-xl bg-gradient-to-br ${plan.color} flex items-center justify-center shadow-lg`}>
-                                      <PlanIcon className="h-7 w-7 text-white" />
+                                    <div className="h-14 w-14 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                                      <PlanIcon className="h-7 w-7 text-slate-700 dark:text-slate-300" />
                                     </div>
                                     <div>
-                                      <p className="font-semibold text-white">{plan.name}</p>
-                                      <p className="text-xs text-slate-400">{plan.description}</p>
+                                      <p className="font-semibold text-slate-900 dark:text-white">{plan.name}</p>
+                                      <p className="text-sm text-slate-600 dark:text-slate-400">{plan.description}</p>
                                     </div>
                                   </div>
                                   <div className="text-right">
-                                    <p className="text-3xl font-bold text-white">${plan.price}</p>
-                                    <p className="text-xs text-slate-500">/{plan.period}</p>
+                                    <p className="text-3xl font-bold text-slate-900 dark:text-white">${plan.price}</p>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">/{plan.period}</p>
                                   </div>
                                 </div>
                               );
@@ -1640,52 +1934,61 @@ export default function AgencyOnboardingWizard() {
                           </CardContent>
                         </Card>
 
-                        <p className="text-[11px] text-slate-500 mt-1">
-                          You can update most of these details later from your workspace settings. Activating now creates your secure agency database and admin account.
-                        </p>
+                        <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg p-4 mt-4">
+                          <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                            <strong className="text-slate-900 dark:text-white">Support Resources:</strong> After activation, you'll have access to our support team, documentation, and onboarding guides. You can update most of these details later from your workspace settings. Activating now creates your secure agency database and admin account.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
                   
-                  {/* Enhanced Navigation Buttons */}
-                  <div className="flex flex-col sm:flex-row justify-between gap-3 mt-6 pt-4 border-t border-slate-800/50 flex-shrink-0">
+                  {/* Professional Navigation Buttons */}
+                  <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-8 pt-6 border-t border-slate-200 dark:border-slate-800 flex-shrink-0">
                     <Button
                       type="button"
                       variant="outline"
                       onClick={handleBack}
                       disabled={currentStep === 1 || isLoading}
-                      className="border-slate-700/50 bg-slate-800/40 text-slate-300 hover:bg-slate-800/60 hover:text-white hover:border-slate-600 transition-all duration-200 w-full sm:w-auto h-11 sm:h-12 text-sm group disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:border-slate-400 dark:hover:border-slate-600 transition-all duration-200 w-full sm:w-auto h-11 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      aria-label={`Go back to step ${currentStep - 1}`}
                     >
-                      <ArrowLeft className="mr-2 h-4 w-4 transition-transform group-hover:-translate-x-1" />
+                      <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
                       Previous
                     </Button>
+
+                    <div className="hidden sm:flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                      <span>Step {currentStep} of {STEPS.length}</span>
+                    </div>
 
                     {currentStep < STEPS.length ? (
                       <Button
                         type="button"
                         onClick={handleNext}
                         disabled={isLoading}
-                        className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-600 text-white font-medium shadow-lg shadow-emerald-500/30 transition-all duration-200 min-w-[140px] w-full sm:w-auto h-11 sm:h-12 text-sm group hover:scale-105 hover:shadow-emerald-500/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 font-medium shadow-sm transition-all duration-200 min-w-[140px] w-full sm:w-auto h-11 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label={`Continue to step ${currentStep + 1}`}
                       >
                         Continue
-                        <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                        <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
                       </Button>
                     ) : (
                       <Button
                         type="button"
                         onClick={handleSubmit}
                         disabled={isLoading}
-                        className="bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-600 hover:via-teal-600 hover:to-cyan-600 text-white font-medium shadow-lg shadow-emerald-500/30 transition-all duration-200 min-w-[160px] w-full sm:w-auto h-11 sm:h-12 text-sm group hover:scale-105 hover:shadow-emerald-500/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 font-medium shadow-sm transition-all duration-200 min-w-[160px] w-full sm:w-auto h-11 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Activate agency and create workspace"
                       >
                         {isLoading ? (
                           <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Activating...
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                            <span>Activating...</span>
                           </>
                         ) : (
                           <>
-                            <CheckCircle2 className="mr-2 h-4 w-4 transition-transform group-hover:scale-110" />
-                            Activate Agency
+                            <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                            <span>Activate Agency</span>
                           </>
                         )}
                       </Button>
@@ -1695,35 +1998,35 @@ export default function AgencyOnboardingWizard() {
               </Card>
             </div>
 
-            {/* Enhanced Right Sidebar */}
-            <div className="lg:col-span-1 flex flex-col min-h-0">
-              <div className="sticky top-0 space-y-3 flex flex-col min-h-0">
+            {/* Professional Right Sidebar */}
+            <div className="lg:col-span-1 flex flex-col">
+              <div className="sticky top-24 space-y-4 flex flex-col">
                 {/* Company Preview Card */}
                 {currentStep <= 3 && (formData.agencyName || formData.industry || formData.companySize) && (
-                  <Card className="border border-slate-800/50 bg-slate-800/40 backdrop-blur-sm shadow-xl transition-all duration-300 hover:border-slate-700/50 animate-fade-in flex-shrink-0">
-                    <CardHeader className="bg-slate-800/50 border-b border-slate-800/50 py-2 px-3">
-                      <CardTitle className="text-xs sm:text-sm font-semibold text-white flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-emerald-400" />
+                  <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex-shrink-0">
+                    <CardHeader className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 py-3 px-4">
+                      <CardTitle className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2.5">
+                        <Building2 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                         Preview
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-3 space-y-3">
+                    <CardContent className="p-4 space-y-4">
                       {formData.agencyName && (
                         <div>
-                          <div className="text-xs text-slate-500 mb-1.5">Company Name</div>
-                          <div className="text-sm font-medium text-white">{formData.agencyName}</div>
+                          <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Company Name</div>
+                          <div className="text-sm font-medium text-slate-900 dark:text-white">{formData.agencyName}</div>
                         </div>
                       )}
                       {formData.industry && (
                         <div>
-                          <div className="text-xs text-slate-500 mb-1.5">Industry</div>
-                          <div className="text-sm font-medium text-white capitalize">{formData.industry}</div>
+                          <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Industry</div>
+                          <div className="text-sm font-medium text-slate-900 dark:text-white capitalize">{formData.industry}</div>
                         </div>
                       )}
                       {formData.companySize && (
                         <div>
-                          <div className="text-xs text-slate-500 mb-1.5">Organization Size</div>
-                          <div className="text-sm font-medium text-white">{formData.companySize} employees</div>
+                          <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Organization Size</div>
+                          <div className="text-sm font-medium text-slate-900 dark:text-white">{formData.companySize} employees</div>
                         </div>
                       )}
                     </CardContent>
@@ -1732,22 +2035,22 @@ export default function AgencyOnboardingWizard() {
 
                 {/* Step Benefits */}
                 {COMPANY_BENEFITS[`step${currentStep}` as keyof typeof COMPANY_BENEFITS] && (
-                  <Card className="border border-slate-800/50 bg-slate-800/40 backdrop-blur-sm shadow-xl transition-all duration-300 hover:border-slate-700/50 flex-1 flex flex-col min-h-0">
-                    <CardHeader className="bg-slate-800/50 border-b border-slate-800/50 py-2 px-3 flex-shrink-0">
-                      <CardTitle className="text-xs sm:text-sm font-semibold text-white">
-                        Benefits
+                  <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex-1 flex flex-col min-h-0">
+                    <CardHeader className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 py-3 px-4 flex-shrink-0">
+                      <CardTitle className="text-sm font-semibold text-slate-900 dark:text-white">
+                        What You'll Get
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-3 flex-1 overflow-hidden">
+                    <CardContent className="p-4 flex-1 overflow-hidden">
                       <ul className="space-y-3">
                         {COMPANY_BENEFITS[`step${currentStep}` as keyof typeof COMPANY_BENEFITS]?.map((benefit, idx) => {
                           const BenefitIcon = benefit.icon;
                           return (
-                            <li key={idx} className="flex items-start gap-2 group/item">
-                              <div className="h-5 w-5 rounded bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5 border border-emerald-500/30">
-                                <BenefitIcon className="h-3 w-3 text-emerald-400" />
+                            <li key={idx} className="flex items-start gap-3">
+                              <div className="h-6 w-6 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 border border-slate-200 dark:border-slate-700 mt-0.5">
+                                <BenefitIcon className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" />
                               </div>
-                              <span className="text-xs text-slate-300 leading-relaxed">{benefit.text}</span>
+                              <span className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">{benefit.text}</span>
                             </li>
                           );
                         })}
@@ -1756,27 +2059,29 @@ export default function AgencyOnboardingWizard() {
                   </Card>
                 )}
 
-                {/* Enhanced System Information */}
-                <Card className="border border-slate-800/50 bg-slate-800/30 backdrop-blur-sm shadow-xl transition-all duration-300 hover:border-slate-700/50 flex-shrink-0">
-                  <CardContent className="p-3">
-                    <div className="text-xs text-slate-400 space-y-3">
+                {/* System Information */}
+                <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex-shrink-0">
+                  <CardContent className="p-4">
+                    <div className="text-sm text-slate-600 dark:text-slate-400 space-y-4">
                       <div className="flex items-center justify-between">
-                        <span>Setup Progress</span>
-                        <span className="font-semibold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+                        <span className="font-medium text-slate-700 dark:text-slate-300">Progress</span>
+                        <span className="font-semibold text-slate-900 dark:text-white">
                           {Math.round(progress)}%
                         </span>
                       </div>
-                      <div className="h-2 bg-slate-800/50 rounded-full overflow-hidden">
+                      <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 transition-all duration-500 shadow-lg shadow-emerald-500/30"
+                          className="h-full bg-slate-900 dark:bg-white transition-all duration-500"
                           style={{ width: `${progress}%` }}
                         />
                       </div>
-                      <div className="pt-2 border-t border-slate-800/50 text-xs leading-relaxed text-slate-500 flex items-center justify-between">
-                        <span>
-                          Step {currentStep} of {STEPS.length}
-                        </span>
-                        <span className="text-slate-500">
+                      <div className="pt-3 border-t border-slate-200 dark:border-slate-800 text-xs leading-relaxed">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-slate-500 dark:text-slate-400">
+                            Step {currentStep} of {STEPS.length}
+                          </span>
+                        </div>
+                        <p className="text-slate-600 dark:text-slate-400">
                           {currentStep === 1
                             ? 'Quick start – 2 fields only'
                             : currentStep === 2
@@ -1790,7 +2095,7 @@ export default function AgencyOnboardingWizard() {
                             : currentStep === 6
                             ? 'Pick your plan'
                             : 'Review & activate'}
-                        </span>
+                        </p>
                       </div>
                     </div>
                   </CardContent>
@@ -1801,31 +2106,40 @@ export default function AgencyOnboardingWizard() {
         </div>
       </div>
       {isLoading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-md mx-4 rounded-2xl border border-slate-800 bg-slate-900/90 p-6 shadow-2xl">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/40">
-                <Loader2 className="h-5 w-5 text-white animate-spin" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/90 dark:bg-slate-950/90">
+          <div className="w-full max-w-md mx-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xl">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700">
+                <Loader2 className="h-5 w-5 text-slate-700 dark:text-slate-300 animate-spin" />
               </div>
               <div>
-                <h2 className="text-base sm:text-lg font-semibold text-white">
+                <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">
                   Creating your agency workspace
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-400">
+                <p className="text-sm text-slate-600 dark:text-slate-400">
                   Please wait a few moments while we set up your dedicated database, roles, and defaults.
                 </p>
               </div>
             </div>
-            <div className="mt-3 space-y-2">
-              <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
-                <div className="h-full w-2/3 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 animate-pulse" />
+            <div className="space-y-3">
+              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                <div className="h-full w-2/3 bg-slate-900 dark:bg-white transition-all duration-300" />
               </div>
-              <ul className="mt-3 space-y-1 text-[11px] text-slate-400">
-                <li>• Creating a secure, isolated database for your agency</li>
-                <li>• Seeding core tables for users, roles, and settings</li>
-                <li>• Applying audit and compliance defaults</li>
+              <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+                <li className="flex items-start gap-2">
+                  <span className="text-slate-400 dark:text-slate-500 mt-0.5">•</span>
+                  <span>Creating a secure, isolated database for your agency</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-slate-400 dark:text-slate-500 mt-0.5">•</span>
+                  <span>Seeding core tables for users, roles, and settings</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-slate-400 dark:text-slate-500 mt-0.5">•</span>
+                  <span>Applying audit and compliance defaults</span>
+                </li>
               </ul>
-              <p className="mt-3 text-[11px] text-slate-500">
+              <p className="text-sm text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-800">
                 This step usually takes less than 10 seconds. You will be redirected automatically when everything is ready.
               </p>
             </div>

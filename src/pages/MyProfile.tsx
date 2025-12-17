@@ -5,13 +5,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Save, Edit, Upload, User, Mail, Phone, MapPin, Calendar, Briefcase, Loader2 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Save, Edit, Upload, User, Mail, Phone, MapPin, Calendar, Briefcase, Loader2, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
-import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { generateUUID } from '@/lib/uuid';
-import { upsertRecord, selectOne } from '@/services/api/postgresql-service';
+import { selectOne, upsertRecord, rawQuery } from '@/services/api/postgresql-service';
+import { getAgencyId } from '@/utils/agencyUtils';
+import type { AppRole } from '@/utils/roleUtils';
 
 interface UserProfile {
   id: string;
@@ -31,55 +32,48 @@ interface UserProfile {
   notes?: string;
   skills: string[];
   full_name?: string;
+   avatar_url?: string;
   salary?: number; // This will only be visible to authorized users
   social_security_number?: string; // This will be masked for non-authorized users
 }
 
+interface AuditLogEntry {
+  id: string;
+  table_name: string;
+  action: string;
+  user_id: string | null;
+  record_id: string | null;
+  old_values: Record<string, any> | null;
+  new_values: Record<string, any> | null;
+  created_at: string;
+  actor_email?: string | null;
+  actor_name?: string | null;
+}
+
 const MyProfile = () => {
-  const { user } = useAuth();
+  const { user, userRole, profile: authProfile } = useAuth();
   const { toast } = useToast();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<UserProfile>>({});
+  const [history, setHistory] = useState<AuditLogEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const isRegularUser = !userRole || ['employee', 'contractor', 'intern'].includes(userRole as AppRole);
+  const canEditStructural = !!userRole && !isRegularUser;
 
   const fetchProfile = async () => {
     if (!user) return;
     
     try {
       setLoading(true);
-      
-      // Fetch employee details, profile, and salary information
-      const [employeeResponse, profileResponse, salaryResponse] = await Promise.all([
-        db
-          .from('employee_details')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        db
-          .from('profiles')
-          .select('*')
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        db
-          .from('employee_salary_details')
-          .select('salary')
-          .eq('employee_id', user.id)
-          .maybeSingle()
+      // Fetch employee details, profile, and salary information directly from PostgreSQL
+      const [profileData, employeeData, salaryData] = await Promise.all([
+        selectOne<any>('profiles', { user_id: user.id }),
+        selectOne<any>('employee_details', { user_id: user.id }),
+        selectOne<any>('employee_salary_details', { employee_id: user.id }),
       ]);
-
-      // Handle errors (ignore PGRST116 which means no rows found)
-      if (employeeResponse.error && employeeResponse.error.code !== 'PGRST116') {
-        console.error('Error fetching employee_details:', employeeResponse.error);
-      }
-      if (profileResponse.error && profileResponse.error.code !== 'PGRST116') {
-        console.error('Error fetching profiles:', profileResponse.error);
-      }
-
-      // Build profile from available data
-      // Priority: employee_details > profiles > user
-      const profileData = profileResponse.data;
-      const employeeData = employeeResponse.data;
       
       // If we have profile data OR employee data, show the profile
       if (profileData || employeeData) {
@@ -121,7 +115,7 @@ const MyProfile = () => {
           department: profileData?.department || '',
           position: profileData?.position || '',
           address: employeeData?.address || '',
-          hire_date: employeeData?.created_at || profileData?.hire_date || profileData?.created_at || new Date().toISOString(),
+          hire_date: profileData?.hire_date || employeeData?.created_at || profileData?.created_at || new Date().toISOString(),
           work_location: employeeData?.work_location || '',
           emergency_contact_name: employeeData?.emergency_contact_name || '',
           emergency_contact_phone: employeeData?.emergency_contact_phone || '',
@@ -131,7 +125,8 @@ const MyProfile = () => {
             ? employeeData.skills.map(skill => String(skill)) 
             : [],
           full_name: fullName || user.email || 'User',
-          salary: salaryResponse.data?.salary,
+          avatar_url: profileData?.avatar_url || '',
+          salary: salaryData?.salary ?? salaryData?.base_salary ?? undefined,
           social_security_number: '***-**-****' // SSN is encrypted and masked for regular users
         };
         
@@ -158,6 +153,7 @@ const MyProfile = () => {
           notes: '',
           skills: [],
           full_name: user.email || 'User',
+          avatar_url: '',
           salary: undefined,
           social_security_number: '***-**-****'
         };
@@ -176,11 +172,37 @@ const MyProfile = () => {
     }
   };
 
+  const fetchHistory = async () => {
+    if (!user) return;
+    try {
+      setHistoryLoading(true);
+      const logs = await rawQuery<AuditLogEntry>(
+        `
+        SELECT al.*, u.email AS actor_email, p.full_name AS actor_name
+        FROM public.audit_logs al
+        LEFT JOIN public.users u ON u.id = al.user_id
+        LEFT JOIN public.profiles p ON p.user_id = al.user_id
+        WHERE al.record_id = $1
+          AND al.table_name IN ('users','profiles','employee_details')
+        ORDER BY al.created_at DESC
+        LIMIT 50
+        `,
+        [user.id]
+      );
+      setHistory(logs);
+    } catch (error) {
+      console.error('Error fetching profile history:', error);
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!user || !profile) return;
 
     try {
       const fullName = `${formData.first_name || ''} ${formData.last_name || ''}`.trim() || user.email || 'User';
+      const agencyId = await getAgencyId(authProfile, user.id);
       
       // Upsert profile (profiles table should always exist)
       try {
@@ -188,26 +210,26 @@ const MyProfile = () => {
           user_id: user.id,
           full_name: fullName,
           phone: formData.phone || null,
-          department: formData.department || null,
-          position: formData.position || null,
+          department: canEditStructural ? (formData.department || null) : profile.department || null,
+          position: canEditStructural ? (formData.position || null) : profile.position || null,
           is_active: true,
-          agency_id: '550e8400-e29b-41d4-a716-446655440000',
+          agency_id: agencyId,
           updated_at: new Date().toISOString()
         }, 'user_id');
       } catch (profileError) {
         console.error('Profile upsert error:', profileError);
-        // Try update if upsert fails
+        // Fallback: try another upsert with safe fields only
         try {
-          await db
-            .from('profiles')
-            .update({
-              full_name: fullName,
-              phone: formData.phone || null,
-              department: formData.department || null,
-              position: formData.position || null,
-              updated_at: new Date().toISOString()
-            })
-            .eq('user_id', user.id);
+          await upsertRecord('profiles', {
+            user_id: user.id,
+            full_name: fullName,
+            phone: formData.phone || null,
+            department: canEditStructural ? (formData.department || null) : profile.department || null,
+            position: canEditStructural ? (formData.position || null) : profile.position || null,
+            is_active: true,
+            agency_id: agencyId,
+            updated_at: new Date().toISOString()
+          }, 'user_id');
         } catch (updateError) {
           console.error('Profile update also failed:', updateError);
         }
@@ -230,7 +252,7 @@ const MyProfile = () => {
           notes: formData.notes || null,
           skills: formData.skills || [],
           is_active: true,
-          agency_id: '550e8400-e29b-41d4-a716-446655440000',
+          agency_id: agencyId,
           updated_at: new Date().toISOString()
         }, 'user_id');
       } catch (employeeError) {
@@ -249,6 +271,7 @@ const MyProfile = () => {
       
       // Refresh profile data
       await fetchProfile();
+      await fetchHistory();
       
       toast({
         title: "Success",
@@ -265,7 +288,9 @@ const MyProfile = () => {
   };
 
   useEffect(() => {
+    if (!user) return;
     fetchProfile();
+    fetchHistory();
   }, [user]);
 
   if (loading) {
@@ -340,8 +365,8 @@ const MyProfile = () => {
                     id="department" 
                     value={isEditing ? formData.department || '' : profile.department || ''}
                     onChange={(e) => setFormData({...formData, department: e.target.value})}
-                    disabled={!isEditing}
-                    placeholder="Enter department"
+                    disabled={!isEditing || !canEditStructural}
+                    placeholder={canEditStructural ? "Enter department" : "Managed by HR/Admin"}
                   />
                 </div>
                 <div className="space-y-2">
@@ -350,8 +375,8 @@ const MyProfile = () => {
                     id="position" 
                     value={isEditing ? formData.position || '' : profile.position || ''}
                     onChange={(e) => setFormData({...formData, position: e.target.value})}
-                    disabled={!isEditing}
-                    placeholder="Enter position"
+                    disabled={!isEditing || !canEditStructural}
+                    placeholder={canEditStructural ? "Enter position" : "Managed by HR/Admin"}
                   />
                 </div>
               </div>
@@ -457,19 +482,42 @@ const MyProfile = () => {
         <div className="space-y-6">
           <Card>
             <CardContent className="pt-6">
-              <div className="text-center mb-6">
-                <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl font-semibold text-primary">
-                    {profile.first_name?.charAt(0)?.toUpperCase() || 'U'}{profile.last_name?.charAt(0)?.toUpperCase() || ''}
-                  </span>
-                </div>
+              <div className="text-center mb-6 flex flex-col items-center">
+                <Avatar className="h-24 w-24 border-2 border-primary/20 mb-4">
+                  <AvatarImage
+                    src={
+                      profile.avatar_url && profile.avatar_url.startsWith('data:')
+                        ? profile.avatar_url
+                        : profile.avatar_url || undefined
+                    }
+                    alt={profile.full_name || `${profile.first_name} ${profile.last_name}` || user?.email || 'User'}
+                  />
+                  <AvatarFallback className="bg-primary/10 text-primary text-2xl font-semibold">
+                    {(profile.first_name || profile.full_name || user?.email || 'U')
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2)}
+                  </AvatarFallback>
+                </Avatar>
                 <h2 className="text-xl font-semibold">
                   {profile.full_name || `${profile.first_name} ${profile.last_name}`.trim() || user?.email || 'User'}
                 </h2>
-                <p className="text-muted-foreground">{profile.position || profile.department || 'No position assigned'}</p>
-                <Button variant="outline" size="sm" className="mt-2">
+                <p className="text-muted-foreground">
+                  {profile.position || profile.department || 'No position assigned'}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => {
+                    // Direct users to the Settings page where avatar upload is implemented
+                    window.location.href = '/settings';
+                  }}
+                >
                   <Upload className="mr-1 h-3 w-3" />
-                  Upload Photo
+                  Update Photo in Settings
                 </Button>
               </div>
               <Separator />
@@ -525,6 +573,82 @@ const MyProfile = () => {
                 <div>
                   <p className="text-sm text-muted-foreground">Position</p>
                   <p className="font-medium">{profile.position}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldAlert className="h-4 w-4" />
+                Change History
+              </CardTitle>
+              <CardDescription>
+                Recent updates to your profile. This history is read-only.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {historyLoading && (
+                <div className="flex items-center text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Loading history...
+                </div>
+              )}
+              {!historyLoading && history.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No recent changes recorded for this profile.
+                </p>
+              )}
+              {!historyLoading && history.length > 0 && (
+                <div className="space-y-3 max-h-72 overflow-y-auto">
+                  {history.map((entry) => {
+                    const actor =
+                      entry.actor_name ||
+                      entry.actor_email ||
+                      'System';
+                    const when = new Date(entry.created_at).toLocaleString();
+                    const changedFields: string[] = [];
+                    if (entry.old_values && entry.new_values) {
+                      for (const key of Object.keys(entry.new_values)) {
+                        const oldVal = (entry.old_values as any)[key];
+                        const newVal = (entry.new_values as any)[key];
+                        if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+                          changedFields.push(
+                            `${key}: ${oldVal ?? '—'} → ${newVal ?? '—'}`
+                          );
+                        }
+                      }
+                    }
+                    return (
+                      <div
+                        key={entry.id}
+                        className="border rounded-md p-2 text-xs space-y-1"
+                      >
+                        <div className="flex justify-between">
+                          <span className="font-medium">{actor}</span>
+                          <span className="text-muted-foreground">
+                            {when}
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground">
+                          <span className="uppercase text-[10px] tracking-wide mr-2">
+                            {entry.table_name}
+                          </span>
+                          <span className="uppercase text-[10px] tracking-wide">
+                            {entry.action}
+                          </span>
+                        </div>
+                        {changedFields.length > 0 && (
+                          <ul className="list-disc list-inside space-y-0.5 mt-1">
+                            {changedFields.map((c) => (
+                              <li key={c}>{c}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </CardContent>

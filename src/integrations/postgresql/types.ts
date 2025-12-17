@@ -149,6 +149,10 @@ export interface Client {
   contact_phone: string | null;
   status: string;
   billing_address: string | null;
+  billing_city: string | null;
+  billing_state: string | null;
+  billing_postal_code: string | null;
+  billing_country: string | null;
   tax_id: string | null;
   payment_terms: string | null;
   notes: string | null;

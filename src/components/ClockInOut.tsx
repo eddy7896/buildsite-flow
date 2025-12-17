@@ -85,7 +85,7 @@ const getLocation = (): Promise<LocationData> => {
           }
         }
       } catch (error) {
-        console.log('Reverse geocoding failed, using coordinates:', error);
+        // Reverse geocoding failed, using coordinates
       }
       
       resolve({

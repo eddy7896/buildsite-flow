@@ -182,7 +182,6 @@ export function SmartRecommendations() {
 
   const implementRecommendation = async (recommendationId: string) => {
     try {
-      console.log(`Implementing recommendation: ${recommendationId}`);
       // In a real app, this would create the automation or workflow
     } catch (error) {
       console.error('Error implementing recommendation:', error);

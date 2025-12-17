@@ -16,10 +16,12 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
     { path: '/system', title: 'System Dashboard', icon: 'Monitor', exists: true, category: 'system' },
     { path: '/dashboard', title: 'Main Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'Employee Management', icon: 'Users', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/role-requests', title: 'Role Requests', icon: 'UserCog', exists: true, category: 'management' },
     { path: '/permissions', title: 'Permissions', icon: 'Settings2', exists: true, category: 'system' },
     { path: '/department-management', title: 'Department Management', icon: 'Building2', exists: true, category: 'management' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
+    { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/clients', title: 'Clients', icon: 'Building2', exists: true, category: 'management' },
     { path: '/crm', title: 'CRM', icon: 'Users2', exists: true, category: 'management' },
     { path: '/attendance', title: 'Attendance', icon: 'Clock', exists: true, category: 'hr' },
@@ -41,6 +43,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   ceo: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/reports', title: 'Strategic Reports', icon: 'ChartLine', exists: true, category: 'reports' },
     { path: '/analytics', title: 'Analytics', icon: 'BarChart3', exists: true, category: 'reports' },
     { path: '/centralized-reports', title: 'Centralized Reports', icon: 'ChartLine', exists: true, category: 'reports' },
@@ -67,6 +70,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   cfo: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/financial-management', title: 'Financial Management', icon: 'Calculator', exists: true, category: 'finance' },
     { path: '/payroll', title: 'Payroll', icon: 'Calculator', exists: true, category: 'finance' },
     { path: '/invoices', title: 'Invoices', icon: 'FileText', exists: true, category: 'finance' },
@@ -85,6 +89,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   coo: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/attendance', title: 'Attendance', icon: 'Clock', exists: true, category: 'hr' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
@@ -131,6 +136,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   operations_manager: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
     { path: '/attendance', title: 'Attendance', icon: 'Clock', exists: true, category: 'hr' },
@@ -145,6 +151,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   department_head: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
     { path: '/attendance', title: 'Attendance', icon: 'Clock', exists: true, category: 'hr' },
@@ -160,6 +167,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   team_lead: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },
@@ -172,6 +180,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   project_manager: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'Team Members', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
     { path: '/clients', title: 'Clients', icon: 'Building2', exists: true, category: 'management' },
@@ -186,6 +195,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   hr: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/create-employee', title: 'Create Employee', icon: 'UserPlus', exists: true, category: 'management' },
     { path: '/calendar', title: 'Calendar', icon: 'Calendar', exists: true, category: 'hr' },
     { path: '/holiday-management', title: 'Holiday Management', icon: 'CalendarDays', exists: true, category: 'hr' },
@@ -320,6 +330,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   employee: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'My Performance', icon: 'BarChart3', exists: true, category: 'personal' },
     { path: '/my-projects', title: 'My Projects', icon: 'Briefcase', exists: true, category: 'projects' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },
     { path: '/my-attendance', title: 'My Attendance', icon: 'Clock', exists: true, category: 'personal' },
@@ -332,6 +343,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   contractor: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'My Performance', icon: 'BarChart3', exists: true, category: 'personal' },
     { path: '/my-projects', title: 'My Projects', icon: 'Briefcase', exists: true, category: 'projects' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },
     { path: '/my-attendance', title: 'My Attendance', icon: 'Clock', exists: true, category: 'personal' },
@@ -342,6 +354,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   intern: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
     { path: '/employee-management', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'My Performance', icon: 'BarChart3', exists: true, category: 'personal' },
     { path: '/my-projects', title: 'My Projects', icon: 'Briefcase', exists: true, category: 'projects' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },
     { path: '/my-attendance', title: 'My Attendance', icon: 'Clock', exists: true, category: 'personal' },

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { db } from '@/lib/database';
+import { queryMainDatabase } from '@/integrations/postgresql/client-http';
 import { useToast } from '@/hooks/use-toast';
+import { generateUUID } from '@/lib/uuid';
 
 export interface PlanFeature {
   id: string;
@@ -36,28 +37,52 @@ export const usePlanManagement = () => {
     try {
       setLoading(true);
 
-      // Fetch plans with their features
-      const { data: plansData, error: plansError } = await db
-        .from('subscription_plans')
-        .select(`
-          *,
-          plan_feature_mappings!inner(
-            enabled,
-            plan_features(
-              id,
-              name,
-              description,
-              feature_key
-            )
-          )
-        `)
-        .eq('is_active', true)
-        .order('price', { ascending: true });
+      // Fetch all plans from main database (including inactive)
+      const plansResult = await queryMainDatabase<any>(
+        `SELECT * FROM public.subscription_plans ORDER BY price ASC, created_at DESC`,
+        []
+      );
+      const plansData = plansResult.rows || [];
 
-      if (plansError) throw plansError;
+      // Fetch feature mappings for all plans
+      const planIds = plansData.map((p: any) => p.id);
+      let featureMappings: any[] = [];
+      if (planIds.length > 0) {
+        const placeholders = planIds.map((_, i) => `$${i + 1}`).join(',');
+        const mappingsResult = await queryMainDatabase<any>(
+          `SELECT 
+            pfm.plan_id,
+            pfm.feature_id,
+            pfm.enabled,
+            pf.id,
+            pf.name,
+            pf.description,
+            pf.feature_key
+          FROM public.plan_feature_mappings pfm
+          INNER JOIN public.plan_features pf ON pfm.feature_id = pf.id
+          WHERE pfm.plan_id IN (${placeholders})`,
+          planIds
+        );
+        featureMappings = mappingsResult.rows || [];
+      }
+
+      // Group feature mappings by plan_id
+      const mappingsByPlan = featureMappings.reduce((acc: any, mapping: any) => {
+        if (!acc[mapping.plan_id]) {
+          acc[mapping.plan_id] = [];
+        }
+        acc[mapping.plan_id].push({
+          id: mapping.id,
+          name: mapping.name,
+          description: mapping.description,
+          feature_key: mapping.feature_key,
+          enabled: mapping.enabled
+        });
+        return acc;
+      }, {});
 
       // Transform the data to match our interface
-      const transformedPlans: SubscriptionPlan[] = plansData?.map(plan => ({
+      const transformedPlans: SubscriptionPlan[] = plansData.map((plan: any) => ({
         id: plan.id,
         name: plan.name,
         description: plan.description || '',
@@ -70,14 +95,8 @@ export const usePlanManagement = () => {
         max_storage_gb: plan.max_storage_gb,
         stripe_product_id: plan.stripe_product_id,
         stripe_price_id: plan.stripe_price_id,
-        features: plan.plan_feature_mappings?.map((mapping: any) => ({
-          id: mapping.plan_features.id,
-          name: mapping.plan_features.name,
-          description: mapping.plan_features.description,
-          feature_key: mapping.plan_features.feature_key,
-          enabled: mapping.enabled
-        })) || []
-      })) || [];
+        features: mappingsByPlan[plan.id] || []
+      }));
 
       setPlans(transformedPlans);
     } catch (error) {
@@ -94,15 +113,13 @@ export const usePlanManagement = () => {
 
   const fetchAvailableFeatures = async () => {
     try {
-      const { data, error } = await db
-        .from('plan_features')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
+      // Fetch features from main database
+      const featuresResult = await queryMainDatabase<any>(
+        `SELECT * FROM public.plan_features WHERE is_active = $1 ORDER BY name ASC`,
+        [true]
+      );
 
-      if (error) throw error;
-
-      const transformedFeatures: PlanFeature[] = data?.map(feature => ({
+      const transformedFeatures: PlanFeature[] = featuresResult.rows?.map((feature: any) => ({
         id: feature.id,
         name: feature.name,
         description: feature.description || '',
@@ -123,35 +140,55 @@ export const usePlanManagement = () => {
 
   const updatePlan = async (planId: string, updates: Partial<SubscriptionPlan>) => {
     try {
-      const { error } = await db
-        .from('subscription_plans')
-        .update({
-          name: updates.name,
-          description: updates.description,
-          price: updates.price,
-          currency: updates.currency,
-          interval: updates.interval,
-          is_active: updates.is_active,
-          max_users: updates.max_users,
-          max_agencies: updates.max_agencies,
-          max_storage_gb: updates.max_storage_gb,
-          stripe_product_id: updates.stripe_product_id,
-          stripe_price_id: updates.stripe_price_id,
-        })
-        .eq('id', planId);
+      // Update plan in main database
+      const updateResult = await queryMainDatabase<any>(
+        `UPDATE public.subscription_plans 
+         SET name = $1, description = $2, price = $3, currency = $4, interval = $5, 
+             is_active = $6, max_users = $7, max_agencies = $8, max_storage_gb = $9,
+             stripe_product_id = $10, stripe_price_id = $11, updated_at = NOW()
+         WHERE id = $12
+         RETURNING *`,
+        [
+          updates.name,
+          updates.description,
+          updates.price,
+          updates.currency,
+          updates.interval,
+          updates.is_active,
+          updates.max_users,
+          updates.max_agencies,
+          updates.max_storage_gb,
+          updates.stripe_product_id,
+          updates.stripe_price_id,
+          planId
+        ]
+      );
 
-      if (error) throw error;
+      if (updateResult.rowCount === 0) {
+        throw new Error('Plan not found');
+      }
 
       // Update features if provided
       if (updates.features) {
-        for (const feature of updates.features) {
-          await db
-            .from('plan_feature_mappings')
-            .upsert({
-              plan_id: planId,
-              feature_id: feature.id,
-              enabled: feature.enabled
-            });
+        // Delete existing mappings
+        await queryMainDatabase(
+          `DELETE FROM public.plan_feature_mappings WHERE plan_id = $1`,
+          [planId]
+        );
+
+        // Insert new mappings
+        if (updates.features.length > 0) {
+          const values = updates.features.map((_, i) => 
+            `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`
+          ).join(',');
+          const params = updates.features.flatMap(f => [planId, f.id, f.enabled]);
+          
+          await queryMainDatabase(
+            `INSERT INTO public.plan_feature_mappings (plan_id, feature_id, enabled) 
+             VALUES ${values}
+             ON CONFLICT (plan_id, feature_id) DO UPDATE SET enabled = EXCLUDED.enabled`,
+            params
+          );
         }
       }
 
@@ -173,39 +210,49 @@ export const usePlanManagement = () => {
 
   const createPlan = async (planData: Omit<SubscriptionPlan, 'id'>) => {
     try {
-      const { data: newPlan, error: planError } = await db
-        .from('subscription_plans')
-        .insert({
-          name: planData.name,
-          description: planData.description,
-          price: planData.price,
-          currency: planData.currency,
-          interval: planData.interval,
-          is_active: planData.is_active,
-          max_users: planData.max_users,
-          max_agencies: planData.max_agencies,
-          max_storage_gb: planData.max_storage_gb,
-          stripe_product_id: planData.stripe_product_id,
-          stripe_price_id: planData.stripe_price_id,
-        })
-        .select()
-        .single();
+      // Generate UUID for new plan
+      const planId = generateUUID();
 
-      if (planError) throw planError;
+      // Insert plan in main database
+      const insertResult = await queryMainDatabase<any>(
+        `INSERT INTO public.subscription_plans 
+         (id, name, description, price, currency, interval, is_active, 
+          max_users, max_agencies, max_storage_gb, stripe_product_id, stripe_price_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
+         RETURNING *`,
+        [
+          planId,
+          planData.name,
+          planData.description,
+          planData.price,
+          planData.currency,
+          planData.interval,
+          planData.is_active,
+          planData.max_users,
+          planData.max_agencies,
+          planData.max_storage_gb,
+          planData.stripe_product_id,
+          planData.stripe_price_id
+        ]
+      );
+
+      const newPlan = insertResult.rows[0];
+      if (!newPlan) {
+        throw new Error('Failed to create plan');
+      }
 
       // Add feature mappings
       if (planData.features && planData.features.length > 0) {
-        const featureMappings = planData.features.map(feature => ({
-          plan_id: newPlan.id,
-          feature_id: feature.id,
-          enabled: feature.enabled
-        }));
+        const values = planData.features.map((_, i) => 
+          `($${i * 3 + 1}, $${i * 3 + 2}, $${i * 3 + 3})`
+        ).join(',');
+        const params = planData.features.flatMap(f => [planId, f.id, f.enabled]);
 
-        const { error: mappingsError } = await db
-          .from('plan_feature_mappings')
-          .insert(featureMappings);
-
-        if (mappingsError) throw mappingsError;
+        await queryMainDatabase(
+          `INSERT INTO public.plan_feature_mappings (plan_id, feature_id, enabled) 
+           VALUES ${values}`,
+          params
+        );
       }
 
       toast({
@@ -226,12 +273,17 @@ export const usePlanManagement = () => {
 
   const deletePlan = async (planId: string) => {
     try {
-      const { error } = await db
-        .from('subscription_plans')
-        .update({ is_active: false })
-        .eq('id', planId);
+      // Deactivate plan in main database
+      const updateResult = await queryMainDatabase(
+        `UPDATE public.subscription_plans 
+         SET is_active = $1, updated_at = NOW()
+         WHERE id = $2`,
+        [false, planId]
+      );
 
-      if (error) throw error;
+      if (updateResult.rowCount === 0) {
+        throw new Error('Plan not found');
+      }
 
       toast({
         title: "Success",
@@ -249,6 +301,135 @@ export const usePlanManagement = () => {
     }
   };
 
+  const createFeature = async (featureData: Omit<PlanFeature, 'id' | 'enabled'>) => {
+    try {
+      const featureId = generateUUID();
+
+      const insertResult = await queryMainDatabase<any>(
+        `INSERT INTO public.plan_features 
+         (id, name, description, feature_key, is_active, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         RETURNING *`,
+        [
+          featureId,
+          featureData.name,
+          featureData.description,
+          featureData.feature_key,
+          true
+        ]
+      );
+
+      if (!insertResult.rows[0]) {
+        throw new Error('Failed to create feature');
+      }
+
+      toast({
+        title: "Success",
+        description: "Feature created successfully",
+      });
+
+      await fetchAvailableFeatures();
+    } catch (error: any) {
+      console.error('Error creating feature:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create feature",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const updateFeature = async (featureId: string, updates: Partial<Omit<PlanFeature, 'id' | 'enabled'>>) => {
+    try {
+      const updateResult = await queryMainDatabase<any>(
+        `UPDATE public.plan_features 
+         SET name = COALESCE($1, name), 
+             description = COALESCE($2, description),
+             feature_key = COALESCE($3, feature_key),
+             updated_at = NOW()
+         WHERE id = $4
+         RETURNING *`,
+        [
+          updates.name,
+          updates.description,
+          updates.feature_key,
+          featureId
+        ]
+      );
+
+      if (updateResult.rowCount === 0) {
+        throw new Error('Feature not found');
+      }
+
+      toast({
+        title: "Success",
+        description: "Feature updated successfully",
+      });
+
+      await fetchAvailableFeatures();
+    } catch (error: any) {
+      console.error('Error updating feature:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update feature",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const deleteFeature = async (featureId: string) => {
+    try {
+      // Check if feature is used in any plans
+      const usageResult = await queryMainDatabase<any>(
+        `SELECT COUNT(*) as count FROM public.plan_feature_mappings WHERE feature_id = $1`,
+        [featureId]
+      );
+
+      const usageCount = parseInt(usageResult.rows[0]?.count || '0');
+
+      if (usageCount > 0) {
+        // Deactivate instead of delete
+        await queryMainDatabase(
+          `UPDATE public.plan_features 
+           SET is_active = $1, updated_at = NOW()
+           WHERE id = $2`,
+          [false, featureId]
+        );
+        toast({
+          title: "Success",
+          description: "Feature deactivated (it's still used in plans)",
+        });
+      } else {
+        // Safe to delete
+        const deleteResult = await queryMainDatabase(
+          `DELETE FROM public.plan_features WHERE id = $1`,
+          [featureId]
+        );
+
+        if (deleteResult.rowCount === 0) {
+          throw new Error('Feature not found');
+        }
+
+        toast({
+          title: "Success",
+          description: "Feature deleted successfully",
+        });
+      }
+
+      await fetchAvailableFeatures();
+    } catch (error: any) {
+      console.error('Error deleting feature:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete feature",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
   useEffect(() => {
     fetchPlans();
     fetchAvailableFeatures();
@@ -261,6 +442,10 @@ export const usePlanManagement = () => {
     updatePlan,
     createPlan,
     deletePlan,
-    refreshPlans: fetchPlans
+    refreshPlans: fetchPlans,
+    createFeature,
+    updateFeature,
+    deleteFeature,
+    refreshFeatures: fetchAvailableFeatures
   };
 };

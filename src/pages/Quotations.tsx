@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/database';
+import { useSearchParams } from 'react-router-dom';
 import QuotationFormDialog from '@/components/QuotationFormDialog';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import QuotationTemplateDialog from '@/components/QuotationTemplateDialog';
@@ -68,6 +69,8 @@ const Quotations = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [previewQuotationId, setPreviewQuotationId] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const clientFilterId = searchParams.get('client_id');
 
   useEffect(() => {
     fetchQuotations();
@@ -121,11 +124,16 @@ const Quotations = () => {
       }
 
       // Combine data
-      const quotationsWithDetails = (data || []).map((quote: any) => ({
+      let quotationsWithDetails = (data || []).map((quote: any) => ({
         ...quote,
         client: clientsMap.get(quote.client_id),
         line_items: lineItemsMap.get(quote.id) || [],
       }));
+
+      // If filtering by client from URL, apply client filter
+      if (clientFilterId) {
+        quotationsWithDetails = quotationsWithDetails.filter((q: any) => q.client_id === clientFilterId);
+      }
 
       setQuotations(quotationsWithDetails);
     } catch (error: any) {

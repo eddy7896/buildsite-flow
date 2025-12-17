@@ -356,11 +356,10 @@ function createRealtimeChannel(name: string): RealtimeChannel {
       return channel;
     },
     subscribe() {
-      console.log(`[Realtime] Channel "${name}" subscribed (no-op in browser mode)`);
       return channel;
     },
     unsubscribe() {
-      console.log(`[Realtime] Channel "${name}" unsubscribed (no-op in browser mode)`);
+      return channel;
     }
   };
   return channel;

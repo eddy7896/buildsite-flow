@@ -360,10 +360,8 @@ const LeaveRequests = () => {
             <Button 
               type="button"
               onClick={() => {
-                console.log('Opening leave request dialog...');
                 setSelectedLeaveRequest(null);
                 setShowLeaveRequestDialog(true);
-                console.log('Dialog state should be true now');
               }}
             >
               <Plus className="mr-2 h-4 w-4" />

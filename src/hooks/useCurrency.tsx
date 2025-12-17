@@ -60,7 +60,6 @@ export const useCurrency = () => {
           setCurrency(currencies.default);
         }
       } catch (error) {
-        console.log('Currency detection failed, using default (INR):', error);
         setCurrency(currencies.default);
       } finally {
         setLoading(false);

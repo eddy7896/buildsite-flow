@@ -122,7 +122,7 @@ const COLOR_PRESETS = [
 ];
 
 const Settings = () => {
-  const { user, profile, userRole } = useAuth();
+  const { user, profile, userRole, refreshProfile } = useAuth();
   const { toast } = useToast();
   const { availableCurrencies } = useCurrency();
   const { settings: agencySettingsData, saveSettings: saveAgencySettingsData, loading: loadingAgencyData } = useAgencySettings();
@@ -339,7 +339,6 @@ const Settings = () => {
         // This ensures even large images are compressed to a reasonable size
         const compressedDataUrl = await compressImage(file, 600, 600, 0.7);
         const sizeMB = (compressedDataUrl.length / (1024 * 1024)).toFixed(2);
-        console.log(`[Settings] Compressed logo: ${sizeMB}MB`);
         setLogoPreview(compressedDataUrl);
       } catch (error: any) {
         toast({
@@ -421,7 +420,6 @@ const Settings = () => {
         // Log the size for debugging
         const logoSize = logoPreview.length;
         const logoSizeMB = (logoSize / (1024 * 1024)).toFixed(2);
-        console.log(`[Settings] Logo size: ${logoSizeMB}MB (${logoSize} bytes)`);
         
         // Warn if still too large (shouldn't happen with compression, but just in case)
         if (logoSize > 5 * 1024 * 1024) {
@@ -532,6 +530,9 @@ const Settings = () => {
 
       setProfileSettings(prev => ({ ...prev, avatar_url: avatarUrl }));
       setAvatarFile(null);
+
+      // Refresh auth profile so dashboards and headers immediately reflect new avatar/name
+      await refreshProfile();
 
       toast({
         title: "Success",

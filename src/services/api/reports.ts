@@ -568,12 +568,8 @@ export class ReportService extends BaseApiService {
         data.agency_id || null,
       ];
       
-      console.log('Creating custom report with query:', query);
-      console.log('Values:', values);
-      
       try {
         const result = await pgClient.query(query, values);
-        console.log('Insert successful, returned row:', result.rows[0]);
         return result.rows[0] as CustomReport;
       } catch (error: any) {
         console.error('Error inserting custom report:', error);

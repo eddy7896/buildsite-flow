@@ -88,7 +88,6 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
 
   const fetchCategories = async () => {
     try {
-      console.log("Fetching expense categories...");
       const { data, error } = await db
         .from("expense_categories")
         .select("id, name, description")
@@ -100,7 +99,6 @@ export const ReimbursementFormDialog: React.FC<ReimbursementFormDialogProps> = (
         throw error;
       }
       
-      console.log("Categories fetched:", data);
       setCategories((data as any) || []);
     } catch (error) {
       console.error("Error fetching categories:", error);

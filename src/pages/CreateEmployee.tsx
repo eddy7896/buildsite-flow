@@ -20,7 +20,7 @@ import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { generateUUID, isValidUUID } from '@/lib/uuid';
 import { useAuth } from "@/hooks/useAuth";
-import { insertRecord, updateRecord, selectOne } from '@/services/api/postgresql-service';
+import { insertRecord, updateRecord, selectOne, selectRecords } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 import bcrypt from 'bcryptjs';
 
@@ -42,12 +42,12 @@ const formSchema = z.object({
   employeeId: z.string().optional(), // Auto-generated, optional in form
   position: z.string().min(2, "Position is required"),
   department: z.string().min(1, "Department is required"),
-  role: z.enum(["admin", "hr", "finance_manager", "employee"]),
+  role: z.string().min(1, "Role is required"), // Dynamic based on database
   hireDate: z.date({
     required_error: "Hire date is required",
   }),
   salary: z.string().min(1, "Salary is required"),
-  employmentType: z.enum(["full-time", "part-time", "contract", "intern"]),
+  employmentType: z.string().min(1, "Employment type is required"), // Dynamic based on database
   workLocation: z.string().min(2, "Work location is required"),
   supervisor: z.string().optional().refine(
     (val) => {
@@ -78,6 +78,11 @@ interface UploadedFile {
   file: File;
 }
 
+interface Department {
+  id: string;
+  name: string;
+}
+
 const CreateEmployee = () => {
   const { toast } = useToast();
   const { user, profile } = useAuth();
@@ -90,6 +95,13 @@ const CreateEmployee = () => {
   const [hireDateOpen, setHireDateOpen] = useState(false);
   const [dateOfBirthInput, setDateOfBirthInput] = useState<string>('');
   const [hireDateInput, setHireDateInput] = useState<string>('');
+  
+  // State for database-fetched options
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [roles, setRoles] = useState<string[]>([]);
+  const [employmentTypes, setEmploymentTypes] = useState<string[]>([]);
+  const [positions, setPositions] = useState<string[]>([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -142,7 +154,27 @@ const CreateEmployee = () => {
       // Check if user with this email already exists
       const existingUser = await selectOne('users', { email: values.email });
       if (existingUser) {
-        throw new Error(`A user with email "${values.email}" already exists. Please use a different email address.`);
+        // Check if this is an orphaned user (user exists but no employee_details)
+        // This can happen if a previous creation attempt failed
+        const existingEmployeeDetails = await selectOne('employee_details', { user_id: existingUser.id });
+        if (!existingEmployeeDetails) {
+          // Orphaned user - delete it and continue with creation
+          console.warn('Found orphaned user, cleaning up and retrying...');
+          try {
+            await db.from('users').delete().eq('id', existingUser.id);
+            toast({
+              title: "Cleaned up incomplete record",
+              description: "Found an incomplete employee record. Cleaning up and retrying...",
+              variant: "default",
+            });
+          } catch (cleanupError) {
+            console.error('Failed to cleanup orphaned user:', cleanupError);
+            throw new Error(`A user with email "${values.email}" exists but is incomplete. Please contact support or use a different email.`);
+          }
+        } else {
+          // User exists with complete employee details - this is a real duplicate
+          throw new Error(`A user with email "${values.email}" already exists. Please use a different email address.`);
+        }
       }
 
       // Generate unique employee ID automatically
@@ -150,9 +182,10 @@ const CreateEmployee = () => {
       
       // If no employee ID provided, generate one automatically
       if (!employeeId) {
-        // Get the latest employee ID to generate next sequential ID
+        // Get the latest employee ID to generate next sequential ID (filter by agency)
         const latestEmployees = await selectRecords('employee_details', {
           select: 'employee_id',
+          where: { agency_id: agencyId },
           orderBy: 'created_at DESC',
           limit: 1
         });
@@ -262,12 +295,15 @@ const CreateEmployee = () => {
       }, currentUserId);
 
       // Create employee salary details entry (salary is in separate table)
+      const salaryValue = parseFloat(values.salary) || 0;
       await insertRecord('employee_salary_details', {
           id: generateUUID(),
           employee_id: employeeDetailsId, // Reference to employee_details.id
-          salary: parseFloat(values.salary),
+          base_salary: salaryValue, // Required NOT NULL field
+          salary: salaryValue, // Alias field for frontend compatibility
           currency: 'USD',
           salary_frequency: 'monthly',
+          pay_frequency: 'monthly', // Also set pay_frequency for compatibility
           effective_date: values.hireDate.toISOString().split('T')[0],
           agency_id: agencyId,
       }, currentUserId);
@@ -426,6 +462,156 @@ const CreateEmployee = () => {
     
     return date;
   };
+
+  // Fetch departments from database
+  const fetchDepartments = async () => {
+    try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        console.warn('No agency_id available for fetching departments');
+        return;
+      }
+
+      const deptData = await selectRecords('departments', {
+        select: 'id, name',
+        filters: [
+          { column: 'is_active', operator: 'eq', value: true },
+          { column: 'agency_id', operator: 'eq', value: agencyId }
+        ],
+        orderBy: 'name ASC'
+      });
+      
+      setDepartments(deptData || []);
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+      toast({
+        title: "Warning",
+        description: "Failed to load departments. Please refresh the page.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Fetch distinct roles from user_roles table
+  const fetchRoles = async () => {
+    try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        console.warn('No agency_id available for fetching roles');
+        return;
+      }
+
+      // Fetch distinct roles from user_roles filtered by agency
+      const rolesData = await selectRecords('user_roles', {
+        select: 'role',
+        filters: [
+          { column: 'agency_id', operator: 'eq', value: agencyId }
+        ]
+      });
+
+      // Get unique roles
+      const uniqueRoles = Array.from(new Set((rolesData || []).map((r: any) => r.role).filter(Boolean)));
+      
+      // If no roles found, use default roles
+      if (uniqueRoles.length === 0) {
+        setRoles(['employee', 'hr', 'finance_manager', 'admin', 'super_admin']);
+      } else {
+        setRoles(uniqueRoles.sort());
+      }
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+      // Fallback to default roles
+      setRoles(['employee', 'hr', 'finance_manager', 'admin', 'super_admin']);
+    }
+  };
+
+  // Fetch distinct employment types from employee_details
+  const fetchEmploymentTypes = async () => {
+    try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        console.warn('No agency_id available for fetching employment types');
+        return;
+      }
+
+      // Fetch distinct employment types from employee_details
+      const empData = await selectRecords('employee_details', {
+        select: 'employment_type',
+        filters: [
+          { column: 'agency_id', operator: 'eq', value: agencyId }
+        ]
+      });
+
+      // Get unique employment types
+      const uniqueTypes = Array.from(new Set((empData || []).map((e: any) => e.employment_type).filter(Boolean)));
+      
+      // If no types found or empty, use default types
+      if (uniqueTypes.length === 0) {
+        setEmploymentTypes(['full-time', 'part-time', 'contract', 'intern']);
+      } else {
+        // Normalize the values (handle both 'full-time' and 'full_time')
+        const normalizedTypes = uniqueTypes.map((t: string) => {
+          if (t === 'full_time') return 'full-time';
+          if (t === 'part_time') return 'part-time';
+          return t;
+        });
+        setEmploymentTypes(Array.from(new Set(normalizedTypes)).sort());
+      }
+    } catch (error) {
+      console.error('Error fetching employment types:', error);
+      // Fallback to default types
+      setEmploymentTypes(['full-time', 'part-time', 'contract', 'intern']);
+    }
+  };
+
+  // Fetch distinct positions from profiles
+  const fetchPositions = async () => {
+    try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        console.warn('No agency_id available for fetching positions');
+        return;
+      }
+
+      // Fetch distinct positions from profiles
+      const profilesData = await selectRecords('profiles', {
+        select: 'position',
+        filters: [
+          { column: 'agency_id', operator: 'eq', value: agencyId },
+          { column: 'position', operator: 'is not', value: null }
+        ]
+      });
+
+      // Get unique positions
+      const uniquePositions = Array.from(new Set((profilesData || []).map((p: any) => p.position).filter(Boolean)));
+      setPositions(uniquePositions.sort());
+    } catch (error) {
+      console.error('Error fetching positions:', error);
+      // Positions can be empty - it's optional to have existing positions
+      setPositions([]);
+    }
+  };
+
+  // Load all options on component mount
+  useEffect(() => {
+    const loadAllOptions = async () => {
+      setLoadingOptions(true);
+      try {
+        await Promise.all([
+          fetchDepartments(),
+          fetchRoles(),
+          fetchEmploymentTypes(),
+          fetchPositions()
+        ]);
+      } catch (error) {
+        console.error('Error loading options:', error);
+      } finally {
+        setLoadingOptions(false);
+      }
+    };
+
+    loadAllOptions();
+  }, [profile, user]);
 
   // Generate employee ID on component mount
   useEffect(() => {
@@ -884,8 +1070,26 @@ const CreateEmployee = () => {
                         <FormItem>
                           <FormLabel>Position</FormLabel>
                           <FormControl>
-                            <Input placeholder="Software Developer" {...field} />
+                            <div className="relative">
+                              <Input 
+                                placeholder="Software Developer" 
+                                list="position-options"
+                                {...field}
+                              />
+                              {positions.length > 0 && (
+                                <datalist id="position-options">
+                                  {positions.map((position) => (
+                                    <option key={position} value={position} />
+                                  ))}
+                                </datalist>
+                              )}
+                            </div>
                           </FormControl>
+                          {positions.length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Start typing to see suggestions or enter a custom position
+                            </p>
+                          )}
                           <FormMessage />
                         </FormItem>
                       )}
@@ -899,19 +1103,24 @@ const CreateEmployee = () => {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Department</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select onValueChange={field.onChange} defaultValue={field.value} disabled={loadingOptions}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select department" />
+                                <SelectValue placeholder={loadingOptions ? "Loading departments..." : "Select department"} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="engineering">Engineering</SelectItem>
-                              <SelectItem value="marketing">Marketing</SelectItem>
-                              <SelectItem value="sales">Sales</SelectItem>
-                              <SelectItem value="hr">Human Resources</SelectItem>
-                              <SelectItem value="finance">Finance</SelectItem>
-                              <SelectItem value="operations">Operations</SelectItem>
+                              {departments.length > 0 ? (
+                                departments.map((dept) => (
+                                  <SelectItem key={dept.id} value={dept.name}>
+                                    {dept.name}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="__no_departments__" disabled>
+                                  {loadingOptions ? "Loading..." : "No departments available"}
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -924,17 +1133,24 @@ const CreateEmployee = () => {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>System Role</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select onValueChange={field.onChange} defaultValue={field.value} disabled={loadingOptions}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select role" />
+                                <SelectValue placeholder={loadingOptions ? "Loading roles..." : "Select role"} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="employee">Employee</SelectItem>
-                              <SelectItem value="hr">HR Manager</SelectItem>
-                              <SelectItem value="finance_manager">Finance Manager</SelectItem>
-                              <SelectItem value="admin">Administrator</SelectItem>
+                              {roles.length > 0 ? (
+                                roles.map((role) => (
+                                  <SelectItem key={role} value={role}>
+                                    {role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="__no_roles__" disabled>
+                                  {loadingOptions ? "Loading..." : "No roles available"}
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -963,17 +1179,24 @@ const CreateEmployee = () => {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Employment Type</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select onValueChange={field.onChange} defaultValue={field.value} disabled={loadingOptions}>
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder="Select type" />
+                                <SelectValue placeholder={loadingOptions ? "Loading types..." : "Select type"} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="full-time">Full-time</SelectItem>
-                              <SelectItem value="part-time">Part-time</SelectItem>
-                              <SelectItem value="contract">Contract</SelectItem>
-                              <SelectItem value="intern">Intern</SelectItem>
+                              {employmentTypes.length > 0 ? (
+                                employmentTypes.map((type) => (
+                                  <SelectItem key={type} value={type}>
+                                    {type.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('-')}
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="__no_employment_types__" disabled>
+                                  {loadingOptions ? "Loading..." : "No employment types available"}
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                           <FormMessage />
@@ -1262,7 +1485,6 @@ const CreateEmployee = () => {
                                 size="sm"
                                 onClick={() => {
                                   // Preview functionality could be added here
-                                  console.log('Preview file:', file);
                                 }}
                               >
                                 <Eye className="h-3 w-3" />

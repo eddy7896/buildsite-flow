@@ -9,6 +9,7 @@ import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import UserFormDialog from "@/components/UserFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface User {
   id: string;
@@ -291,11 +292,24 @@ const Users = () => {
                       <div className="flex-1 space-y-3 lg:space-y-0">
                         <div className="flex flex-col space-y-2 lg:flex-row lg:items-center lg:space-y-0 lg:space-x-4">
                           <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                              <span className="text-sm font-semibold text-primary">
-                                {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                              </span>
-                            </div>
+                            <Avatar className="h-10 w-10 border border-primary/20">
+                              <AvatarImage
+                                src={
+                                  user.avatar_url && user.avatar_url.startsWith('data:')
+                                    ? user.avatar_url
+                                    : user.avatar_url || undefined
+                                }
+                                alt={user.name}
+                              />
+                              <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
+                                {user.name
+                                  .split(' ')
+                                  .map((n) => n[0])
+                                  .join('')
+                                  .toUpperCase()
+                                  .slice(0, 2)}
+                              </AvatarFallback>
+                            </Avatar>
                             <div className="min-w-0 flex-1">
                               <h3 className="font-medium text-base lg:text-lg truncate">{user.name}</h3>
                               <p className="text-sm text-muted-foreground truncate">{user.email}</p>
@@ -342,11 +356,24 @@ const Users = () => {
                             </DialogHeader>
                             <div className="space-y-4">
                               <div className="flex items-center space-x-4">
-                                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-                                  <span className="text-xl font-semibold text-primary">
-                                    {user.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                                  </span>
-                                </div>
+                                <Avatar className="h-16 w-16 border-2 border-primary/20">
+                                  <AvatarImage
+                                    src={
+                                      user.avatar_url && user.avatar_url.startsWith('data:')
+                                        ? user.avatar_url
+                                        : user.avatar_url || undefined
+                                    }
+                                    alt={user.name}
+                                  />
+                                  <AvatarFallback className="bg-primary/10 text-primary text-xl font-semibold">
+                                    {user.name
+                                      .split(' ')
+                                      .map((n) => n[0])
+                                      .join('')
+                                      .toUpperCase()
+                                      .slice(0, 2)}
+                                  </AvatarFallback>
+                                </Avatar>
                                 <div>
                                   <h3 className="text-xl font-semibold">{user.name}</h3>
                                   <p className="text-muted-foreground">{user.position || 'No position'}</p>

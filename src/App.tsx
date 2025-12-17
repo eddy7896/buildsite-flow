@@ -21,6 +21,7 @@ const SignupSuccess = React.lazy(() => import("./pages/SignupSuccess"));
 const AgencyDashboard = React.lazy(() => import("./pages/AgencyDashboard"));
 const AgencyOnboardingWizard = React.lazy(() => import("./components/AgencyOnboardingWizard"));
 const AgencySetup = React.lazy(() => import("./pages/AgencySetup"));
+const AgencySetupProgress = React.lazy(() => import("./pages/AgencySetupProgress"));
 const SuperAdminDashboard = React.lazy(() => import("./pages/SuperAdminDashboard"));
 const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
@@ -42,6 +43,8 @@ const Clients = React.lazy(() => import("./pages/Clients"));
 const Reports = React.lazy(() => import("./pages/Reports"));
 const Analytics = React.lazy(() => import("./pages/Analytics"));
 const ProjectManagement = React.lazy(() => import("./pages/ProjectManagement"));
+const ProjectDetails = React.lazy(() => import("./pages/ProjectDetails"));
+const TaskDetails = React.lazy(() => import("./pages/TaskDetails"));
 const DepartmentManagement = React.lazy(() => import("./pages/DepartmentManagement"));
 const AIFeatures = React.lazy(() => import("./pages/AIFeatures"));
 const CreateEmployee = React.lazy(() => import("./pages/CreateEmployee"));
@@ -49,6 +52,8 @@ const AssignUserRoles = React.lazy(() => import("./pages/AssignUserRoles"));
 const JobCosting = React.lazy(() => import("./pages/JobCosting"));
 const Quotations = React.lazy(() => import("./pages/Quotations"));
 const CRM = React.lazy(() => import("./pages/CRM"));
+const LeadDetail = React.lazy(() => import("./pages/LeadDetail"));
+const ActivityDetail = React.lazy(() => import("./pages/ActivityDetail"));
 const FinancialManagement = React.lazy(() => import("./pages/FinancialManagement"));
 const GstCompliance = React.lazy(() => import("./pages/GstCompliance"));
 const EmployeeProjects = React.lazy(() => import("./pages/EmployeeProjects"));
@@ -58,6 +63,7 @@ const Calendar = React.lazy(() => import("./pages/Calendar"));
 const HolidayManagement = React.lazy(() => import('./pages/HolidayManagement'));
 const CentralizedReports = React.lazy(() => import("./pages/CentralizedReports"));
 const Notifications = React.lazy(() => import("./pages/Notifications"));
+const EmployeePerformance = React.lazy(() => import("./pages/EmployeePerformance"));
 
 // Lazy load component modules
 const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
@@ -129,6 +135,17 @@ const App = () => {
               />
               
               <Route 
+                path="/agency-setup-progress" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><AgencySetupProgress /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
                 path="/dashboard" 
                 element={
                   <ProtectedRoute>
@@ -170,6 +187,28 @@ const App = () => {
                   <ProtectedRoute>
                     <DashboardLayout>
                       <SuspenseRoute><ProjectManagement /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/projects/:id" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProjectDetails /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/tasks/:id" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><TaskDetails /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 
@@ -429,6 +468,28 @@ const App = () => {
               />
               
               <Route 
+                path="/crm/leads/:leadId" 
+                element={
+                  <ProtectedRoute requiredRole="hr">
+                    <DashboardLayout>
+                      <SuspenseRoute><LeadDetail /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/crm/activities/:activityId" 
+                element={
+                  <ProtectedRoute requiredRole="hr">
+                    <DashboardLayout>
+                      <SuspenseRoute><ActivityDetail /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
                 path="/calendar" 
                 element={
                   <ProtectedRoute>
@@ -599,6 +660,17 @@ const App = () => {
                   <ProtectedRoute>
                     <DashboardLayout>
                       <SuspenseRoute><Notifications /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/employee-performance" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><EmployeePerformance /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 

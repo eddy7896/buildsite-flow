@@ -23,7 +23,8 @@ class HttpDatabaseClient {
   private async makeRequest<T>(
     endpoint: string,
     method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'POST',
-    body?: any
+    body?: any,
+    useMainDatabase: boolean = false
   ): Promise<QueryResult<T>> {
     try {
       const url = `${this.baseUrl}/database${endpoint}`;
@@ -42,7 +43,9 @@ class HttpDatabaseClient {
           headers['Authorization'] = `Bearer ${token}`;
         }
 
-        if (agencyDatabase) {
+        // Only add agency database header if not using main database
+        // For system-level queries (agencies table, etc.), we need to query main database
+        if (agencyDatabase && !useMainDatabase) {
           headers['X-Agency-Database'] = agencyDatabase;
         }
       }
@@ -86,14 +89,21 @@ class HttpDatabaseClient {
     }
   }
 
-  async query<T = any>(sql: string, params: any[] = [], userId?: string): Promise<QueryResult<T>> {
-    console.log('[HTTP DB] Executing query:', sql.substring(0, 100));
+  async query<T = any>(sql: string, params: any[] = [], userId?: string, useMainDatabase: boolean = false): Promise<QueryResult<T>> {
     
     return this.makeRequest<T>('/query', 'POST', {
       sql,
       params,
       userId, // Pass userId to backend to set context
-    });
+    }, useMainDatabase);
+  }
+
+  /**
+   * Query the main database (not agency-specific database)
+   * Use this for system-level queries like agencies table
+   */
+  async queryMainDatabase<T = any>(sql: string, params: any[] = [], userId?: string): Promise<QueryResult<T>> {
+    return this.query<T>(sql, params, userId, true);
   }
 }
 
@@ -109,12 +119,6 @@ export async function query<T = any>(
   const start = Date.now();
   try {
     const result = await httpClient.query<T>(text, params || [], userId);
-    const duration = Date.now() - start;
-    console.log('[HTTP DB Query]', { 
-      text: text.substring(0, 80), 
-      duration, 
-      rows: result.rowCount 
-    });
     return result;
   } catch (error) {
     console.error('[HTTP DB Error]', { text, error });
@@ -139,6 +143,16 @@ export async function queryMany<T = any>(
 ): Promise<T[]> {
   const result = await query<T>(text, params);
   return result.rows;
+}
+
+// Query the main database (not agency-specific database)
+// Use this for system-level queries like agencies table
+export async function queryMainDatabase<T = any>(
+  text: string,
+  params: any[] = [],
+  userId?: string
+): Promise<QueryResult<T>> {
+  return httpClient.queryMainDatabase<T>(text, params, userId);
 }
 
 // Execute without returning rows

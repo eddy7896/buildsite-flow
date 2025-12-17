@@ -10,6 +10,7 @@ import { db } from '@/lib/database';
 import { useAuth } from '@/hooks/useAuth';
 import { generateUUID } from '@/lib/uuid';
 import { getAgencyId } from '@/utils/agencyUtils';
+import { getEmployeesForAssignmentAuto } from '@/services/api/employee-selector-service';
 
 interface Activity {
   id?: string;
@@ -22,6 +23,11 @@ interface Activity {
   due_date: string;
   completed_date?: string;
   assigned_to?: string;
+  duration?: number;
+  outcome?: string;
+  location?: string;
+  agenda?: string;
+  attendees?: string[];
 }
 
 interface ActivityFormDialogProps {
@@ -58,6 +64,7 @@ const ActivityFormDialog: React.FC<ActivityFormDialogProps> = ({
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [leads, setLeads] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<Array<{ id: string; full_name: string }>>([]);
   const [formData, setFormData] = useState<Activity>({
     lead_id: activity?.lead_id || leadId || '',
     client_id: activity?.client_id || '',
@@ -68,11 +75,17 @@ const ActivityFormDialog: React.FC<ActivityFormDialogProps> = ({
     due_date: activity?.due_date || '',
     completed_date: activity?.completed_date || '',
     assigned_to: activity?.assigned_to || '',
+    duration: activity?.duration || undefined,
+    outcome: activity?.outcome || '',
+    location: activity?.location || '',
+    agenda: activity?.agenda || '',
+    attendees: activity?.attendees || [],
   });
 
   useEffect(() => {
     if (isOpen) {
       fetchLeads();
+      fetchEmployees();
       if (activity && activity.id) {
         setFormData({
           lead_id: activity.lead_id || '',
@@ -84,6 +97,11 @@ const ActivityFormDialog: React.FC<ActivityFormDialogProps> = ({
           due_date: activity.due_date || '',
           completed_date: activity.completed_date || '',
           assigned_to: activity.assigned_to || '',
+          duration: activity.duration || undefined,
+          outcome: activity.outcome || '',
+          location: activity.location || '',
+          agenda: activity.agenda || '',
+          attendees: activity.attendees || [],
         });
       } else {
         setFormData({
@@ -96,6 +114,11 @@ const ActivityFormDialog: React.FC<ActivityFormDialogProps> = ({
           due_date: '',
           completed_date: '',
           assigned_to: '',
+          duration: undefined,
+          outcome: '',
+          location: '',
+          agenda: '',
+          attendees: [],
         });
       }
     }
@@ -112,6 +135,18 @@ const ActivityFormDialog: React.FC<ActivityFormDialogProps> = ({
       setLeads(data || []);
     } catch (error) {
       console.error('Error fetching leads:', error);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      const employeesData = await getEmployeesForAssignmentAuto(profile, user?.id);
+      setEmployees(employeesData.map(emp => ({
+        id: emp.user_id,
+        full_name: emp.full_name
+      })));
+    } catch (error) {
+      console.error('Error fetching employees:', error);
     }
   };
 
@@ -143,12 +178,22 @@ const ActivityFormDialog: React.FC<ActivityFormDialogProps> = ({
           due_date: formData.due_date || null,
           completed_date: formData.completed_date || null,
           assigned_to: formData.assigned_to || null,
+          duration: formData.duration || null,
+          outcome: formData.outcome || null,
+          location: formData.location || null,
+          agenda: formData.agenda || null,
+          attendees: formData.attendees && formData.attendees.length > 0 ? formData.attendees : null,
           updated_at: new Date().toISOString(),
         };
 
         // If status is completed and completed_date is not set, set it
         if (formData.status === 'completed' && !formData.completed_date) {
           updateData.completed_date = new Date().toISOString();
+        }
+
+        // Ensure activity_date is set (use due_date if available, otherwise current time)
+        if (!updateData.activity_date) {
+          updateData.activity_date = formData.due_date || new Date().toISOString();
         }
 
         const { data, error } = await db
@@ -175,9 +220,15 @@ const ActivityFormDialog: React.FC<ActivityFormDialogProps> = ({
             subject: formData.subject,
             description: formData.description || null,
             status: formData.status,
+            activity_date: formData.due_date || new Date().toISOString(),
             due_date: formData.due_date || null,
             completed_date: formData.completed_date || null,
             assigned_to: formData.assigned_to || null,
+            duration: formData.duration || null,
+            outcome: formData.outcome || null,
+            location: formData.location || null,
+            agenda: formData.agenda || null,
+            attendees: formData.attendees && formData.attendees.length > 0 ? formData.attendees : null,
             created_by: userId,
             agency_id: agencyId,
             created_at: new Date().toISOString(),
@@ -298,24 +349,109 @@ const ActivityFormDialog: React.FC<ActivityFormDialogProps> = ({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="due_date">Due Date</Label>
+              <Label htmlFor="due_date">Due Date & Time</Label>
               <Input
                 id="due_date"
                 type="datetime-local"
                 value={formatDateTimeLocal(formData.due_date)}
-                onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value ? new Date(e.target.value).toISOString() : '' }))}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    // Convert local datetime to ISO string
+                    const localDate = new Date(e.target.value);
+                    setFormData(prev => ({ ...prev, due_date: localDate.toISOString() }));
+                  } else {
+                    setFormData(prev => ({ ...prev, due_date: '' }));
+                  }
+                }}
               />
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="assigned_to">Assigned To</Label>
+            <Select 
+              value={formData.assigned_to || undefined} 
+              onValueChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value === '__none__' ? '' : value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select employee (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {employees.map((emp) => (
+                  <SelectItem key={emp.id} value={emp.id}>
+                    {emp.full_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {formData.status === 'completed' && (
             <div className="space-y-2">
-              <Label htmlFor="completed_date">Completed Date</Label>
+              <Label htmlFor="completed_date">Completed Date & Time</Label>
               <Input
                 id="completed_date"
                 type="datetime-local"
                 value={formatDateTimeLocal(formData.completed_date)}
-                onChange={(e) => setFormData(prev => ({ ...prev, completed_date: e.target.value ? new Date(e.target.value).toISOString() : '' }))}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    const localDate = new Date(e.target.value);
+                    setFormData(prev => ({ ...prev, completed_date: localDate.toISOString() }));
+                  } else {
+                    setFormData(prev => ({ ...prev, completed_date: '' }));
+                  }
+                }}
+              />
+            </div>
+          )}
+
+          {formData.activity_type === 'meeting' && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="location">Location</Label>
+                <Input
+                  id="location"
+                  value={formData.location || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
+                  placeholder="Meeting location"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="agenda">Agenda</Label>
+                <Textarea
+                  id="agenda"
+                  value={formData.agenda || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, agenda: e.target.value }))}
+                  rows={3}
+                  placeholder="Meeting agenda"
+                />
+              </div>
+            </>
+          )}
+
+          {formData.activity_type === 'call' && (
+            <div className="space-y-2">
+              <Label htmlFor="duration">Duration (minutes)</Label>
+              <Input
+                id="duration"
+                type="number"
+                value={formData.duration || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, duration: Number(e.target.value) || null }))}
+                placeholder="Call duration in minutes"
+              />
+            </div>
+          )}
+
+          {(formData.activity_type === 'call' || formData.activity_type === 'meeting') && (
+            <div className="space-y-2">
+              <Label htmlFor="outcome">Outcome</Label>
+              <Textarea
+                id="outcome"
+                value={formData.outcome || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, outcome: e.target.value }))}
+                rows={2}
+                placeholder="Activity outcome or result"
               />
             </div>
           )}

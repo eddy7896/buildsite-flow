@@ -18,7 +18,7 @@ import {
 import { 
   Plus, Search, Filter, Mail, Phone, Loader2, Edit, Trash2, Eye, 
   Users, UserCheck, UserX, Briefcase, Shield, Crown, Star, MapPin, 
-  Calendar, Building2, UserPlus, X, MoreVertical, ExternalLink, Clock, Calculator
+  Calendar, Building2, UserPlus, X, MoreVertical, ExternalLink, Clock, Calculator, BarChart3
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -26,8 +26,11 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import UserFormDialog from "@/components/UserFormDialog";
 import { DepartmentBreadcrumb } from "@/components/DepartmentBreadcrumb";
 import { useDepartmentNavigation } from "@/hooks/useDepartmentNavigation";
-import { selectRecords, updateRecord, deleteRecord } from '@/services/api/postgresql-service';
-import { getRoleDisplayName, ROLE_CATEGORIES } from '@/utils/roleUtils';
+import { selectRecords, updateRecord, deleteRecord, insertRecord } from '@/services/api/postgresql-service';
+import { generateUUID } from '@/lib/uuid';
+import { getAgencyId } from '@/utils/agencyUtils';
+import { getRoleDisplayName, ROLE_CATEGORIES, canAccessEmployeeData, canManageRole, AppRole } from '@/utils/roleUtils';
+import { RoleGuard } from "@/components/RoleGuard";
 
 interface UnifiedEmployee {
   id: string;
@@ -54,7 +57,7 @@ interface UnifiedEmployee {
 
 const EmployeeManagement = () => {
   const { toast } = useToast();
-  const { user, userRole } = useAuth();
+  const { user, userRole, profile } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const {
@@ -90,6 +93,28 @@ const EmployeeManagement = () => {
   const [showUserDeleteDialog, setShowUserDeleteDialog] = useState(false);
   const [editForm, setEditForm] = useState<Partial<UnifiedEmployee>>({});
   const [saving, setSaving] = useState(false);
+
+  const managerDepartment = profile?.department || undefined;
+
+  const canViewEmployee = (employee: UnifiedEmployee): boolean => {
+    if (!user || !userRole) return false;
+    // Everyone can see their own record
+    if (employee.user_id === user.id) return true;
+    return canAccessEmployeeData(userRole as AppRole, managerDepartment, employee.department);
+  };
+
+  const canManageEmployee = (employee: UnifiedEmployee): boolean => {
+    if (!user || !userRole) return false;
+    // Cannot manage yourself from this screen
+    if (employee.user_id === user.id) return false;
+    const canAccess = canAccessEmployeeData(
+      userRole as AppRole,
+      managerDepartment,
+      employee.department
+    );
+    if (!canAccess) return false;
+    return canManageRole(userRole as AppRole, employee.role as AppRole);
+  };
 
   useEffect(() => {
     fetchDepartments();
@@ -296,8 +321,8 @@ const EmployeeManagement = () => {
       // Managers tab shows only active managers
       filtered = filtered.filter(emp => emp.is_active && ROLE_CATEGORIES.management.includes(emp.role as any));
     } else if (selectedTab === 'all') {
-      // "All" tab shows only active employees (deleted employees appear in "Trash" tab)
-      filtered = filtered.filter(emp => emp.is_active);
+      // "All" tab shows ALL employees regardless of status
+      // No filter applied - show everything
     }
 
     // Search filter
@@ -349,6 +374,14 @@ const EmployeeManagement = () => {
   };
 
   const handleEditEmployee = (employee: UnifiedEmployee) => {
+    if (!canManageEmployee(employee)) {
+      toast({
+        title: "Permission denied",
+        description: "You are not allowed to edit this employee.",
+        variant: "destructive",
+      });
+      return;
+    }
     // Check if this is a user (has user_id but no employee_id) or an employee
     if (!employee.employee_id) {
       // This is a user, open UserFormDialog
@@ -382,6 +415,14 @@ const EmployeeManagement = () => {
   };
 
   const handleDeleteEmployee = (employee: UnifiedEmployee) => {
+    if (!canManageEmployee(employee)) {
+      toast({
+        title: "Permission denied",
+        description: "You are not allowed to delete or deactivate this employee.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!employee.employee_id) {
       // This is a user, show user delete dialog
       setSelectedUserForDelete(employee);
@@ -410,6 +451,7 @@ const EmployeeManagement = () => {
       const isNowActive = editForm.is_active;
       const statusChangedToActive = wasInactive && isNowActive;
 
+      // Update all three tables sequentially to ensure consistency
       // Check if profile exists
       const existingProfiles = await selectRecords('profiles', {
         filters: [{ column: 'user_id', operator: 'eq', value: selectedEmployee.user_id }]
@@ -426,9 +468,18 @@ const EmployeeManagement = () => {
           is_active: editForm.is_active,
         }, { user_id: selectedEmployee.user_id }, user.id);
       } else {
-        // Profile doesn't exist, but we can't create it here without more info
-        // Just log a warning
-        console.warn('Profile does not exist for user:', selectedEmployee.user_id);
+        // Profile doesn't exist - create it with the updated information
+        const agencyId = await getAgencyId(profile, user?.id);
+        await insertRecord('profiles', {
+          id: generateUUID(),
+          user_id: selectedEmployee.user_id,
+          agency_id: agencyId || '00000000-0000-0000-0000-000000000000',
+          full_name: editForm.full_name,
+          phone: editForm.phone,
+          department: editForm.department,
+          position: editForm.position,
+          is_active: editForm.is_active,
+        }, user.id);
       }
 
       // Update users table is_active status
@@ -458,9 +509,6 @@ const EmployeeManagement = () => {
           work_location: editForm.work_location,
           is_active: editForm.is_active,
         }, { user_id: selectedEmployee.user_id }, user.id);
-      } else {
-        // Employee details doesn't exist - that's okay for users without employee records
-        console.log('Employee details does not exist for user:', selectedEmployee.user_id);
       }
 
       toast({
@@ -477,10 +525,19 @@ const EmployeeManagement = () => {
         setSelectedTab('active');
       }
       
-      // Small delay to ensure view is updated
-      setTimeout(() => {
-        fetchEmployees();
-      }, 100);
+      // Force multiple refreshes to ensure the view is updated
+      // The view might need time to recalculate is_fully_active
+      await fetchEmployees();
+      
+      // Refresh again after a short delay
+      setTimeout(async () => {
+        await fetchEmployees();
+      }, 300);
+      
+      // Final refresh after longer delay to ensure database view has fully updated
+      setTimeout(async () => {
+        await fetchEmployees();
+      }, 1000);
     } catch (error: any) {
       console.error('Error updating employee:', error);
       toast({
@@ -896,16 +953,18 @@ const EmployeeManagement = () => {
               : "Manage all employees, users, and team members in one place"}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate('/create-employee')}>
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add Employee
-          </Button>
-          <Button onClick={() => setShowUserFormDialog(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add User
-          </Button>
-        </div>
+        <RoleGuard requiredRole="hr" fallback={null}>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate('/create-employee')}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Employee
+            </Button>
+            <Button onClick={() => setShowUserFormDialog(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add User
+            </Button>
+          </div>
+        </RoleGuard>
       </div>
 
       {/* Stats Cards */}
@@ -1079,6 +1138,9 @@ const EmployeeManagement = () => {
           ) : (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {filteredEmployees.map((employee) => {
+                const canView = canViewEmployee(employee);
+                const canEdit = canManageEmployee(employee);
+                const canDelete = canManageEmployee(employee);
                 const RoleIcon = getRoleIcon(employee.role);
                 
                 return (
@@ -1217,6 +1279,7 @@ const EmployeeManagement = () => {
                           size="sm" 
                           className="flex-1 text-xs h-8 min-w-0"
                           onClick={() => handleViewEmployee(employee)}
+                          disabled={!canView}
                         >
                           <Eye className="h-3.5 w-3.5 mr-1 sm:mr-1.5" />
                           <span className="hidden sm:inline">View</span>
@@ -1226,6 +1289,7 @@ const EmployeeManagement = () => {
                           size="sm" 
                           className="h-8 w-8 sm:w-8 p-0 flex-shrink-0"
                           onClick={() => handleEditEmployee(employee)}
+                          disabled={!canEdit}
                           title="Edit employee"
                         >
                           <Edit className="h-3.5 w-3.5" />
@@ -1242,11 +1306,11 @@ const EmployeeManagement = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewEmployee(employee)}>
+                            <DropdownMenuItem onClick={() => handleViewEmployee(employee)} disabled={!canView}>
                               <Eye className="h-4 w-4 mr-2" />
                               View Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleEditEmployee(employee)}>
+                            <DropdownMenuItem onClick={() => handleEditEmployee(employee)} disabled={!canEdit}>
                               <Edit className="h-4 w-4 mr-2" />
                               Edit
                             </DropdownMenuItem>
@@ -1285,6 +1349,13 @@ const EmployeeManagement = () => {
                               <ExternalLink className="h-3 w-3 ml-auto" />
                             </DropdownMenuItem>
                             <DropdownMenuItem 
+                              onClick={() => navigate(`/employee-performance?employeeId=${employee.user_id}`)}
+                            >
+                              <BarChart3 className="h-4 w-4 mr-2" />
+                              View Performance
+                              <ExternalLink className="h-3 w-3 ml-auto" />
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
                               onClick={() => navigateToPayroll({ 
                                 employeeId: employee.user_id, 
                                 employeeName: employee.full_name,
@@ -1297,13 +1368,15 @@ const EmployeeManagement = () => {
                               <ExternalLink className="h-3 w-3 ml-auto" />
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              onClick={() => handleDeleteEmployee(employee)}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
+                            {canDelete && (
+                              <DropdownMenuItem 
+                                onClick={() => handleDeleteEmployee(employee)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -1496,6 +1569,18 @@ const EmployeeManagement = () => {
                     >
                       <Calculator className="h-4 w-4 mr-2" />
                       View Payroll
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShowViewDialog(false);
+                        navigate(`/employee-performance?employeeId=${selectedEmployee.user_id}`);
+                      }}
+                      className="w-full"
+                    >
+                      <BarChart3 className="h-4 w-4 mr-2" />
+                      View Performance
                     </Button>
                   </div>
                 </div>

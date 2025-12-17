@@ -48,7 +48,7 @@ export function DepartmentFormDialog({
     budget: "",
   });
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
 
   useEffect(() => {
     if (open) {

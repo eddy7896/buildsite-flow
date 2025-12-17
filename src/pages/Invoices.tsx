@@ -8,6 +8,7 @@ import { selectRecords } from '@/services/api/postgresql-service';
 import { useToast } from "@/hooks/use-toast";
 import InvoiceFormDialog from "@/components/InvoiceFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
+import { useSearchParams } from "react-router-dom";
 
 interface Invoice {
   id: string;
@@ -30,6 +31,8 @@ interface Invoice {
 
 const Invoices = () => {
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const clientFilterId = searchParams.get("client_id");
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -48,7 +51,11 @@ const Invoices = () => {
       const invoicesData = await selectRecords('invoices', {
         orderBy: 'created_at DESC',
       });
-      setInvoices(invoicesData || []);
+      const scoped = (invoicesData || []) as Invoice[];
+      const filteredByClient = clientFilterId
+        ? scoped.filter(inv => inv.client_id === clientFilterId)
+        : scoped;
+      setInvoices(filteredByClient);
     } catch (error: any) {
       console.error('Error fetching invoices:', error);
       toast({

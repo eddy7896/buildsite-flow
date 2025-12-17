@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
 import { selectRecords, updateRecord } from '@/services/api/postgresql-service';
+import type { AppRole } from "@/utils/roleUtils";
 
 interface Employee {
   id: string;
@@ -36,7 +37,7 @@ interface Employee {
 const Employees = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, userRole } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -47,6 +48,12 @@ const Employees = () => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Employee>>({});
+
+  const canManageEmployees =
+    !!userRole &&
+    (['super_admin', 'ceo', 'admin', 'hr', 'department_head', 'team_lead'] as AppRole[]).includes(
+      userRole as AppRole
+    );
 
   const fetchDepartments = async () => {
     try {
@@ -157,6 +164,14 @@ const Employees = () => {
   };
 
   const handleEditEmployee = (employee: Employee) => {
+    if (!canManageEmployees) {
+      toast({
+        title: "Permission denied",
+        description: "You are not allowed to edit employees.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSelectedEmployee(employee);
     setEditForm({
       first_name: employee.first_name,
@@ -172,6 +187,14 @@ const Employees = () => {
   };
 
   const handleDeleteEmployee = (employee: Employee) => {
+    if (!canManageEmployees) {
+      toast({
+        title: "Permission denied",
+        description: "You are not allowed to delete or deactivate employees.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSelectedEmployee(employee);
     setShowDeleteDialog(true);
   };
@@ -253,10 +276,12 @@ const Employees = () => {
           <h1 className="text-2xl sm:text-3xl font-bold">Employees</h1>
           <p className="text-sm sm:text-base text-muted-foreground">Manage employee information and records</p>
         </div>
-        <Button onClick={() => navigate('/create-employee')} className="w-full sm:w-auto">
-          <Plus className="mr-2 h-4 w-4" />
-          Add Employee
-        </Button>
+        {canManageEmployees && (
+          <Button onClick={() => navigate('/create-employee')} className="w-full sm:w-auto">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Employee
+          </Button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -593,7 +618,7 @@ const Employees = () => {
                         </SelectItem>
                       ))
                     ) : (
-                      <SelectItem value="" disabled>No departments available</SelectItem>
+                      <SelectItem value="no-dept" disabled>No departments available</SelectItem>
                     )}
                   </SelectContent>
                 </Select>

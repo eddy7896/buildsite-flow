@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { insertRecord, updateRecord, selectRecords } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
+import { getEmployeesForAssignmentAuto } from '@/services/api/employee-selector-service';
 
 interface Payroll {
   id?: string;
@@ -42,7 +43,7 @@ const PayrollFormDialog: React.FC<PayrollFormDialogProps> = ({
   payrollPeriodId 
 }) => {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
   const [payrollPeriods, setPayrollPeriods] = useState<any[]>([]);
@@ -104,36 +105,40 @@ const PayrollFormDialog: React.FC<PayrollFormDialogProps> = ({
 
   const fetchEmployees = async () => {
     try {
-      // Fetch active employees with their profiles
-      const employeesData = await selectRecords('employee_details', {
-        where: { is_active: true },
-        orderBy: 'first_name ASC, last_name ASC',
-      });
+      // Use standardized employee fetching service
+      const employeesData = await getEmployeesForAssignmentAuto(profile, user?.id);
       
-      // Fetch profiles for names
-      const userIds = employeesData.map((e: any) => e.user_id).filter(Boolean);
-      let profiles: any[] = [];
+      // Payroll uses employee_id (from employee_details), so we need to fetch employee_details
+      // to get the employee_id for each user_id
+      const userIds = employeesData.map(emp => emp.user_id);
       if (userIds.length > 0) {
-        // Use filters with IN operator
-        const { rawQuery } = await import('@/services/api/postgresql-service');
-        const placeholders = userIds.map((_, i) => `$${i + 1}`).join(',');
-        profiles = await rawQuery(
-          `SELECT * FROM public.profiles WHERE user_id IN (${placeholders})`,
-          userIds
-        ) || [];
+        const employeeDetails = await selectRecords('employee_details', {
+          filters: [
+            { column: 'user_id', operator: 'in', value: userIds }
+          ]
+        });
+        
+        const employeeDetailsMap = new Map(employeeDetails.map((ed: any) => [ed.user_id, ed]));
+        
+        // Combine employee data with employee_details
+        const employeesWithDetails = employeesData.map(emp => {
+          const ed = employeeDetailsMap.get(emp.user_id);
+          return {
+            ...(ed || {}),
+            user_id: emp.user_id,
+            id: ed?.id || emp.user_id,
+            employee_id: ed?.id || emp.user_id,
+            display_name: emp.full_name
+          };
+        });
+        
+        setEmployees(employeesWithDetails);
+      } else {
+        setEmployees([]);
       }
-      
-      const profileMap = new Map(profiles.map((p: any) => [p.user_id, p.full_name]));
-      
-      // Combine employee details with profile names
-      const employeesWithNames = employeesData.map((emp: any) => ({
-        ...emp,
-        display_name: profileMap.get(emp.user_id) || `${emp.first_name} ${emp.last_name}`.trim() || 'Unknown',
-      }));
-      
-      setEmployees(employeesWithNames);
     } catch (error) {
       console.error('Error fetching employees:', error);
+      setEmployees([]);
     }
   };
 

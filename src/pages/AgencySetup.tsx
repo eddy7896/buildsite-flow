@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { generateUUID } from '@/lib/uuid';
 import { 
   Loader2, 
   Building2, 
@@ -992,7 +993,7 @@ export default function AgencySetup() {
                       setFormData(prev => ({
                         ...prev,
                         departments: [...prev.departments, {
-                          id: crypto.randomUUID(),
+                          id: generateUUID(),
                           name: '',
                           description: '',
                           manager: '',

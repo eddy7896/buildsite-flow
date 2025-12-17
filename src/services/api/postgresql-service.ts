@@ -43,8 +43,15 @@ function buildWhereClause(where: Record<string, any>, startIndex: number = 1): {
       params.push(...value);
     } else if (typeof value === 'object' && value.operator) {
       // Support operators like { operator: '>', value: 100 }
-      conditions.push(`${key} ${value.operator} $${paramIndex++}`);
-      params.push(value.value);
+      if (value.operator === 'in' && Array.isArray(value.value)) {
+        // Handle IN operator with arrays
+        const placeholders = value.value.map(() => `$${paramIndex++}`).join(',');
+        conditions.push(`${key} IN (${placeholders})`);
+        params.push(...value.value);
+      } else {
+        conditions.push(`${key} ${value.operator} $${paramIndex++}`);
+        params.push(value.value);
+      }
     } else {
       conditions.push(`${key} = $${paramIndex++}`);
       params.push(value);
@@ -334,34 +341,24 @@ export async function updateRecord<T = any>(
     RETURNING *
   `;
 
-  console.log('[PostgreSQL Service] Update query:', { 
-    table, 
-    setClause: setClause.substring(0, 100),
-    whereClause,
-    paramsCount: allParams.length,
-    whereKeys: Object.keys(where)
-  });
-
   const result = await queryOne<T>(query, allParams, userId);
   
   if (!result) {
     // Check if record exists but update had no effect (e.g., setting is_active=false when already false)
-    // Try to fetch the record to verify it exists
-    const checkQuery = `SELECT * FROM public.${table} ${whereClause} LIMIT 1`;
-    const existingRecord = await queryOne<T>(checkQuery, whereParams, userId);
+    // Try to fetch the record to verify it exists - rebuild WHERE clause with correct parameter indices
+    const { clause: checkWhereClause, params: checkWhereParams } = buildWhereClause(where, 1);
+    const checkQuery = `SELECT * FROM public.${table} ${checkWhereClause} LIMIT 1`;
+    const existingRecord = await queryOne<T>(checkQuery, checkWhereParams, userId);
     
     if (existingRecord) {
       // Record exists but update had no effect (likely already has the same value)
       // Return the existing record as if update succeeded
-      console.log('[PostgreSQL Service] Update had no effect (record already has target value):', { table, where });
       return existingRecord;
     }
     
     console.error('[PostgreSQL Service] Update returned no result and record not found:', { table, where });
     throw new Error(`Failed to update record in ${table}: Record not found`);
   }
-
-  console.log('[PostgreSQL Service] Update successful:', { table, resultId: (result as any)?.id });
   return result;
 }
 

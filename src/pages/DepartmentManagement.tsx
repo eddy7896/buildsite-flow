@@ -137,7 +137,7 @@ export default function DepartmentManagement() {
     role_in_department: string;
   }>>>({});
   
-  const { userRole, profile } = useAuth();
+  const { user, userRole, profile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -168,7 +168,7 @@ export default function DepartmentManagement() {
       if (error) throw error;
       if (data) setManagers(data);
     } catch (error) {
-      console.error("Error fetching managers:", error);
+      // Silently handle error - managers list will be empty
     }
   };
 
@@ -190,7 +190,7 @@ export default function DepartmentManagement() {
       if (error) throw error;
       if (data) setParentDepartments(data);
     } catch (error) {
-      console.error("Error fetching parent departments:", error);
+      // Silently handle error - parent departments list will be empty
     }
   };
 
@@ -198,13 +198,16 @@ export default function DepartmentManagement() {
     setLoading(true);
     try {
       // Get agency_id from profile for filtering
+      // Note: In isolated database architecture, all records belong to the agency
+      // But we still filter by agency_id for consistency (or show NULL records for backward compatibility)
       const agencyId = profile?.agency_id;
       
-      // Build query with agency_id filter if available
+      // Build query - show records matching agency_id OR NULL (for backward compatibility)
       let query = db.from("departments").select("*");
       
       if (agencyId) {
-        query = query.eq("agency_id", agencyId);
+        // Show departments with matching agency_id OR NULL (for records created before backfill)
+        query = query.or(`agency_id.eq.${agencyId},agency_id.is.null`);
       }
       
       const { data, error } = await query.order("name");
@@ -222,7 +225,7 @@ export default function DepartmentManagement() {
             .eq("is_active", true);
           
           if (countError) {
-            console.error("Error fetching team assignments count:", countError);
+            // Silently handle count errors - use 0 as default
           }
           
           const count = countData?.length || 0;
@@ -236,9 +239,7 @@ export default function DepartmentManagement() {
               .eq("user_id", dept.manager_id)
               .single();
             
-            if (managerError) {
-              console.error("Error fetching manager:", managerError);
-            } else {
+            if (!managerError && managerData) {
               manager = managerData;
             }
           }
@@ -252,9 +253,7 @@ export default function DepartmentManagement() {
               .eq("id", dept.parent_department_id)
               .single();
             
-            if (parentError) {
-              console.error("Error fetching parent department:", parentError);
-            } else {
+            if (!parentError && parentData) {
               parent_department = parentData;
             }
           }
@@ -270,7 +269,6 @@ export default function DepartmentManagement() {
 
       setDepartments(departmentsWithCounts);
     } catch (error: any) {
-      console.error("Error fetching departments:", error);
       toast({
         title: "Error",
         description: error?.message || "Failed to fetch departments. Please check your database connection.",
@@ -475,38 +473,114 @@ export default function DepartmentManagement() {
         // Fetch profile data for each employee
         const employeeData = await Promise.all(
           assignments.map(async (assignment) => {
-            const { data: profileData } = await db
-              .from("profiles")
-              .select("full_name")
-              .eq("user_id", assignment.user_id)
-              .single();
+            try {
+              const { data: profileData, error: profileError } = await db
+                .from("profiles")
+                .select("full_name")
+                .eq("user_id", assignment.user_id)
+                .single();
 
-            return {
-              id: assignment.id,
-              user_id: assignment.user_id,
-              position_title: assignment.position_title || "",
-              role_in_department: assignment.role_in_department,
-              full_name: profileData?.full_name || "Unknown",
-            };
+              return {
+                id: assignment.id,
+                user_id: assignment.user_id,
+                position_title: assignment.position_title || "",
+                role_in_department: assignment.role_in_department || "member",
+                full_name: profileData?.full_name || "Unknown Employee",
+              };
+            } catch (profileError) {
+              // If profile fetch fails, still return the assignment with default name
+              return {
+                id: assignment.id,
+                user_id: assignment.user_id,
+                position_title: assignment.position_title || "",
+                role_in_department: assignment.role_in_department || "member",
+                full_name: "Unknown Employee",
+              };
+            }
           })
         );
         setDepartmentEmployees(employeeData);
       } else {
         setDepartmentEmployees([]);
       }
-    } catch (error) {
-      console.error("Error fetching department employees:", error);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to fetch department employees",
+        variant: "destructive",
+      });
       setDepartmentEmployees([]);
     } finally {
       setLoadingEmployees(false);
     }
   };
 
-  const handleViewDetails = (department: Department) => {
+  const handleViewDetails = async (department: Department) => {
     setSelectedDepartment(department);
     setShowDetailsDialog(true);
+    
     if (department.id) {
-      fetchDepartmentEmployees(department.id);
+      // Fetch fresh department data with all related information
+      try {
+        const { data: deptData, error } = await db
+          .from("departments")
+          .select("*")
+          .eq("id", department.id)
+          .single();
+
+        if (error) throw error;
+
+        // Fetch manager info if manager_id exists
+        let manager = null;
+        if (deptData.manager_id) {
+          const { data: managerData, error: managerError } = await db
+            .from("profiles")
+            .select("full_name")
+            .eq("user_id", deptData.manager_id)
+            .single();
+          
+          if (!managerError && managerData) {
+            manager = managerData;
+          }
+        }
+
+        // Fetch parent department info if parent_department_id exists
+        let parent_department = null;
+        if (deptData.parent_department_id) {
+          const { data: parentData, error: parentError } = await db
+            .from("departments")
+            .select("name")
+            .eq("id", deptData.parent_department_id)
+            .single();
+          
+          if (!parentError && parentData) {
+            parent_department = parentData;
+          }
+        }
+
+        // Count team assignments
+        const { data: countData } = await db
+          .from("team_assignments")
+          .select("id")
+          .eq("department_id", department.id)
+          .eq("is_active", true);
+
+        const count = countData?.length || 0;
+
+        // Update selected department with fresh data
+        setSelectedDepartment({
+          ...deptData,
+          manager,
+          parent_department,
+          _count: { team_assignments: count }
+        });
+
+        // Fetch employees
+        fetchDepartmentEmployees(department.id);
+      } catch (error) {
+        // If refresh fails, use the existing department data
+        fetchDepartmentEmployees(department.id);
+      }
     }
   };
 
@@ -1961,8 +2035,7 @@ export default function DepartmentManagement() {
                   departmentMembers={departmentMembers}
                   setDepartmentMembers={setDepartmentMembers}
                   onDepartmentClick={(dept) => {
-                    setSelectedDepartment(dept);
-                    setShowDetailsDialog(true);
+                    handleViewDetails(dept);
                   }}
                   db={db}
                   onRefresh={fetchDepartments}
@@ -2024,11 +2097,11 @@ export default function DepartmentManagement() {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Status</label>
-                  <p className="mt-1">
+                  <div className="mt-1">
                     <Badge variant={selectedDepartment.is_active ? "default" : "secondary"}>
                       {selectedDepartment.is_active ? "Active" : "Inactive"}
                     </Badge>
-                  </p>
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Created</label>

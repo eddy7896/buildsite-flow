@@ -46,6 +46,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -77,14 +78,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         if (decoded.exp && decoded.exp * 1000 > Date.now()) {
-          // Token is still valid
-          const mockUser: User = {
+          // Token is still valid – restore minimal user from token,
+          // then hydrate full user/profile/roles from the database where possible
+          const restoredUser: User = {
             id: decoded.userId || '',
             email: decoded.email || '',
             email_confirmed: true,
             is_active: true
           };
-          setUser(mockUser);
+          setUser(restoredUser);
           
           // Prefer stored role from previous real login if available
           const storedRole = localStorage.getItem('user_role') as AppRole | null;
@@ -120,24 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserRole = async (userId: string) => {
     try {
-      // Check if this is a mock user and handle them differently
-      const mockUsers = [
-        { userId: '550e8400-e29b-41d4-a716-446655440010', role: 'super_admin' as AppRole },
-        { userId: '550e8400-e29b-41d4-a716-446655440011', role: 'admin' as AppRole },
-        { userId: '550e8400-e29b-41d4-a716-446655440012', role: 'hr' as AppRole },
-        { userId: '550e8400-e29b-41d4-a716-446655440013', role: 'finance_manager' as AppRole },
-        { userId: '550e8400-e29b-41d4-a716-446655440014', role: 'employee' as AppRole },
-      ];
-
-      const mockUser = mockUsers.find(u => u.userId === userId);
-      
-      if (mockUser) {
-        console.log('Setting mock user role:', mockUser.role);
-        setUserRole(mockUser.role);
-        return;
-      }
-
-      // For real users, query the database
+      // Query the database for roles
       const data = await selectRecords('user_roles', {
         where: { user_id: userId }
       });
@@ -181,11 +166,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return currentPriority < highestPriority ? current : highest;
       });
 
-      console.log('User roles found:', userRoles, 'Selected highest role:', highestRole);
       setUserRole(highestRole);
     } catch (error) {
       console.error('Error fetching user role:', error);
     }
+  };
+
+  const refreshProfile = async () => {
+    if (!user) return;
+    await fetchUserProfile(user.id);
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
@@ -232,93 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    // Check for mock credentials first
-    const mockUsers: Array<{
-      email: string;
-      password: string;
-      fullName: string;
-      role: AppRole;
-      userId: string;
-    }> = [
-      { email: 'super@buildflow.local', password: 'super123', fullName: 'Super Administrator', role: 'super_admin', userId: '550e8400-e29b-41d4-a716-446655440010' },
-      { email: 'admin@buildflow.local', password: 'admin123', fullName: 'System Administrator', role: 'admin', userId: '550e8400-e29b-41d4-a716-446655440011' },
-      { email: 'hr@buildflow.local', password: 'hr123', fullName: 'HR Manager', role: 'hr', userId: '550e8400-e29b-41d4-a716-446655440012' },
-      { email: 'finance@buildflow.local', password: 'finance123', fullName: 'Finance Manager', role: 'finance_manager', userId: '550e8400-e29b-41d4-a716-446655440013' },
-      { email: 'employee@buildflow.local', password: 'employee123', fullName: 'John Employee', role: 'employee', userId: '550e8400-e29b-41d4-a716-446655440014' },
-    ];
-
-    const mockUser = mockUsers.find(u => u.email === email && u.password === password);
-    
-    if (mockUser) {
-      try {
-        // Create mock session
-        const mockToken = btoa(JSON.stringify({
-          userId: mockUser.userId,
-          email: mockUser.email,
-          exp: Math.floor(Date.now() / 1000) + 86400 // 24 hours
-        }));
-
-        const mockSession: Session = {
-          access_token: mockToken,
-          token_type: 'bearer',
-          expires_in: 3600,
-          expires_at: Date.now() + 3600000,
-          refresh_token: 'mock-refresh',
-          user: {
-            id: mockUser.userId,
-            email: mockUser.email,
-            email_confirmed: true,
-            is_active: true
-          }
-        };
-
-        // Store token
-        localStorage.setItem('auth_token', mockToken);
-        
-        // Set auth state
-        setUser(mockSession.user);
-        setSession(mockSession);
-        
-        // Get agency_id from localStorage if available, otherwise null
-        const agencyId = typeof window !== 'undefined' 
-          ? localStorage.getItem('agency_id') || null 
-          : null;
-
-        // Create mock profile
-        const mockProfile: Profile = {
-          id: `profile${mockUser.userId}`,
-          user_id: mockUser.userId,
-          full_name: mockUser.fullName,
-          phone: null,
-          department: null,
-          position: null,
-          hire_date: null,
-          avatar_url: null,
-          is_active: true,
-          agency_id: agencyId
-        };
-        
-        setProfile(mockProfile);
-        setUserRole(mockUser.role);
-
-        toast({
-          title: "Login successful",
-          description: `Logged in as ${mockUser.fullName}`
-        });
-
-        return { error: null };
-      } catch (error) {
-        console.error('Mock login error:', error);
-        toast({
-          title: "Login failed",
-          description: "Error setting up session",
-          variant: "destructive"
-        });
-        return { error };
-      }
-    }
-
-    // Try real database login (multi-tenant agency-aware)
+    // Real database login (multi-tenant agency-aware)
     try {
       const result = await loginUser({ email, password });
       
@@ -430,7 +333,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     signUp,
     signIn,
-    signOut
+    signOut,
+    refreshProfile
   };
 
   return (

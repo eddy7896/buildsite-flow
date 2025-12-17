@@ -114,7 +114,7 @@ const ConvertLeadToClientDialog: React.FC<ConvertLeadToClientDialogProps> = ({
           created_by: userId,
           agency_id: agencyId,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          // Note: updated_at is automatically set by the database
         }])
         .select()
         .single();
@@ -122,11 +122,11 @@ const ConvertLeadToClientDialog: React.FC<ConvertLeadToClientDialogProps> = ({
       if (clientError) throw clientError;
 
       // Update lead status to 'won'
+      // Note: updated_at is automatically set by the updateRecord function
       await db
         .from('leads')
         .update({ 
           status: 'won',
-          updated_at: new Date().toISOString(),
         })
         .eq('id', lead.id);
 
@@ -147,7 +147,7 @@ const ConvertLeadToClientDialog: React.FC<ConvertLeadToClientDialogProps> = ({
             created_by: userId,
             agency_id: agencyId,
             created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            // Note: updated_at is automatically set by the database
           }]);
       }
 
@@ -171,7 +171,7 @@ const ConvertLeadToClientDialog: React.FC<ConvertLeadToClientDialogProps> = ({
             created_by: userId,
             agency_id: agencyId,
             created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            // Note: updated_at is automatically set by the database
           }]);
       }
 

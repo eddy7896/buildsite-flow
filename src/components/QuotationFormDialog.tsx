@@ -532,7 +532,7 @@ const QuotationFormDialog: React.FC<QuotationFormDialogProps> = ({ isOpen, onClo
           {templates.length > 0 && (
             <div className="space-y-2">
               <Label>Use Template (Optional)</Label>
-              <Select onValueChange={useTemplate} value={formData.template_id || ''}>
+              <Select onValueChange={useTemplate} value={formData.template_id || undefined}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select a template" />
                 </SelectTrigger>

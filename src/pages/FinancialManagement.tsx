@@ -104,22 +104,41 @@ const FinancialManagement = () => {
     const effectiveAgencyId = agencyIdParam || agencyId;
     setJobsLoading(true);
     try {
-      if (!effectiveAgencyId) {
-        setJobs([]);
-        return;
+      let jobsData: any[] = [];
+      if (effectiveAgencyId) {
+        try {
+          jobsData = await selectRecords('jobs', {
+            where: { agency_id: effectiveAgencyId },
+            orderBy: 'created_at DESC',
+          });
+        } catch (err: any) {
+          // Fallback if agency_id column does not exist in current schema
+          if (err?.code === '42703' || String(err?.message || '').includes('agency_id')) {
+            console.warn('jobs has no agency_id column, falling back to all jobs');
+            jobsData = await selectRecords('jobs', {
+              orderBy: 'created_at DESC',
+            });
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        // If no agency_id available, fetch all jobs as a last resort
+        jobsData = await selectRecords('jobs', {
+          orderBy: 'created_at DESC',
+        });
       }
-      const jobsData = await selectRecords('jobs', {
-        where: { agency_id: effectiveAgencyId },
-        orderBy: 'created_at DESC',
-      });
       setJobs(jobsData || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching jobs:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch jobs',
-        variant: 'destructive',
-      });
+      // Do not toast on schema issues; just show empty state
+      if (error?.code !== '42703') {
+        toast({
+          title: 'Error',
+          description: 'Failed to fetch jobs',
+          variant: 'destructive',
+        });
+      }
       setJobs([]);
     } finally {
       setJobsLoading(false);
@@ -238,7 +257,7 @@ const FinancialManagement = () => {
           JOIN journal_entries je ON jel.journal_entry_id = je.id
           LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
           WHERE je.status = 'posted' AND je.agency_id = $1
-          ORDER BY je.entry_date DESC, jel.line_number ASC
+          ORDER BY je.entry_date DESC, COALESCE(jel.line_number, 1), jel.id ASC
           LIMIT 100
         `;
         params = [effectiveAgencyId];
@@ -259,7 +278,7 @@ const FinancialManagement = () => {
           JOIN journal_entries je ON jel.journal_entry_id = je.id
           LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
           WHERE je.status = 'posted'
-          ORDER BY je.entry_date DESC, jel.line_number ASC
+          ORDER BY je.entry_date DESC, COALESCE(jel.line_number, 1), jel.id ASC
           LIMIT 100
         `;
       }
@@ -268,29 +287,80 @@ const FinancialManagement = () => {
       try {
         txnData = await rawQuery(query, params);
       } catch (err: any) {
-        // Fallback if agency_id column does not exist in current schema
-        if (err?.code === '42703' || String(err?.message || '').includes('agency_id')) {
-          console.warn('journal_entries has no agency_id column, falling back to all transactions');
-          query = `
-            SELECT 
-              jel.id,
-              je.entry_date as date,
-              COALESCE(jel.description, je.description) as description,
-              COALESCE(coa.account_type, 'Other') as category,
-              CASE WHEN jel.debit_amount > 0 THEN 'debit' ELSE 'credit' END as type,
-              COALESCE(jel.debit_amount, jel.credit_amount, 0) as amount,
-              je.reference,
-              je.entry_number,
-              coa.account_name,
-              coa.account_code
-            FROM journal_entry_lines jel
-            JOIN journal_entries je ON jel.journal_entry_id = je.id
-            LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
-            WHERE je.status = 'posted'
-            ORDER BY je.entry_date DESC, jel.line_number ASC
-            LIMIT 100
-          `;
-          txnData = await rawQuery(query, []);
+        const message = String(err?.message || '');
+        // Fallbacks for missing columns in older schemas
+        if (err?.code === '42703' || message.includes('column')) {
+          if (message.includes('agency_id')) {
+            console.warn('journal_entries has no agency_id column, falling back to all transactions');
+            query = `
+              SELECT 
+                jel.id,
+                je.entry_date as date,
+                COALESCE(jel.description, je.description) as description,
+                COALESCE(coa.account_type, 'Other') as category,
+                CASE WHEN jel.debit_amount > 0 THEN 'debit' ELSE 'credit' END as type,
+                COALESCE(jel.debit_amount, jel.credit_amount, 0) as amount,
+                je.reference,
+                je.entry_number,
+                coa.account_name,
+                coa.account_code
+              FROM journal_entry_lines jel
+              JOIN journal_entries je ON jel.journal_entry_id = je.id
+              LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
+              WHERE je.status = 'posted'
+              ORDER BY je.entry_date DESC, COALESCE(jel.line_number, 1), jel.id ASC
+              LIMIT 100
+            `;
+            txnData = await rawQuery(query, []);
+          } else if (message.includes('line_number')) {
+            console.warn('journal_entry_lines has no line_number column, falling back to ordering by id');
+            // Re-run the original query but order by jel.id instead of line_number
+            if (effectiveAgencyId) {
+              query = `
+                SELECT 
+                  jel.id,
+                  je.entry_date as date,
+                  COALESCE(jel.description, je.description) as description,
+                  COALESCE(coa.account_type, 'Other') as category,
+                  CASE WHEN jel.debit_amount > 0 THEN 'debit' ELSE 'credit' END as type,
+                  COALESCE(jel.debit_amount, jel.credit_amount, 0) as amount,
+                  je.reference,
+                  je.entry_number,
+                  coa.account_name,
+                  coa.account_code
+                FROM journal_entry_lines jel
+                JOIN journal_entries je ON jel.journal_entry_id = je.id
+                LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
+                WHERE je.status = 'posted' AND je.agency_id = $1
+                ORDER BY je.entry_date DESC, jel.id ASC
+                LIMIT 100
+              `;
+              txnData = await rawQuery(query, [effectiveAgencyId]);
+            } else {
+              query = `
+                SELECT 
+                  jel.id,
+                  je.entry_date as date,
+                  COALESCE(jel.description, je.description) as description,
+                  COALESCE(coa.account_type, 'Other') as category,
+                  CASE WHEN jel.debit_amount > 0 THEN 'debit' ELSE 'credit' END as type,
+                  COALESCE(jel.debit_amount, jel.credit_amount, 0) as amount,
+                  je.reference,
+                  je.entry_number,
+                  coa.account_name,
+                  coa.account_code
+                FROM journal_entry_lines jel
+                JOIN journal_entries je ON jel.journal_entry_id = je.id
+                LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
+                WHERE je.status = 'posted'
+                ORDER BY je.entry_date DESC, jel.id ASC
+                LIMIT 100
+              `;
+              txnData = await rawQuery(query, []);
+            }
+          } else {
+            throw err;
+          }
         } else {
           throw err;
         }

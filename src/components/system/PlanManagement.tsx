@@ -6,20 +6,49 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Save, Trash2, DollarSign, Settings, Loader2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Plus, Save, Trash2, DollarSign, Settings, Loader2, Edit, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePlanManagement, type SubscriptionPlan, type PlanFeature } from '@/hooks/usePlanManagement';
 
 const PlanManagement = () => {
   const { toast } = useToast();
-  const { plans, availableFeatures, loading, updatePlan, createPlan, deletePlan } = usePlanManagement();
+  const { 
+    plans, 
+    availableFeatures, 
+    loading, 
+    updatePlan, 
+    createPlan, 
+    deletePlan,
+    createFeature,
+    updateFeature,
+    deleteFeature,
+    refreshFeatures
+  } = usePlanManagement();
   
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<SubscriptionPlan>>({});
+  
+  // Feature Management state
+  const [isFeatureDialogOpen, setIsFeatureDialogOpen] = useState(false);
+  const [editingFeature, setEditingFeature] = useState<PlanFeature | null>(null);
+  const [featureForm, setFeatureForm] = useState<{ name: string; description: string; feature_key: string }>({
+    name: '',
+    description: '',
+    feature_key: ''
+  });
 
   const handlePlanSelect = (plan: SubscriptionPlan) => {
     setSelectedPlan(plan);
+    
+    // Merge plan features with all available features
+    const allFeatures = availableFeatures.map(af => {
+      const planFeature = plan.features.find(pf => pf.id === af.id);
+      return planFeature || { ...af, enabled: false };
+    });
+    
     setEditForm({
       name: plan.name,
       description: plan.description,
@@ -30,7 +59,7 @@ const PlanManagement = () => {
       max_users: plan.max_users,
       max_agencies: plan.max_agencies,
       max_storage_gb: plan.max_storage_gb,
-      features: [...plan.features]
+      features: allFeatures
     });
     setIsEditing(true);
   };
@@ -38,20 +67,52 @@ const PlanManagement = () => {
   const handleSavePlan = async () => {
     if (!selectedPlan || !editForm) return;
 
-    await updatePlan(selectedPlan.id, editForm);
-    setIsEditing(false);
-    setSelectedPlan(null);
-    setEditForm({});
+    // Validation
+    if (!editForm.name || editForm.name.trim() === '') {
+      toast({
+        title: "Validation Error",
+        description: "Plan name is required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (editForm.price === undefined || editForm.price < 0) {
+      toast({
+        title: "Validation Error",
+        description: "Price must be a positive number",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!editForm.interval || !['month', 'year'].includes(editForm.interval)) {
+      toast({
+        title: "Validation Error",
+        description: "Billing interval must be 'month' or 'year'",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      await updatePlan(selectedPlan.id, editForm);
+      setIsEditing(false);
+      setSelectedPlan(null);
+      setEditForm({});
+    } catch (error) {
+      // Error already handled in hook
+    }
   };
 
   const handleFeatureToggle = (featureId: string) => {
     setEditForm(prev => ({
       ...prev,
-      features: prev.features?.map(feature =>
+      features: (prev.features || []).map(feature =>
         feature.id === featureId 
           ? { ...feature, enabled: !feature.enabled }
           : feature
-      ) || []
+      )
     }));
   };
 
@@ -69,7 +130,7 @@ const PlanManagement = () => {
       features: availableFeatures.map(feature => ({
         ...feature,
         enabled: false
-      }))
+      })) || []
     };
     
     setSelectedPlan(null);
@@ -80,9 +141,41 @@ const PlanManagement = () => {
   const handleCreateNewPlan = async () => {
     if (!editForm) return;
     
-    await createPlan(editForm as Omit<SubscriptionPlan, 'id'>);
-    setIsEditing(false);
-    setEditForm({});
+    // Validation
+    if (!editForm.name || editForm.name.trim() === '') {
+      toast({
+        title: "Validation Error",
+        description: "Plan name is required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (editForm.price === undefined || editForm.price < 0) {
+      toast({
+        title: "Validation Error",
+        description: "Price must be a positive number",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (!editForm.interval || !['month', 'year'].includes(editForm.interval)) {
+      toast({
+        title: "Validation Error",
+        description: "Billing interval must be 'month' or 'year'",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    try {
+      await createPlan(editForm as Omit<SubscriptionPlan, 'id'>);
+      setIsEditing(false);
+      setEditForm({});
+    } catch (error) {
+      // Error already handled in hook
+    }
   };
 
   const handleDeletePlan = async (planId: string) => {
@@ -265,16 +358,30 @@ const PlanManagement = () => {
                 </div>
 
                 <div className="space-y-4">
-                  <Label>Features</Label>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Features</Label>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setFeatureForm({ name: '', description: '', feature_key: '' });
+                        setEditingFeature(null);
+                        setIsFeatureDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Feature
+                    </Button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
                     {(editForm.features || availableFeatures).map((feature) => (
                       <div key={feature.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="space-y-1">
+                        <div className="space-y-1 flex-1">
                           <div className="font-medium">{feature.name}</div>
                           <div className="text-sm text-muted-foreground">{feature.description}</div>
                         </div>
                         <Switch
-                          checked={feature.enabled}
+                          checked={feature.enabled || false}
                           onCheckedChange={() => handleFeatureToggle(feature.id)}
                         />
                       </div>
@@ -316,22 +423,150 @@ const PlanManagement = () => {
         <TabsContent value="features" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Available Features</CardTitle>
-              <CardDescription>Manage system-wide feature definitions</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Feature Management</CardTitle>
+                  <CardDescription>Manage system-wide feature definitions</CardDescription>
+                </div>
+                <Dialog open={isFeatureDialogOpen} onOpenChange={setIsFeatureDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button onClick={() => {
+                      setEditingFeature(null);
+                      setFeatureForm({ name: '', description: '', feature_key: '' });
+                    }}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Feature
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>
+                        {editingFeature ? 'Edit Feature' : 'Create New Feature'}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {editingFeature ? 'Update feature details' : 'Add a new feature that can be enabled in subscription plans'}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="featureName">Feature Name</Label>
+                        <Input
+                          id="featureName"
+                          value={featureForm.name}
+                          onChange={(e) => setFeatureForm(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="e.g., Advanced Analytics"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="featureKey">Feature Key</Label>
+                        <Input
+                          id="featureKey"
+                          value={featureForm.feature_key}
+                          onChange={(e) => setFeatureForm(prev => ({ ...prev, feature_key: e.target.value.toLowerCase().replace(/\s+/g, '_') }))}
+                          placeholder="e.g., advanced_analytics"
+                          disabled={!!editingFeature}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Unique identifier (lowercase, underscores only). Cannot be changed after creation.
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="featureDescription">Description</Label>
+                        <Textarea
+                          id="featureDescription"
+                          value={featureForm.description}
+                          onChange={(e) => setFeatureForm(prev => ({ ...prev, description: e.target.value }))}
+                          placeholder="Describe what this feature enables"
+                          rows={3}
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsFeatureDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          try {
+                            if (!featureForm.name || !featureForm.feature_key) {
+                              toast({
+                                title: "Validation Error",
+                                description: "Name and feature key are required",
+                                variant: "destructive"
+                              });
+                              return;
+                            }
+
+                            if (editingFeature) {
+                              await updateFeature(editingFeature.id, featureForm);
+                            } else {
+                              await createFeature(featureForm);
+                            }
+                            setIsFeatureDialogOpen(false);
+                            setFeatureForm({ name: '', description: '', feature_key: '' });
+                            setEditingFeature(null);
+                          } catch (error) {
+                            // Error already handled in hook
+                          }
+                        }}
+                      >
+                        {editingFeature ? 'Update' : 'Create'} Feature
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {availableFeatures.map((feature) => (
-                  <Card key={feature.id}>
+                  <Card key={feature.id} className="relative">
                     <CardContent className="pt-4">
                       <div className="space-y-2">
-                        <h4 className="font-medium">{feature.name}</h4>
-                        <p className="text-sm text-muted-foreground">{feature.description}</p>
-                        <Badge variant="outline">{feature.feature_key}</Badge>
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h4 className="font-medium">{feature.name}</h4>
+                            <p className="text-sm text-muted-foreground mt-1">{feature.description}</p>
+                            <Badge variant="outline" className="mt-2">{feature.feature_key}</Badge>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setEditingFeature(feature);
+                                setFeatureForm({
+                                  name: feature.name,
+                                  description: feature.description,
+                                  feature_key: feature.feature_key
+                                });
+                                setIsFeatureDialogOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={async () => {
+                                if (confirm(`Are you sure you want to ${feature.is_active ? 'deactivate' : 'delete'} this feature?`)) {
+                                  await deleteFeature(feature.id);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
                 ))}
+                {availableFeatures.length === 0 && (
+                  <div className="col-span-full text-center py-8 text-muted-foreground">
+                    No features found. Create your first feature to get started.
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

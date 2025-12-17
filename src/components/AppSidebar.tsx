@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   Building, 
   Users, 
@@ -27,7 +27,8 @@ import {
   CalendarDays,
   UserCog,
   Settings2,
-  UserPlus
+  UserPlus,
+  TrendingUp
 } from 'lucide-react';
 import {
   Sidebar,
@@ -44,6 +45,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getPagesForRole, type PageConfig } from '@/utils/rolePages';
 import { AppRole } from '@/utils/roleUtils';
+import { useAgencySettings } from '@/hooks/useAgencySettings';
 
 // Icon mapping from string names to icon components
 const iconMap: Record<string, any> = {
@@ -58,7 +60,7 @@ const iconMap: Record<string, any> = {
   DollarSign,
   Calendar,
   Clock,
-  TrendingUp: ChartLine,
+  TrendingUp,
   AlertCircle: Clock,
   CalendarDays,
   Shield: Monitor,
@@ -83,11 +85,49 @@ const iconMap: Record<string, any> = {
 export function AppSidebar() {
   const { state, setOpenMobile } = useSidebar();
   const { userRole, loading } = useAuth();
+  const { settings: agencySettings } = useAgencySettings();
   const location = useLocation();
   const currentPath = location.pathname;
   const isMobile = useIsMobile();
+  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
 
-  console.log('AppSidebar - userRole:', userRole, 'loading:', loading);
+  // Check setup status
+  useEffect(() => {
+    const checkSetup = async () => {
+      try {
+        const agencyDatabase = localStorage.getItem('agency_database');
+        if (!agencyDatabase) {
+          setSetupComplete(true); // No agency database means no setup needed
+          return;
+        }
+
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        const apiBaseUrl = API_URL.replace(/\/api\/?$/, '');
+        
+        const response = await fetch(`${apiBaseUrl}/api/agencies/check-setup?database=${encodeURIComponent(agencyDatabase)}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+            'X-Agency-Database': agencyDatabase || '',
+          },
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          setSetupComplete(result.setupComplete || false);
+        } else {
+          setSetupComplete(true); // Assume complete on error
+        }
+      } catch (error) {
+        console.error('Error checking setup status:', error);
+        setSetupComplete(true); // Assume complete on error
+      }
+    };
+
+    if (!loading && userRole) {
+      checkSetup();
+    }
+  }, [loading, userRole]);
 
   // Auto-collapse sidebar on mobile when navigating
   useEffect(() => {
@@ -172,16 +212,42 @@ export function AppSidebar() {
           <SidebarGroupLabel>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                  <Building className="h-4 w-4 text-primary" />
-                </div>
-                {(!collapsed || isMobile) && <span className="text-xl font-bold">BuildFlow</span>}
+                {agencySettings?.logo_url ? (
+                  <img
+                    src={agencySettings.logo_url}
+                    alt={agencySettings.agency_name || 'Agency Logo'}
+                    className="h-8 w-8 rounded-lg object-contain bg-primary/5"
+                  />
+                ) : (
+                  <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <Building className="h-4 w-4 text-primary" />
+                  </div>
+                )}
+                {(!collapsed || isMobile) && (
+                  <span className="text-xl font-bold">
+                    {agencySettings?.agency_name || 'BuildFlow'}
+                  </span>
+                )}
               </div>
             </div>
           </SidebarGroupLabel>
           
           <SidebarGroupContent className="mt-8">
             <SidebarMenu>
+              {/* Setup Progress Link - Show only if setup is incomplete */}
+              {setupComplete === false && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink 
+                      to="/agency-setup-progress" 
+                      className={({ isActive }) => getNavCls({ isActive })}
+                    >
+                      <TrendingUp className="h-4 w-4" />
+                      {(!collapsed || isMobile) && <span>Setup Progress</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
               {mainPages.map((page) => {
                 const IconComponent = iconMap[page.icon] || User;
                 return (

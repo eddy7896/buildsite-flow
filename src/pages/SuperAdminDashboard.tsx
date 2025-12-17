@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Navigate } from 'react-router-dom';
+import { useParams, Navigate, useNavigate } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ export default function SuperAdminDashboard() {
   const { agencyId } = useParams<{ agencyId: string }>();
   const { userRole } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
 
@@ -70,7 +71,13 @@ export default function SuperAdminDashboard() {
         }
 
         const data = await response.json();
-        setSetupStatus({ setupComplete: !!data.setupComplete });
+        const isComplete = !!data.setupComplete;
+        setSetupStatus({ setupComplete: isComplete });
+        
+        // If setup is incomplete, redirect to the better setup progress page
+        if (!isComplete) {
+          navigate('/agency-setup-progress', { replace: true });
+        }
       } catch (error: any) {
         console.error('Error loading agency setup status:', error);
         toast({
@@ -79,13 +86,15 @@ export default function SuperAdminDashboard() {
           variant: 'destructive',
         });
         setSetupStatus({ setupComplete: false });
+        // On error, assume setup needed and redirect to progress page
+        navigate('/agency-setup-progress', { replace: true });
       } finally {
         setLoading(false);
       }
     };
 
     fetchSetupStatus();
-  }, [toast]);
+  }, [toast, navigate]);
 
   if (loading) {
     return (
@@ -209,11 +218,15 @@ export default function SuperAdminDashboard() {
             <Button
               className="w-full mt-2"
               variant={setupStatus?.setupComplete ? 'outline' : 'default'}
-              asChild
+              onClick={() => {
+                if (setupStatus?.setupComplete) {
+                  navigate('/agency-setup');
+                } else {
+                  navigate('/agency-setup-progress');
+                }
+              }}
             >
-              <a href="/agency-setup">
-                {setupStatus?.setupComplete ? 'Review Setup Wizard' : 'Continue Setup Wizard'}
-              </a>
+              {setupStatus?.setupComplete ? 'Review Setup Wizard' : 'View Setup Progress'}
             </Button>
           </CardContent>
         </Card>

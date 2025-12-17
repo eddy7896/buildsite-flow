@@ -289,6 +289,30 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
           agency_id: agencyId
         }, currentUser?.id);
 
+        // Create minimal employee_details record so the user appears in unified employee views
+        const nameParts = (formData.name || '').trim().split(/\s+/);
+        const firstName = nameParts[0] || formData.name || 'User';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        const employeeId = `EMP-${newUserId.substring(0, 8).toUpperCase()}`;
+
+        await insertRecord('employee_details', {
+          id: generateUUID(),
+          user_id: newUserId,
+          employee_id: employeeId,
+          first_name: firstName,
+          last_name: lastName,
+          address: null,
+          employment_type: 'full-time',
+          work_location: null,
+          emergency_contact_name: null,
+          emergency_contact_phone: null,
+          emergency_contact_relationship: null,
+          skills: [],
+          notes: null,
+          is_active: true,
+          agency_id: agencyId
+        }, currentUser?.id);
+
         // Store the created user credentials to display
         setCreatedUser({
           email: formData.email,

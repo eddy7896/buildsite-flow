@@ -46,24 +46,24 @@ export function AuthRedirect() {
             setHasRedirected(true);
             
             if (!result.setupComplete) {
-              // Setup not complete, redirect to setup page
-              navigate('/agency-setup');
+              // Setup not complete, redirect to setup progress page (better UI)
+              navigate('/agency-setup-progress');
             } else {
               // Setup complete, go to dashboard
               navigate('/dashboard');
             }
           } else {
-            // If check fails, assume setup needed
+            // If check fails, assume setup needed - redirect to progress page
             setSetupChecked(true);
             setHasRedirected(true);
-            navigate('/agency-setup');
+            navigate('/agency-setup-progress');
           }
         } catch (error) {
           console.error('Error checking setup status:', error);
-          // On error, assume setup needed
+          // On error, assume setup needed - redirect to progress page
           setSetupChecked(true);
           setHasRedirected(true);
-          navigate('/agency-setup');
+          navigate('/agency-setup-progress');
         }
       }
     };

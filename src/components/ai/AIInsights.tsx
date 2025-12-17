@@ -154,7 +154,6 @@ export function AIInsights() {
     try {
       // Simulate AI insight generation
       await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log('Refreshed AI insights');
     } catch (error) {
       console.error('Error refreshing insights:', error);
     } finally {
@@ -164,7 +163,6 @@ export function AIInsights() {
 
   const implementInsight = async (insightId: string) => {
     try {
-      console.log(`Implementing insight: ${insightId}`);
       // In a real app, this would trigger automated actions or create tasks
     } catch (error) {
       console.error('Error implementing insight:', error);

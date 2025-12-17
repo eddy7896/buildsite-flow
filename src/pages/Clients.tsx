@@ -9,9 +9,16 @@ import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/database';
 import ClientFormDialog from "@/components/ClientFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
+import { useAuth } from "@/hooks/useAuth";
+import { getAgencyId } from "@/utils/agencyUtils";
+import { RoleGuard } from "@/components/RoleGuard";
+import { hasRoleOrHigher, AppRole } from "@/utils/roleUtils";
+import { useNavigate } from "react-router-dom";
 
 const Clients = () => {
   const { toast } = useToast();
+  const { user, profile, userRole } = useAuth();
+  const navigate = useNavigate();
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,6 +33,9 @@ const Clients = () => {
     suspendedClients: 0
   });
 
+  const canManageClients = userRole ? hasRoleOrHigher(userRole, 'sales_manager' as AppRole) : false;
+  const canDeleteClients = userRole ? hasRoleOrHigher(userRole, 'admin' as AppRole) : false;
+
   useEffect(() => {
     fetchClients();
   }, []);
@@ -33,9 +43,22 @@ const Clients = () => {
   const fetchClients = async () => {
     try {
       setLoading(true);
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        toast({
+          title: 'Error',
+          description: 'Agency context is missing. Please re-login.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await db
         .from('clients')
         .select('*')
+        .eq('agency_id', agencyId)
+        .eq('is_active', true)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -189,17 +212,44 @@ const Clients = () => {
           </div>
           
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleEditClient(client)}>
-              <Edit className="h-4 w-4" />
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => handleDeleteClient(client)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            {canManageClients && (
+              <Button variant="outline" size="sm" onClick={() => handleEditClient(client)}>
+                <Edit className="h-4 w-4" />
+              </Button>
+            )}
+            {canDeleteClients && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleDeleteClient(client)}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/projects?client_id=${client.id}`)}
+          >
+            View Projects
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/invoices?client_id=${client.id}`)}
+          >
+            View Invoices
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/quotations?client_id=${client.id}`)}
+          >
+            View Quotations
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -230,10 +280,12 @@ const Clients = () => {
             <Filter className="mr-2 h-4 w-4" />
             Export List
           </Button>
-          <Button onClick={() => setIsFormDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Client
-          </Button>
+          {canManageClients && (
+            <Button onClick={() => setIsFormDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Client
+            </Button>
+          )}
         </div>
       </div>
 
@@ -322,10 +374,12 @@ const Clients = () => {
                   <p className="text-sm text-muted-foreground mb-4">
                     {searchTerm ? 'Try adjusting your search terms.' : 'Get started by adding your first client.'}
                   </p>
-                  <Button onClick={() => setIsFormDialogOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Client
-                  </Button>
+                  {canManageClients && (
+                    <Button onClick={() => setIsFormDialogOpen(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Client
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -360,6 +414,8 @@ const Clients = () => {
         itemName={selectedClient?.name || ''}
         itemId={selectedClient?.id || ''}
         tableName="clients"
+        softDelete={true}
+        userId={user?.id}
       />
     </div>
   );

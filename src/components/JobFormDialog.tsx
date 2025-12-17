@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { insertRecord, updateRecord, selectRecords } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
+import { getEmployeesForAssignmentAuto } from '@/services/api/employee-selector-service';
 import { X } from 'lucide-react';
 
 interface Job {
@@ -36,7 +37,7 @@ interface JobFormDialogProps {
 
 const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJobSaved }) => {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
   const [clients, setClients] = useState<any[]>([]);
@@ -154,36 +155,17 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
         setEmployees([]);
         return;
       }
-      const { selectOne } = await import('@/services/api/postgresql-service');
-      const profile = await selectOne('profiles', { user_id: user.id });
-      if (!profile?.agency_id) {
-        setEmployees([]);
-        return;
-      }
-
-      // Fetch employee details
-      const employeeDetails = await selectRecords('employee_details', {
-        where: { is_active: true },
-        orderBy: 'first_name ASC, last_name ASC',
-      });
-
-      // Fetch profiles for names
-      const userIds = employeeDetails.map((e: any) => e.user_id).filter(Boolean);
-      let profiles: any[] = [];
-      if (userIds.length > 0) {
-        profiles = await selectRecords('profiles', {
-          filters: [{ column: 'user_id', operator: 'in', value: userIds }],
-        });
-      }
-
-      const profileMap = new Map(profiles.map((p: any) => [p.user_id, p.full_name]));
       
-      const employeesWithNames = employeeDetails.map((emp: any) => ({
+      // Use standardized employee fetching service
+      const employeesData = await getEmployeesForAssignmentAuto(profile, user?.id);
+      
+      // Transform to component format
+      const transformedEmployees = employeesData.map(emp => ({
         id: emp.user_id,
-        name: profileMap.get(emp.user_id) || `${emp.first_name} ${emp.last_name}`.trim() || 'Unknown',
+        name: emp.full_name
       }));
-
-      setEmployees(employeesWithNames || []);
+      
+      setEmployees(transformedEmployees);
     } catch (error) {
       console.error('Error fetching employees:', error);
       setEmployees([]);

@@ -54,6 +54,7 @@ const ClientFormDialog: React.FC<ClientFormDialogProps> = ({
   onClientSaved,
 }) => {
   const { toast } = useToast();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<Client>({
     name: '',
@@ -147,12 +148,59 @@ const ClientFormDialog: React.FC<ClientFormDialogProps> = ({
     setLoading(true);
 
     try {
-      const dataToSubmit = { ...formData };
+      // Basic validation
+      if (!formData.name.trim()) {
+        toast({
+          title: 'Validation Error',
+          description: 'Client name is required',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (formData.email && !emailRegex.test(formData.email)) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please enter a valid email address',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      if (formData.contact_email && !emailRegex.test(formData.contact_email)) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please enter a valid contact email address',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
+      const dataToSubmit: any = { ...formData };
       
-      // Remove undefined values and id/client_number for new clients
+      // Clean up data: convert empty strings to null for optional fields, remove undefined
+      // Keep required fields even if empty (they'll be validated)
+      const optionalFields = [
+        'company_name', 'industry', 'email', 'phone', 'address', 'city', 'state', 
+        'postal_code', 'country', 'website', 'contact_person', 'contact_position',
+        'contact_email', 'contact_phone', 'billing_address', 'billing_city',
+        'billing_state', 'billing_postal_code', 'billing_country', 'tax_id', 'notes'
+      ];
+      
       Object.keys(dataToSubmit).forEach(key => {
-        if (dataToSubmit[key as keyof Client] === '' || dataToSubmit[key as keyof Client] === undefined) {
-          delete dataToSubmit[key as keyof Client];
+        const value = dataToSubmit[key];
+        if (value === '' || value === undefined) {
+          if (optionalFields.includes(key)) {
+            // Set optional fields to null instead of deleting (so they're explicitly null in DB)
+            dataToSubmit[key] = null;
+          } else {
+            // Remove undefined/empty required fields (they'll cause validation errors)
+            delete dataToSubmit[key];
+          }
         }
       });
 
@@ -175,6 +223,8 @@ const ClientFormDialog: React.FC<ClientFormDialogProps> = ({
         const { data: clientNumberData } = await db
           .rpc('generate_client_number');
 
+        const agencyId = await getAgencyId(profile, user?.id);
+
         const { id, client_number, ...insertData } = dataToSubmit;
         const { error } = await db
           .from('clients')
@@ -182,7 +232,8 @@ const ClientFormDialog: React.FC<ClientFormDialogProps> = ({
             id: generateUUID(),
             ...insertData,
             client_number: clientNumberData || `CLT-${Date.now().toString(36).toUpperCase()}`,
-            agency_id: await getAgencyId(profile, user?.id) || undefined
+            agency_id: agencyId || undefined,
+            is_active: true,
           });
 
         if (error) throw error;

@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { insertRecord, updateRecord, selectRecords } from '@/services/api/postgresql-service';
 import { LeaveRequest, LeaveType } from '@/integrations/postgresql/types';
+import { getEmployeesForAssignmentAuto } from '@/services/api/employee-selector-service';
 
 interface LeaveRequestFormDialogProps {
   isOpen: boolean;
@@ -26,7 +27,7 @@ const LeaveRequestFormDialog: React.FC<LeaveRequestFormDialogProps> = ({
   isEmployeeView = false,
 }) => {
   const { toast } = useToast();
-  const { user, userRole } = useAuth();
+  const { user, userRole, profile } = useAuth();
   
   // Check if user is admin/HR (can manage all requests)
   const isAdminOrHR = userRole === 'admin' || userRole === 'super_admin' || userRole === 'hr';
@@ -124,57 +125,22 @@ const LeaveRequestFormDialog: React.FC<LeaveRequestFormDialogProps> = ({
 
       // Only fetch employees list if user is admin/HR and not in employee view
       if (canManageRequests) {
-        // Fetch employees (users with employee_details)
-        const employeeDetails = await selectRecords('employee_details', {
-          select: 'user_id, first_name, last_name',
-          orderBy: 'first_name ASC, last_name ASC'
-        });
-
-        // Also get profiles for users without employee_details
-        const profiles = await selectRecords('profiles', {
-          select: 'user_id, full_name',
-          orderBy: 'full_name ASC'
-        });
-
-        // Combine and deduplicate
-        const employeeMap = new Map();
-        employeeDetails.forEach((emp: any) => {
-          employeeMap.set(emp.user_id, {
-            id: emp.user_id,
-            name: `${emp.first_name} ${emp.last_name}`.trim()
-          });
-        });
-        profiles.forEach((prof: any) => {
-          if (!employeeMap.has(prof.user_id)) {
-            employeeMap.set(prof.user_id, {
-              id: prof.user_id,
-              name: prof.full_name || 'Unknown'
-            });
-          }
-        });
-
-        setEmployees(Array.from(employeeMap.values()));
+        // Use standardized employee fetching service
+        const employeesData = await getEmployeesForAssignmentAuto(profile, user?.id);
+        setEmployees(employeesData.map(emp => ({
+          id: emp.user_id,
+          name: emp.full_name
+        })));
       } else {
         // For employee view, just set current user as the only employee
         if (user?.id) {
-          // Get current user's name
-          const profile = await selectRecords('profiles', {
-            where: { user_id: user.id },
-            limit: 1
-          });
-          const empDetail = await selectRecords('employee_details', {
-            where: { user_id: user.id },
-            limit: 1
-          });
-          
-          let userName = 'You';
-          if (profile.length > 0 && profile[0].full_name) {
-            userName = profile[0].full_name;
-          } else if (empDetail.length > 0) {
-            userName = `${empDetail[0].first_name} ${empDetail[0].last_name}`.trim();
-          }
-          
-          setEmployees([{ id: user.id, name: userName }]);
+          // Use standardized service to get current user's info
+          const employeesData = await getEmployeesForAssignmentAuto(profile, user?.id);
+          const currentUser = employeesData.find(emp => emp.user_id === user.id);
+          setEmployees([{ 
+            id: user.id, 
+            name: currentUser?.full_name || profile?.full_name || 'You' 
+          }]);
         }
       }
     } catch (error: any) {

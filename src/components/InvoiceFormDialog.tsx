@@ -220,7 +220,7 @@ const InvoiceFormDialog: React.FC<InvoiceFormDialogProps> = ({ isOpen, onClose, 
               <Label htmlFor="client_id">Client</Label>
               <Select 
                 value={formData.client_id || undefined} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, client_id: value === 'none' ? '' : value }))}
+                onValueChange={(value) => setFormData(prev => ({ ...prev, client_id: value === 'none' ? null : value }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select client (optional)" />

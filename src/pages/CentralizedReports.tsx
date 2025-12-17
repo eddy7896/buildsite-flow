@@ -206,8 +206,6 @@ const CentralizedReports = () => {
     if (hasUser) {
       fetchGeneratedReports();
       fetchCustomReports();
-    } else {
-      console.log('No authentication found - user:', user, 'token:', token ? 'exists' : 'missing');
     }
   }, [user, isAuthenticated]);
   
@@ -240,7 +238,6 @@ const CentralizedReports = () => {
     const userId = getUserId();
     const token = localStorage.getItem('auth_token');
     if (!userId && !token) {
-      console.log('No authentication found for fetching reports');
       return;
     }
     
@@ -276,7 +273,6 @@ const CentralizedReports = () => {
     }
     
     if (!userId) {
-      console.log('No user ID available for custom reports');
       return;
     }
     
@@ -291,8 +287,6 @@ const CentralizedReports = () => {
         if (response.success && response.data) {
           setCustomReports(response.data);
         }
-      } else {
-        console.log('Profile not found for user:', userId);
       }
     } catch (error: any) {
       console.error('Failed to load custom reports:', error);

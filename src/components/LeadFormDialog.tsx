@@ -19,12 +19,18 @@ interface Lead {
   email: string;
   phone: string;
   address?: string;
+  website?: string;
+  job_title?: string;
+  industry?: string;
+  location?: string;
   lead_source_id?: string;
   status: string;
   priority: string;
   estimated_value: number;
   probability: number;
   expected_close_date: string;
+  due_date?: string;
+  follow_up_date?: string;
   notes?: string;
 }
 
@@ -41,18 +47,24 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
   const [loading, setLoading] = useState(false);
   const [leadSources, setLeadSources] = useState<any[]>([]);
   const [formData, setFormData] = useState<Lead>({
-    company_name: lead?.company_name || '',
-    contact_name: lead?.contact_name || '',
+    company_name: lead?.company_name || lead?.name || '',
+    contact_name: lead?.contact_name || lead?.name || '',
     email: lead?.email || '',
     phone: lead?.phone || '',
     address: lead?.address || '',
-    lead_source_id: lead?.lead_source_id || '',
+    website: lead?.website || '',
+    job_title: lead?.job_title || '',
+    industry: lead?.industry || '',
+    location: lead?.location || '',
+    lead_source_id: lead?.lead_source_id || lead?.source_id || '',
     status: lead?.status || 'new',
     priority: lead?.priority || 'medium',
-    estimated_value: lead?.estimated_value || 0,
+    estimated_value: lead?.estimated_value || lead?.value || 0,
     probability: lead?.probability || 0,
     expected_close_date: lead?.expected_close_date || '',
-    notes: lead?.notes || '',
+    due_date: lead?.due_date || '',
+    follow_up_date: lead?.follow_up_date || '',
+    notes: lead?.notes || lead?.description || '',
   });
 
   useEffect(() => {
@@ -61,18 +73,24 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
       // Reset form when dialog opens
       if (lead) {
         setFormData({
-          company_name: lead.company_name || '',
-          contact_name: lead.contact_name || '',
+          company_name: lead.company_name || lead.name || '',
+          contact_name: lead.contact_name || lead.name || '',
           email: lead.email || '',
           phone: lead.phone || '',
           address: lead.address || '',
-          lead_source_id: lead.lead_source_id || '',
+          website: lead.website || '',
+          job_title: lead.job_title || '',
+          industry: lead.industry || '',
+          location: lead.location || '',
+          lead_source_id: lead.lead_source_id || lead.source_id || '',
           status: lead.status || 'new',
           priority: lead.priority || 'medium',
-          estimated_value: lead.estimated_value || 0,
+          estimated_value: lead.estimated_value || lead.value || 0,
           probability: lead.probability || 0,
           expected_close_date: lead.expected_close_date || '',
-          notes: lead.notes || '',
+          due_date: lead.due_date || '',
+          follow_up_date: lead.follow_up_date || '',
+          notes: lead.notes || lead.description || '',
         });
       } else {
         setFormData({
@@ -81,12 +99,18 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
           email: '',
           phone: '',
           address: '',
+          website: '',
+          job_title: '',
+          industry: '',
+          location: '',
           lead_source_id: '',
           status: 'new',
           priority: 'medium',
           estimated_value: 0,
           probability: 0,
           expected_close_date: '',
+          due_date: '',
+          follow_up_date: '',
           notes: '',
         });
       }
@@ -126,12 +150,35 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
       const userId = user.id;
 
       if (lead?.id) {
+        const updateData: any = {
+          name: formData.contact_name || formData.company_name || '', // Set name for backward compatibility
+          company_name: formData.company_name,
+          contact_name: formData.contact_name,
+          email: formData.email || null,
+          phone: formData.phone || null,
+          address: formData.address || null,
+          website: formData.website || null,
+          job_title: formData.job_title || null,
+          industry: formData.industry || null,
+          location: formData.location || null,
+          lead_source_id: (formData.lead_source_id && formData.lead_source_id !== '__none__') ? formData.lead_source_id : null,
+          source_id: (formData.lead_source_id && formData.lead_source_id !== '__none__') ? formData.lead_source_id : null,
+          status: formData.status,
+          priority: formData.priority,
+          estimated_value: formData.estimated_value || null,
+          value: formData.estimated_value || null,
+          probability: formData.probability || 0,
+          expected_close_date: formData.expected_close_date || null,
+          due_date: formData.due_date || null,
+          follow_up_date: formData.follow_up_date || null,
+          notes: formData.notes || null,
+          description: formData.notes || null,
+          updated_at: new Date().toISOString(),
+        };
+
         const { data, error } = await db
           .from('leads')
-          .update({
-            ...formData,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq('id', lead.id)
           .select()
           .single();
@@ -153,18 +200,28 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
           .insert([{
             id: generateUUID(),
             lead_number: leadNumber,
+            name: formData.contact_name || formData.company_name || '', // Set name for backward compatibility
             company_name: formData.company_name,
             contact_name: formData.contact_name,
             email: formData.email || null,
             phone: formData.phone || null,
             address: formData.address || null,
+            website: formData.website || null,
+            job_title: formData.job_title || null,
+            industry: formData.industry || null,
+            location: formData.location || null,
             lead_source_id: (formData.lead_source_id && formData.lead_source_id !== '__none__') ? formData.lead_source_id : null,
+            source_id: (formData.lead_source_id && formData.lead_source_id !== '__none__') ? formData.lead_source_id : null,
             status: formData.status,
             priority: formData.priority,
             estimated_value: formData.estimated_value || null,
+            value: formData.estimated_value || null,
             probability: formData.probability || 0,
             expected_close_date: formData.expected_close_date || null,
+            due_date: formData.due_date || null,
+            follow_up_date: formData.follow_up_date || null,
             notes: formData.notes || null,
+            description: formData.notes || null,
             assigned_to: null,
             created_by: userId,
             agency_id: agencyId,
@@ -224,6 +281,46 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
                 value={formData.contact_name}
                 onChange={(e) => setFormData(prev => ({ ...prev, contact_name: e.target.value }))}
                 required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="job_title">Job Title</Label>
+              <Input
+                id="job_title"
+                value={formData.job_title || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, job_title: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="website">Website</Label>
+              <Input
+                id="website"
+                type="url"
+                value={formData.website || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
+                placeholder="https://example.com"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="industry">Industry</Label>
+              <Input
+                id="industry"
+                value={formData.industry || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, industry: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="location">Location</Label>
+              <Input
+                id="location"
+                value={formData.location || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, location: e.target.value }))}
               />
             </div>
           </div>
@@ -334,13 +431,34 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="expected_close_date">Expected Close Date</Label>
+              <Input
+                id="expected_close_date"
+                type="date"
+                value={formData.expected_close_date}
+                onChange={(e) => setFormData(prev => ({ ...prev, expected_close_date: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="due_date">Due Date</Label>
+              <Input
+                id="due_date"
+                type="date"
+                value={formData.due_date || ''}
+                onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
+              />
+            </div>
+          </div>
+
           <div className="space-y-2">
-            <Label htmlFor="expected_close_date">Expected Close Date</Label>
+            <Label htmlFor="follow_up_date">Follow-up Date</Label>
             <Input
-              id="expected_close_date"
+              id="follow_up_date"
               type="date"
-              value={formData.expected_close_date}
-              onChange={(e) => setFormData(prev => ({ ...prev, expected_close_date: e.target.value }))}
+              value={formData.follow_up_date || ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, follow_up_date: e.target.value }))}
             />
           </div>
 

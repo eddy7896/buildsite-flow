@@ -23,6 +23,8 @@ interface Resource {
   availability: number;
   current_projects: number;
   utilization: number;
+  total_hours?: number;
+  estimated_hours?: number;
 }
 
 interface Project {
@@ -186,7 +188,9 @@ export function ResourceManagement({ resources, projects }: ResourceManagementPr
                         <DollarSign className="h-3 w-3 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">Rate</span>
                       </div>
-                      <p className="font-medium">${resource.hourly_rate}/hr</p>
+                      <p className="font-medium">
+                        {resource.hourly_rate > 0 ? `$${resource.hourly_rate.toFixed(2)}/hr` : 'N/A'}
+                      </p>
                     </div>
                   </div>
 
@@ -240,7 +244,10 @@ export function ResourceManagement({ resources, projects }: ResourceManagementPr
                         </td>
                         <td className="p-4 text-muted-foreground">{resource.role}</td>
                         <td className="p-4">{resource.current_projects}</td>
-                        <td className="p-4">{Math.round(40 * (resource.utilization / 100))}</td>
+                        <td className="p-4">
+                          {resource.estimated_hours ? Math.round(resource.estimated_hours) : 
+                           Math.round(40 * (resource.utilization / 100))}h
+                        </td>
                         <td className="p-4">
                           <div className="flex items-center space-x-2">
                             <Progress value={resource.utilization} className="w-20 h-2" />
@@ -373,12 +380,26 @@ export function ResourceManagement({ resources, projects }: ResourceManagementPr
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <h4 className="font-medium">Hourly Rate</h4>
-                    <p className="text-lg">${selectedResource.hourly_rate}</p>
+                    <p className="text-lg">
+                      {selectedResource.hourly_rate > 0 ? `$${selectedResource.hourly_rate.toFixed(2)}` : 'Not set'}
+                    </p>
                   </div>
                   <div>
                     <h4 className="font-medium">Availability</h4>
                     <p className="text-lg">{selectedResource.availability}%</p>
                   </div>
+                  {selectedResource.total_hours !== undefined && (
+                    <>
+                      <div>
+                        <h4 className="font-medium">Total Hours Logged</h4>
+                        <p className="text-lg">{Math.round(selectedResource.total_hours)}h</p>
+                      </div>
+                      <div>
+                        <h4 className="font-medium">Estimated Hours</h4>
+                        <p className="text-lg">{Math.round(selectedResource.estimated_hours || 0)}h</p>
+                      </div>
+                    </>
+                  )}
                 </div>
                 
                 <div>

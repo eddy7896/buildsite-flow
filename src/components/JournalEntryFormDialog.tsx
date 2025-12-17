@@ -90,11 +90,27 @@ const JournalEntryFormDialog: React.FC<JournalEntryFormDialogProps> = ({
       const { selectOne } = await import('@/services/api/postgresql-service');
       const profile = await selectOne('profiles', { user_id: user.id });
       if (!profile?.agency_id) return;
-      
-      const accountsData = await selectRecords('chart_of_accounts', {
-        where: { is_active: true, agency_id: profile.agency_id },
-        orderBy: 'account_code ASC',
-      });
+
+      let accountsData: any[] = [];
+      try {
+        // Prefer agency-scoped accounts when the column exists
+        accountsData = await selectRecords('chart_of_accounts', {
+          where: { is_active: true, agency_id: profile.agency_id },
+          orderBy: 'account_code ASC',
+        });
+      } catch (err: any) {
+        // Fallback if agency_id column does not exist in current schema
+        if (err?.code === '42703' || String(err?.message || '').includes('agency_id')) {
+          console.warn('chart_of_accounts has no agency_id column, falling back to global accounts');
+          accountsData = await selectRecords('chart_of_accounts', {
+            where: { is_active: true },
+            orderBy: 'account_code ASC',
+          });
+        } else {
+          throw err;
+        }
+      }
+
       setAccounts(accountsData || []);
     } catch (error) {
       console.error('Error fetching accounts:', error);
@@ -233,10 +249,10 @@ const JournalEntryFormDialog: React.FC<JournalEntryFormDialogProps> = ({
 
       // Use transactions for updates to ensure data consistency
       if (entry?.id) {
-        const { executeTransaction, updateRecord, deleteRecord, insertRecord } = await import('@/services/api/postgresql-service');
+        const { executeTransaction } = await import('@/services/api/postgresql-service');
         
         // Use transaction for atomic update
-        await executeTransaction(async (client) => {
+        await executeTransaction(async (client: any) => {
           // Update entry
           await client.query(
             `UPDATE journal_entries 
@@ -279,7 +295,7 @@ const JournalEntryFormDialog: React.FC<JournalEntryFormDialogProps> = ({
         });
       } else {
         // Get agency_id from profile
-        const { selectOne } = await import('@/services/api/postgresql-service');
+        const { selectOne, insertRecord } = await import('@/services/api/postgresql-service');
         const profile = user?.id ? await selectOne('profiles', { user_id: user.id }) : null;
         if (!profile?.agency_id) {
           toast({
@@ -297,7 +313,6 @@ const JournalEntryFormDialog: React.FC<JournalEntryFormDialogProps> = ({
         entryData.entry_number = `JE-${year}-${timestamp}`;
 
         // Insert new entry
-        const { insertRecord } = await import('@/services/api/postgresql-service');
         const newEntry = await insertRecord('journal_entries', {
           entry_number: entryData.entry_number,
           entry_date: entryData.entry_date,
@@ -310,7 +325,7 @@ const JournalEntryFormDialog: React.FC<JournalEntryFormDialogProps> = ({
           agency_id: profile.agency_id,
         }, user?.id);
 
-        const newEntryId = newEntry.id;
+        const newEntryId = (newEntry as any).id;
 
         // Insert lines
         for (const line of formData.lines) {
@@ -527,4 +542,3 @@ const JournalEntryFormDialog: React.FC<JournalEntryFormDialogProps> = ({
 };
 
 export default JournalEntryFormDialog;
-

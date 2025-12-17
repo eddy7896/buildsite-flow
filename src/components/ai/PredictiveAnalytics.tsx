@@ -89,7 +89,6 @@ export function PredictiveAnalytics() {
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Update data with new predictions
-      console.log(`Generated ${type} prediction`);
     } catch (error) {
       console.error('Error generating prediction:', error);
     } finally {
