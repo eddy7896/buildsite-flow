@@ -54,7 +54,7 @@ const eventColors = [
 
 export function CalendarEventDialog({ open, onOpenChange, onEventCreated, editEvent }: CalendarEventDialogProps) {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -103,6 +103,11 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated, editEv
     try {
       setLoading(true);
 
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        throw new Error('Agency ID is required to create/update events');
+      }
+
       if (editEvent) {
         // Update existing event
         const { error } = await db
@@ -113,12 +118,13 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated, editEv
             event_type: formData.event_type,
             start_date: formData.start_date.toISOString(),
             end_date: formData.end_date.toISOString(),
-            all_day: formData.is_all_day,
+            is_all_day: formData.is_all_day,
             location: formData.location,
             color: formData.color,
             updated_at: new Date().toISOString()
           })
-          .eq('id', editEvent.id);
+          .eq('id', editEvent.id)
+          .eq('agency_id', agencyId);
 
         if (error) throw error;
 
@@ -137,18 +143,73 @@ export function CalendarEventDialog({ open, onOpenChange, onEventCreated, editEv
             event_type: formData.event_type,
             start_date: formData.start_date.toISOString(),
             end_date: formData.end_date.toISOString(),
-            all_day: formData.is_all_day,
+            is_all_day: formData.is_all_day,
             location: formData.location,
             color: formData.color,
             created_by: user.id,
-            agency_id: await getAgencyId(profile, user?.id) || undefined
+            agency_id: agencyId
           });
 
         if (error) throw error;
 
+        // Send notifications to all users in the agency
+        try {
+          // Get all users in this agency
+          const { data: profiles } = await db
+            .from('profiles')
+            .select('user_id')
+            .eq('agency_id', agencyId);
+
+          if (profiles && profiles.length > 0) {
+            const userIds = profiles.map((p: any) => p.user_id).filter(Boolean);
+
+            // Get active users
+            const { data: users } = await db
+              .from('users')
+              .select('id')
+              .in('id', userIds)
+              .eq('is_active', true);
+
+            if (users && users.length > 0) {
+              // Format event date for notification message
+              const eventDate = format(formData.start_date, 'MMM d, yyyy');
+              const eventTime = formData.is_all_day 
+                ? 'All Day' 
+                : format(formData.start_date, 'h:mm a');
+              const locationText = formData.location ? ` at ${formData.location}` : '';
+
+              // Create notifications for all users in this agency
+              const notifications = users.map((u: any) => ({
+                id: generateUUID(),
+                user_id: u.id,
+                title: `New Event: ${formData.title}`,
+                message: `${formData.title} is scheduled for ${eventDate}${eventTime ? ` at ${eventTime}` : ''}${locationText}. ${formData.description ? formData.description.substring(0, 100) + (formData.description.length > 100 ? '...' : '') : ''}`,
+                type: 'in_app',
+                category: 'event',
+                priority: 'normal',
+                action_url: '/calendar',
+                agency_id: agencyId,
+                created_at: new Date().toISOString()
+              }));
+
+              const { error: notifError } = await db
+                .from('notifications')
+                .insert(notifications);
+
+              if (notifError) {
+                console.warn('Failed to send event notifications:', notifError);
+                // Don't throw - event was created successfully
+              }
+            }
+          }
+        } catch (notifErr) {
+          console.warn('Error sending event notifications:', notifErr);
+          // Don't throw - event was created successfully
+        }
+
         toast({
           title: 'Success',
-          description: 'Event created successfully'
+          description: 'Event created successfully and notifications sent'
         });
       }
 

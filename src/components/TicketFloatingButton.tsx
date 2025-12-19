@@ -227,7 +227,7 @@ export function TicketFloatingButton() {
 
                 {/* Sparkle effect for attention */}
                 {hasErrors && (
-                  <Sparkles className="absolute top-0 right-0 h-2.5 w-2.5 text-yellow-300 animate-pulse" />
+                  <Sparkles className="absolute top-0 right-0 h-2.5 w-2.5 text-yellow-300" />
                 )}
               </Button>
 

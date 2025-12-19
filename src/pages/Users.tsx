@@ -285,7 +285,7 @@ const Users = () => {
           ) : (
             <div className="space-y-4">
               {filteredUsers.map((user) => (
-                <Card key={user.id} className="transition-all hover:shadow-md">
+                <Card key={user.id} className="hover:shadow-md">
                   <CardContent className="p-4 lg:p-6">
                     <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
                       {/* User Info Section */}

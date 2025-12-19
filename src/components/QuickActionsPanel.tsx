@@ -100,17 +100,22 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
   useEffect(() => {
     const fetchRecentActivities = async () => {
       try {
-        // Fetch recent events
+        const agencyId = await getAgencyId(profile, user?.id);
+        if (!agencyId) return;
+
+        // Fetch recent events for this agency
         const { data: events } = await db
           .from('company_events')
           .select('*')
+          .eq('agency_id', agencyId)
           .order('created_at', { ascending: false })
           .limit(3);
 
-        // Fetch recent holidays
+        // Fetch recent holidays for this agency
         const { data: holidays } = await db
           .from('holidays')
           .select('*')
+          .eq('agency_id', agencyId)
           .order('created_at', { ascending: false })
           .limit(3);
 
@@ -129,7 +134,7 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
     if (canManageEvents) {
       fetchRecentActivities();
     }
-  }, [canManageEvents]);
+  }, [canManageEvents, profile, user?.id]);
 
   const resetForms = () => {
     setEventForm({
@@ -168,6 +173,12 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
 
     setLoading(true);
     try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        throw new Error('Agency ID is required to create events');
+      }
+
+      // Create the event
       const { error } = await db
         .from('company_events')
         .insert({
@@ -177,19 +188,74 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
           event_type: eventForm.event_type,
           start_date: eventForm.start_date.toISOString(),
           end_date: eventForm.end_date.toISOString(),
-          all_day: eventForm.is_all_day,
+          is_all_day: eventForm.is_all_day,
           location: eventForm.location,
           color: eventForm.color,
           created_by: user?.id,
-          agency_id: await getAgencyId(profile, user?.id) || undefined,
+          agency_id: agencyId,
           created_at: new Date().toISOString()
         });
 
       if (error) throw error;
 
+      // Send notifications to all users in the agency
+      try {
+        // Get all users in this agency
+        const { data: profiles } = await db
+          .from('profiles')
+          .select('user_id')
+          .eq('agency_id', agencyId);
+
+        if (profiles && profiles.length > 0) {
+          const userIds = profiles.map(p => p.user_id).filter(Boolean);
+
+          // Get active users
+          const { data: users } = await db
+            .from('users')
+            .select('id')
+            .in('id', userIds)
+            .eq('is_active', true);
+
+          if (users && users.length > 0) {
+            // Format event date for notification message
+            const eventDate = format(eventForm.start_date, 'MMM d, yyyy');
+            const eventTime = eventForm.is_all_day 
+              ? 'All Day' 
+              : format(eventForm.start_date, 'h:mm a');
+            const locationText = eventForm.location ? ` at ${eventForm.location}` : '';
+
+            // Create notifications for all users in this agency
+            const notifications = users.map(u => ({
+              id: generateUUID(),
+              user_id: u.id,
+              title: `New Event: ${eventForm.title}`,
+              message: `${eventForm.title} is scheduled for ${eventDate}${eventTime ? ` at ${eventTime}` : ''}${locationText}. ${eventForm.description ? eventForm.description.substring(0, 100) + (eventForm.description.length > 100 ? '...' : '') : ''}`,
+              type: 'in_app',
+              category: 'event',
+              priority: 'normal',
+              action_url: '/calendar',
+              agency_id: agencyId,
+              created_at: new Date().toISOString()
+            }));
+
+            const { error: notifError } = await db
+              .from('notifications')
+              .insert(notifications);
+
+            if (notifError) {
+              console.warn('Failed to send event notifications:', notifError);
+              // Don't throw - event was created successfully
+            }
+          }
+        }
+      } catch (notifErr) {
+        console.warn('Error sending event notifications:', notifErr);
+        // Don't throw - event was created successfully
+      }
+
       toast({
         title: '✅ Event Created',
-        description: `"${eventForm.title}" has been added to the calendar.`
+        description: `"${eventForm.title}" has been added to the calendar and notifications sent.`
       });
 
       resetForms();
@@ -219,6 +285,11 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
 
     setLoading(true);
     try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        throw new Error('Agency ID is required to create holidays');
+      }
+
       // Map form fields to database schema (is_company_holiday and is_national_holiday)
       const { error } = await db
         .from('holidays')
@@ -227,17 +298,74 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
           name: holidayForm.name,
           description: holidayForm.description,
           date: format(holidayForm.date, 'yyyy-MM-dd'),
+          holiday_date: format(holidayForm.date, 'yyyy-MM-dd'),
           is_company_holiday: holidayForm.is_company_holiday,
           is_national_holiday: holidayForm.is_national_holiday,
-          agency_id: await getAgencyId(profile, user?.id) || undefined,
+          agency_id: agencyId,
           created_at: new Date().toISOString()
         });
 
       if (error) throw error;
 
+      // Send notifications to all users in the agency
+      try {
+        // Get all users in this agency
+        const { data: profiles } = await db
+          .from('profiles')
+          .select('user_id')
+          .eq('agency_id', agencyId);
+
+        if (profiles && profiles.length > 0) {
+          const userIds = profiles.map(p => p.user_id).filter(Boolean);
+
+          // Get active users
+          const { data: users } = await db
+            .from('users')
+            .select('id')
+            .in('id', userIds)
+            .eq('is_active', true);
+
+          if (users && users.length > 0) {
+            // Format holiday date for notification message
+            const holidayDate = format(holidayForm.date, 'MMM d, yyyy');
+            const holidayType = holidayForm.is_national_holiday 
+              ? 'National Holiday' 
+              : holidayForm.is_company_holiday 
+              ? 'Company Holiday' 
+              : 'Holiday';
+
+            // Create notifications for all users in this agency
+            const notifications = users.map(u => ({
+              id: generateUUID(),
+              user_id: u.id,
+              title: `New ${holidayType}: ${holidayForm.name}`,
+              message: `${holidayForm.name} has been added to the calendar for ${holidayDate}. ${holidayForm.description ? holidayForm.description.substring(0, 100) + (holidayForm.description.length > 100 ? '...' : '') : ''}`,
+              type: 'in_app',
+              category: 'holiday',
+              priority: 'normal',
+              action_url: '/calendar',
+              agency_id: agencyId,
+              created_at: new Date().toISOString()
+            }));
+
+            const { error: notifError } = await db
+              .from('notifications')
+              .insert(notifications);
+
+            if (notifError) {
+              console.warn('Failed to send holiday notifications:', notifError);
+              // Don't throw - holiday was created successfully
+            }
+          }
+        }
+      } catch (notifErr) {
+        console.warn('Error sending holiday notifications:', notifErr);
+        // Don't throw - holiday was created successfully
+      }
+
       toast({
         title: '✅ Holiday Created',
-        description: `"${holidayForm.name}" has been added to the calendar.`
+        description: `"${holidayForm.name}" has been added to the calendar and notifications sent.`
       });
 
       resetForms();
@@ -267,17 +395,35 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
 
     setLoading(true);
     try {
-      // Get all users to send notifications
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        throw new Error('Agency ID is required to send announcements');
+      }
+
+      // Get all users in this agency to send notifications
+      const { data: profiles } = await db
+        .from('profiles')
+        .select('user_id')
+        .eq('agency_id', agencyId);
+
+      if (!profiles || profiles.length === 0) {
+        throw new Error('No users found in your agency');
+      }
+
+      const userIds = profiles.map(p => p.user_id).filter(Boolean);
+
+      // Get active users
       const { data: users } = await db
         .from('users')
         .select('id')
+        .in('id', userIds)
         .eq('is_active', true);
 
       if (!users || users.length === 0) {
-        throw new Error('No active users found');
+        throw new Error('No active users found in your agency');
       }
 
-      // Create notifications for all users
+      // Create notifications for all users in this agency
       const notifications = users.map(u => ({
         id: generateUUID(),
         user_id: u.id,
@@ -286,6 +432,7 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
         type: 'in_app',
         category: 'announcement',
         priority: announcementForm.priority,
+        agency_id: agencyId,
         created_at: new Date().toISOString()
       }));
 
@@ -297,7 +444,7 @@ export function QuickActionsPanel({ onEventCreated, onHolidayCreated }: QuickAct
 
       toast({
         title: '✅ Announcement Sent',
-        description: `Sent to ${users.length} users`
+        description: `Sent to ${users.length} users in your agency`
       });
 
       resetForms();

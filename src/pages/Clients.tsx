@@ -7,7 +7,6 @@ import { Plus, Search, Filter, Edit, Trash2, Mail, Phone, MapPin, Building, Cale
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/database';
-import ClientFormDialog from "@/components/ClientFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { getAgencyId } from "@/utils/agencyUtils";
@@ -23,7 +22,6 @@ const Clients = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTab, setSelectedTab] = useState('all');
-  const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [clientStats, setClientStats] = useState({
@@ -90,8 +88,7 @@ const Clients = () => {
   };
 
   const handleEditClient = (client: any) => {
-    setSelectedClient(client);
-    setIsFormDialogOpen(true);
+    navigate('/clients/edit/' + client.id, { state: { client } });
   };
 
   const handleDeleteClient = (client: any) => {
@@ -281,7 +278,7 @@ const Clients = () => {
             Export List
           </Button>
           {canManageClients && (
-            <Button onClick={() => setIsFormDialogOpen(true)}>
+            <Button onClick={() => navigate('/clients/create')}>
               <Plus className="mr-2 h-4 w-4" />
               Add Client
             </Button>
@@ -375,7 +372,7 @@ const Clients = () => {
                     {searchTerm ? 'Try adjusting your search terms.' : 'Get started by adding your first client.'}
                   </p>
                   {canManageClients && (
-                    <Button onClick={() => setIsFormDialogOpen(true)}>
+                    <Button onClick={() => navigate('/clients/create')}>
                       <Plus className="mr-2 h-4 w-4" />
                       Add Client
                     </Button>
@@ -393,15 +390,6 @@ const Clients = () => {
         </TabsContent>
       </Tabs>
 
-      <ClientFormDialog
-        isOpen={isFormDialogOpen}
-        onClose={() => {
-          setIsFormDialogOpen(false);
-          setSelectedClient(null);
-        }}
-        client={selectedClient}
-        onClientSaved={handleClientSaved}
-      />
 
       <DeleteConfirmDialog
         isOpen={isDeleteDialogOpen}

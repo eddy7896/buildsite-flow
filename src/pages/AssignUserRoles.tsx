@@ -370,7 +370,7 @@ const AssignUserRoles = () => {
               {employees.map((employee) => (
                 <div 
                   key={employee.id} 
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50"
                 >
                   <div className="flex items-center space-x-4">
                     <Checkbox

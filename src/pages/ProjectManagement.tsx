@@ -1794,7 +1794,7 @@ export default function ProjectManagement() {
               {fetchingProjects ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {[1, 2, 3, 4, 5, 6].map(i => (
-                    <Card key={i} className="animate-pulse">
+                    <Card key={i} className="">
                       <CardHeader>
                         <Skeleton className="h-6 w-3/4" />
                         <Skeleton className="h-4 w-1/2 mt-2" />

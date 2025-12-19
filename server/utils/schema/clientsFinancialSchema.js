@@ -125,23 +125,95 @@ async function ensureQuotationsTable(client) {
     CREATE TABLE IF NOT EXISTS public.quotations (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       quotation_number TEXT UNIQUE,
+      quote_number TEXT,
       client_id UUID REFERENCES public.clients(id),
+      template_id UUID REFERENCES public.quotation_templates(id),
       title TEXT NOT NULL,
       description TEXT,
       status TEXT DEFAULT 'draft',
-      issue_date DATE NOT NULL,
+      issue_date DATE,
       expiry_date DATE,
+      valid_until DATE,
       subtotal NUMERIC(15, 2) DEFAULT 0,
       tax_rate NUMERIC(5, 2) DEFAULT 0,
+      tax_amount NUMERIC(15, 2) DEFAULT 0,
       discount NUMERIC(15, 2) DEFAULT 0,
       total_amount NUMERIC(15, 2) DEFAULT 0,
       notes TEXT,
       terms_and_conditions TEXT,
+      terms_conditions TEXT,
+      -- Multi-tenant scoping
+      agency_id UUID,
       created_by UUID REFERENCES public.users(id),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
   `);
+
+  // Ensure quotations multi-tenant and additional columns exist
+  try {
+    await client.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'quotations' 
+          AND column_name = 'agency_id'
+        ) THEN
+          ALTER TABLE public.quotations ADD COLUMN agency_id UUID;
+          CREATE INDEX IF NOT EXISTS idx_quotations_agency_id ON public.quotations(agency_id);
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'quotations' 
+          AND column_name = 'quote_number'
+        ) THEN
+          ALTER TABLE public.quotations ADD COLUMN quote_number TEXT;
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'quotations' 
+          AND column_name = 'template_id'
+        ) THEN
+          ALTER TABLE public.quotations ADD COLUMN template_id UUID REFERENCES public.quotation_templates(id);
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'quotations' 
+          AND column_name = 'valid_until'
+        ) THEN
+          ALTER TABLE public.quotations ADD COLUMN valid_until DATE;
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'quotations' 
+          AND column_name = 'tax_amount'
+        ) THEN
+          ALTER TABLE public.quotations ADD COLUMN tax_amount NUMERIC(15, 2) DEFAULT 0;
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'quotations' 
+          AND column_name = 'terms_conditions'
+        ) THEN
+          ALTER TABLE public.quotations ADD COLUMN terms_conditions TEXT;
+        END IF;
+      END $$;
+    `);
+  } catch (error) {
+    console.warn('[SQL] Warning: Could not add multi-tenant/additional columns to quotations:', error.message);
+  }
 }
 
 /**
@@ -155,11 +227,54 @@ async function ensureQuotationTemplatesTable(client) {
       description TEXT,
       template_data JSONB,
       is_default BOOLEAN DEFAULT false,
+      is_active BOOLEAN DEFAULT true,
+      last_used TIMESTAMP WITH TIME ZONE,
+      -- Multi-tenant scoping
+      agency_id UUID,
       created_by UUID REFERENCES public.users(id),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
   `);
+
+  // Ensure quotation_templates multi-tenant and additional columns exist
+  try {
+    await client.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'quotation_templates' 
+          AND column_name = 'agency_id'
+        ) THEN
+          ALTER TABLE public.quotation_templates ADD COLUMN agency_id UUID;
+          CREATE INDEX IF NOT EXISTS idx_quotation_templates_agency_id ON public.quotation_templates(agency_id);
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'quotation_templates' 
+          AND column_name = 'is_active'
+        ) THEN
+          ALTER TABLE public.quotation_templates ADD COLUMN is_active BOOLEAN DEFAULT true;
+          CREATE INDEX IF NOT EXISTS idx_quotation_templates_is_active ON public.quotation_templates(is_active);
+        END IF;
+
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'quotation_templates' 
+          AND column_name = 'last_used'
+        ) THEN
+          ALTER TABLE public.quotation_templates ADD COLUMN last_used TIMESTAMP WITH TIME ZONE;
+        END IF;
+      END $$;
+    `);
+  } catch (error) {
+    console.warn('[SQL] Warning: Could not add multi-tenant/additional columns to quotation_templates:', error.message);
+  }
 }
 
 /**
@@ -176,12 +291,32 @@ async function ensureQuotationLineItemsTable(client) {
       unit_price NUMERIC(15, 2) DEFAULT 0,
       tax_rate NUMERIC(5, 2) DEFAULT 0,
       discount NUMERIC(15, 2) DEFAULT 0,
+      discount_percentage NUMERIC(5, 2) DEFAULT 0,
       line_total NUMERIC(15, 2) DEFAULT 0,
       sort_order INTEGER DEFAULT 0,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
   `);
+
+  // Ensure quotation_line_items additional columns exist
+  try {
+    await client.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'quotation_line_items' 
+          AND column_name = 'discount_percentage'
+        ) THEN
+          ALTER TABLE public.quotation_line_items ADD COLUMN discount_percentage NUMERIC(5, 2) DEFAULT 0;
+        END IF;
+      END $$;
+    `);
+  } catch (error) {
+    console.warn('[SQL] Warning: Could not add discount_percentage to quotation_line_items:', error.message);
+  }
 }
 
 /**

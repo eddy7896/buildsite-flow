@@ -168,7 +168,7 @@ const ForgotPassword = () => {
             <div className="mt-6 text-center">
               <Link 
                 to="/auth" 
-                className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-emerald-400 transition-colors"
+                className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-emerald-400"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back to Sign In
@@ -181,7 +181,7 @@ const ForgotPassword = () => {
         <div className="mt-6 text-center">
           <p className="text-xs text-slate-600">
             Need help?{' '}
-            <a href="mailto:support@buildflow.com" className="text-slate-400 hover:text-emerald-400 transition-colors">
+            <a href="mailto:support@buildflow.com" className="text-slate-400 hover:text-emerald-400">
               Contact Support
             </a>
           </p>

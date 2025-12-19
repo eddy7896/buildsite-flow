@@ -257,13 +257,15 @@ export async function selectOne<T = any>(
  */
 const AGENCY_REQUIRED_TABLES = [
   'profiles', 'user_roles', 'departments', 'team_assignments', 'clients', 'projects', 'tasks',
-  'invoices', 'quotations', 'quotation_line_items', 'jobs', 'job_cost_items', 'job_categories',
+  'invoices', 'quotations', 'jobs', 'job_cost_items', 'job_categories',
   'leads', 'lead_sources', 'crm_activities', 'chart_of_accounts', 'journal_entries', 'journal_entry_lines',
   'attendance', 'leave_requests', 'leave_types', 'leave_balances', 'payroll', 'payroll_periods',
   'reimbursement_requests', 'reimbursement_attachments', 'reimbursement_categories', 'expense_categories',
   'employee_details', 'employee_salary_details', 'holidays', 'company_events', 'notifications',
   'dashboard_widgets', 'custom_reports', 'message_threads', 'messages', 'thread_participants',
   'document_folders', 'documents', 'reports'
+  // Note: quotation_line_items does NOT have agency_id - it's linked via quotation_id to quotations table
+  // Note: invoice_line_items does NOT have agency_id - it's linked via invoice_id to invoices table
 ];
 
 /**

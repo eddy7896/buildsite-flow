@@ -26,7 +26,7 @@ export function WorkHoursChart({ workHours, hoursByProject, loading, selectedEmp
             <CardDescription>Loading...</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] bg-muted animate-pulse rounded" />
+            <div className="h-[300px] bg-muted rounded" />
           </CardContent>
         </Card>
         <Card>
@@ -35,7 +35,7 @@ export function WorkHoursChart({ workHours, hoursByProject, loading, selectedEmp
             <CardDescription>Loading...</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[300px] bg-muted animate-pulse rounded" />
+            <div className="h-[300px] bg-muted rounded" />
           </CardContent>
         </Card>
       </div>

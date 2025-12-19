@@ -446,9 +446,9 @@ const Projects = () => {
       dropZone.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2', 'bg-blue-50/50');
       dropZone.style.transform = 'scale(1)';
       // Add a brief success animation
-      dropZone.classList.add('animate-pulse');
+      // Animation removed for ERP system
       setTimeout(() => {
-        dropZone.classList.remove('animate-pulse');
+        // Animation removed for ERP system
       }, 500);
     }
 
@@ -942,7 +942,7 @@ const Projects = () => {
           </div>
           <div className="grid gap-4 lg:gap-6">
             {paginatedProjects.map((project) => (
-            <Card key={project.id} className="transition-all hover:shadow-md">
+            <Card key={project.id} className="hover:shadow-md">
               <CardHeader className="pb-4">
                 <div className="flex flex-col space-y-3 lg:flex-row lg:justify-between lg:items-start lg:space-y-0">
                   <div className="flex-1 min-w-0">
@@ -1181,7 +1181,7 @@ const Projects = () => {
                       onDragLeave={onDragLeave}
                       onDrop={(e) => onDrop(e, stage.status)}
                     >
-                      <div className="pipeline-column bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 lg:p-5 h-[calc(100vh-300px)] min-h-[650px] sm:min-h-[700px] lg:min-h-[750px] max-h-[850px] border-2 border-gray-200 transition-all duration-200 flex flex-col shadow-md hover:shadow-lg hover:border-blue-300">
+                      <div className="pipeline-column bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 lg:p-5 h-[calc(100vh-300px)] min-h-[650px] sm:min-h-[700px] lg:min-h-[750px] max-h-[850px] border-2 border-gray-200 flex flex-col shadow-md hover:shadow-lg hover:border-blue-300">
                         {/* Stage Header */}
                         <div className="flex items-center justify-between mb-4 pb-4 border-b-2 border-gray-300 flex-shrink-0">
                           <div className="flex items-center gap-2.5 lg:gap-3">
@@ -1264,7 +1264,7 @@ const Projects = () => {
                                     onDragStart={(e) => onDragStart(e, project.id)}
                                     onDragEnd={onDragEnd}
                                     onClick={() => handleViewProject(project)}
-                                    className={`relative p-3 lg:p-4 hover:shadow-xl transition-all duration-200 cursor-pointer bg-white border-2 border-gray-200 border-l-4 ${getStatusBorderColor(project.status)} hover:border-blue-300 hover:shadow-2xl group ${
+                                    className={`relative p-3 lg:p-4 hover:shadow-xl cursor-pointer bg-white border-2 border-gray-200 border-l-4 ${getStatusBorderColor(project.status)} hover:border-blue-300 hover:shadow-2xl group ${
                                       isDragging ? 'opacity-40 scale-95 rotate-2' : 'hover:scale-[1.02] hover:-translate-y-1'
                                     }`}
                                   >

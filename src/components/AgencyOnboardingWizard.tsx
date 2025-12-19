@@ -823,7 +823,7 @@ export default function AgencyOnboardingWizard() {
                           <StepIcon className="h-4 w-4 md:h-5 md:w-5 opacity-60" />
                         )}
                         {isCurrent && (
-                          <div className="absolute -inset-1 rounded-lg bg-primary/10 dark:bg-primary/20 animate-pulse" />
+                          <div className="absolute -inset-1 rounded-lg bg-primary/10 dark:bg-primary/20" />
                         )}
                       </button>
                       <div className="mt-2 text-center max-w-[80px] sm:max-w-none">
@@ -2321,7 +2321,7 @@ export default function AgencyOnboardingWizard() {
                 <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700 flex items-center justify-center shadow-lg">
                   <Loader2 className="h-6 w-6 sm:h-7 sm:w-7 text-white animate-spin" />
                 </div>
-                <div className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white dark:border-slate-900 animate-pulse" />
+                <div className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white dark:border-slate-900" />
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-1">
@@ -2345,10 +2345,10 @@ export default function AgencyOnboardingWizard() {
               </div>
               <div className="h-2.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden shadow-inner">
                 <div 
-                  className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 dark:from-blue-600 dark:via-indigo-600 dark:to-purple-600 transition-all duration-500 ease-out shadow-lg relative"
+                  className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 dark:from-blue-600 dark:via-indigo-600 dark:to-purple-600 shadow-lg relative"
                   style={{ width: `${loadingProgress}%` }}
                 >
-                  <div className="absolute inset-0 bg-white/30 animate-pulse" />
+                  <div className="absolute inset-0 bg-white/30" />
                 </div>
               </div>
             </div>

@@ -135,7 +135,7 @@ async function ensureAttendanceTable(client) {
       throw new Error('Users table must exist before creating attendance table');
     }
 
-    // First, ensure the table exists
+    // First, ensure the table exists with all required columns
     await client.query(`
       CREATE TABLE IF NOT EXISTS public.attendance (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -146,6 +146,11 @@ async function ensureAttendanceTable(client) {
         check_out_time TIMESTAMP WITH TIME ZONE,
         status TEXT DEFAULT 'present',
         hours_worked NUMERIC(5, 2),
+        total_hours NUMERIC(5, 2),
+        overtime_hours NUMERIC(5, 2),
+        location TEXT,
+        ip_address TEXT,
+        agency_id UUID,
         notes TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -166,10 +171,11 @@ async function ensureAttendanceTable(client) {
       throw new Error('Failed to create attendance table');
     }
 
-    // Add employee_id column if it doesn't exist (for backward compatibility)
+    // Add missing columns if they don't exist (for backward compatibility and updates)
     await client.query(`
       DO $$ 
       BEGIN
+        -- Add employee_id column if it doesn't exist
         IF NOT EXISTS (
           SELECT 1 FROM information_schema.columns 
           WHERE table_schema = 'public' 
@@ -182,37 +188,97 @@ async function ensureAttendanceTable(client) {
           -- Create index
           CREATE INDEX IF NOT EXISTS idx_attendance_employee_id ON public.attendance(employee_id);
         END IF;
+
+        -- Add total_hours column if it doesn't exist
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'attendance' 
+          AND column_name = 'total_hours'
+        ) THEN
+          ALTER TABLE public.attendance ADD COLUMN total_hours NUMERIC(5, 2);
+        END IF;
+
+        -- Add overtime_hours column if it doesn't exist
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'attendance' 
+          AND column_name = 'overtime_hours'
+        ) THEN
+          ALTER TABLE public.attendance ADD COLUMN overtime_hours NUMERIC(5, 2);
+        END IF;
+
+        -- Add location column if it doesn't exist
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'attendance' 
+          AND column_name = 'location'
+        ) THEN
+          ALTER TABLE public.attendance ADD COLUMN location TEXT;
+        END IF;
+
+        -- Add ip_address column if it doesn't exist
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'attendance' 
+          AND column_name = 'ip_address'
+        ) THEN
+          ALTER TABLE public.attendance ADD COLUMN ip_address TEXT;
+        END IF;
+
+        -- Add agency_id column if it doesn't exist
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'attendance' 
+          AND column_name = 'agency_id'
+        ) THEN
+          ALTER TABLE public.attendance ADD COLUMN agency_id UUID;
+          -- Create index for agency_id
+          CREATE INDEX IF NOT EXISTS idx_attendance_agency_id ON public.attendance(agency_id);
+        END IF;
       END $$;
     `);
 
-    // Verify trigger function exists before creating trigger
-    const functionCheck = await client.query(`
-      SELECT EXISTS (
-        SELECT FROM pg_proc p
-        JOIN pg_namespace n ON p.pronamespace = n.oid
-        WHERE n.nspname = 'public' 
-        AND p.proname = 'sync_attendance_employee_id'
-      );
+    // Create or replace the sync function
+    await client.query(`
+      CREATE OR REPLACE FUNCTION sync_attendance_employee_id()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF NEW.employee_id IS NULL THEN
+          NEW.employee_id := NEW.user_id;
+        END IF;
+        IF NEW.hours_worked IS NULL AND NEW.total_hours IS NOT NULL THEN
+          NEW.hours_worked := NEW.total_hours;
+        END IF;
+        IF NEW.total_hours IS NULL AND NEW.hours_worked IS NOT NULL THEN
+          NEW.total_hours := NEW.hours_worked;
+        END IF;
+        NEW.updated_at := NOW();
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
     `);
-    
-    if (functionCheck.rows[0].exists) {
-      // Create trigger for sync_attendance_employee_id function (after table exists)
-      await client.query(`
-        DROP TRIGGER IF EXISTS sync_attendance_employee_id_trigger ON public.attendance;
-        CREATE TRIGGER sync_attendance_employee_id_trigger
-          BEFORE INSERT OR UPDATE ON public.attendance
-          FOR EACH ROW
-          EXECUTE FUNCTION public.sync_attendance_employee_id();
-      `);
-    } else {
-      console.warn('[SQL] ⚠️ sync_attendance_employee_id function not found, skipping trigger creation');
-    }
+
+    // Create trigger for sync_attendance_employee_id function
+    await client.query(`
+      DROP TRIGGER IF EXISTS sync_attendance_employee_id_trigger ON public.attendance;
+      CREATE TRIGGER sync_attendance_employee_id_trigger
+        BEFORE INSERT OR UPDATE ON public.attendance
+        FOR EACH ROW
+        EXECUTE FUNCTION public.sync_attendance_employee_id();
+    `);
 
     // Create indexes for better query performance
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_attendance_user_id ON public.attendance(user_id);
+      CREATE INDEX IF NOT EXISTS idx_attendance_employee_id ON public.attendance(employee_id);
       CREATE INDEX IF NOT EXISTS idx_attendance_date ON public.attendance(date);
       CREATE INDEX IF NOT EXISTS idx_attendance_status ON public.attendance(status);
+      CREATE INDEX IF NOT EXISTS idx_attendance_agency_id ON public.attendance(agency_id);
     `);
     
     console.log('[SQL] ✅ Attendance table ensured successfully');

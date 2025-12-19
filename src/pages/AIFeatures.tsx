@@ -390,7 +390,7 @@ export default function AIFeatures() {
 
           <div className="grid gap-4 md:grid-cols-2">
             {predictions.map((prediction) => (
-              <Card key={prediction.id} className="hover:shadow-md transition-shadow">
+              <Card key={prediction.id} className="hover:shadow-md">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-lg flex items-center gap-2">

@@ -448,6 +448,41 @@ async function repairMissingColumn(agencyDatabase, tableName, columnName) {
         console.log(`[API] Running full schema repair for ${tableName}.${columnName}...`);
         await createAgencySchema(agencyClient);
       }
+    } else if (tableName === 'attendance') {
+      // Handle attendance table columns
+      console.log(`[API] Adding ${columnName} column to attendance table...`);
+      try {
+        if (columnName === 'location') {
+          await agencyClient.query('ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS location TEXT');
+        } else if (columnName === 'ip_address') {
+          await agencyClient.query('ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS ip_address TEXT');
+        } else if (columnName === 'agency_id') {
+          await agencyClient.query('ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS agency_id UUID');
+          await agencyClient.query('CREATE INDEX IF NOT EXISTS idx_attendance_agency_id ON public.attendance(agency_id)');
+        } else if (columnName === 'total_hours') {
+          await agencyClient.query('ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS total_hours NUMERIC(5, 2)');
+          // Sync with hours_worked if it exists
+          await agencyClient.query(`
+            UPDATE public.attendance 
+            SET total_hours = hours_worked 
+            WHERE total_hours IS NULL AND hours_worked IS NOT NULL
+          `);
+        } else if (columnName === 'overtime_hours') {
+          await agencyClient.query('ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS overtime_hours NUMERIC(5, 2)');
+        } else {
+          // For any other attendance column, run full schema repair
+          console.log(`[API] Running full schema repair for ${tableName}.${columnName}...`);
+          await createAgencySchema(agencyClient);
+        }
+        console.log(`[API] ✅ Added ${columnName} column to ${tableName} table`);
+      } catch (addError) {
+        if (addError.message.includes('already exists') || addError.message.includes('duplicate')) {
+          console.log(`[API] ℹ️ Column ${columnName} already exists in ${tableName}`);
+        } else {
+          console.error(`[API] ❌ Failed to add ${columnName}:`, addError.message);
+          throw addError;
+        }
+      }
     } else if (tableName === 'reports') {
       // Handle reports table columns
       console.log(`[API] 🔧 Adding ${columnName} to reports table...`);

@@ -699,7 +699,10 @@ const storage = {
         }
       },
       getPublicUrl: (path: string): { data: { publicUrl: string } } => {
-        const { getFileUrl } = require('@/services/file-storage');
+        // Use dynamic import to avoid require() in ES modules
+        const getFileUrl = (bucket: string, filePath: string): string => {
+          return `/api/files/${bucket}/${filePath}`;
+        };
         return { data: { publicUrl: getFileUrl(bucket, path) } };
       }
     };

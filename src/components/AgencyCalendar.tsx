@@ -34,7 +34,7 @@ interface AgencyCalendarProps {
 }
 
 export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
-  const { userRole } = useAuth();
+  const { userRole, profile, user } = useAuth();
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -48,7 +48,7 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
 
   useEffect(() => {
     fetchCalendarData();
-  }, [selectedDate]);
+  }, [selectedDate, profile, user?.id]);
 
   const fetchCalendarData = async () => {
     try {
@@ -58,10 +58,21 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
 
       const allEvents: CalendarEvent[] = [];
 
-      // Fetch company events
+      // Get agency_id for filtering
+      const { getAgencyId } = await import('@/utils/agencyUtils');
+      const agencyId = await getAgencyId(profile, user?.id);
+      
+      if (!agencyId) {
+        console.warn('No agency_id available, cannot fetch calendar data');
+        setLoading(false);
+        return;
+      }
+
+      // Fetch company events for this agency
       const { data: companyEvents } = await db
         .from('company_events')
         .select('*')
+        .eq('agency_id', agencyId)
         .gte('start_date', startDate.toISOString())
         .lte('start_date', endDate.toISOString())
         .order('start_date');
@@ -76,17 +87,18 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
           color: event.color,
           location: event.location,
           event_type: event.event_type,
-          all_day: event.all_day,
+          all_day: event.is_all_day || event.all_day || false,
           start_date: new Date(event.start_date),
           end_date: event.end_date ? new Date(event.end_date) : undefined,
           is_company_event: true
         })));
       }
 
-      // Fetch holidays
+      // Fetch holidays for this agency
       const { data: holidays } = await db
         .from('holidays')
         .select('*')
+        .eq('agency_id', agencyId)
         .gte('date', format(startDate, 'yyyy-MM-dd'))
         .lte('date', format(endDate, 'yyyy-MM-dd'))
         .order('date');
@@ -453,10 +465,18 @@ export function AgencyCalendar({ compact = false }: AgencyCalendarProps) {
         }}
         onDelete={async (eventId) => {
           try {
+            const { getAgencyId } = await import('@/utils/agencyUtils');
+            const agencyId = await getAgencyId(profile, user?.id);
+            
+            if (!agencyId) {
+              throw new Error('Agency ID is required to delete events');
+            }
+
             const { error } = await db
               .from('company_events')
               .delete()
-              .eq('id', eventId);
+              .eq('id', eventId)
+              .eq('agency_id', agencyId);
 
             if (error) throw error;
 

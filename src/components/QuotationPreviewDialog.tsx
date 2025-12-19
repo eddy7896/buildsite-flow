@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -8,18 +8,23 @@ import { Download, Printer, Mail, X, Building, MapPin, Phone, Mail as MailIcon, 
 
 interface Quotation {
   id: string;
-  quote_number: string;
+  quote_number?: string;
+  quotation_number?: string;
   client_id: string;
   template_id?: string | null;
   title: string;
   description?: string;
   status: string;
-  valid_until: string;
+  issue_date?: string;
+  expiry_date?: string;
+  valid_until?: string;
   subtotal: number;
   tax_rate: number;
   tax_amount: number;
+  discount?: number;
   total_amount: number;
   terms_conditions?: string;
+  terms_and_conditions?: string;
   notes?: string;
   created_at: string;
   updated_at: string;
@@ -53,9 +58,9 @@ interface LineItem {
   description?: string;
   quantity: number;
   unit_price: number;
-  discount_percentage: number;
-  line_total: number;
-  sort_order: number;
+  discount_percentage?: number;
+  line_total?: number;
+  sort_order?: number;
 }
 
 interface AgencyInfo {
@@ -95,6 +100,15 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
       fetchQuotationData();
     }
   }, [isOpen, quotationId]);
+
+  const calculateLineTotal = (item: LineItem): number => {
+    const qty = Number(item.quantity) || 0;
+    const price = Number(item.unit_price) || 0;
+    const subtotal = qty * price;
+    const discountPct = Number(item.discount_percentage) || 0;
+    const discount = subtotal * (discountPct / 100);
+    return subtotal - discount;
+  };
 
   const fetchQuotationData = async () => {
     try {
@@ -140,7 +154,12 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
         .order('sort_order', { ascending: true });
 
       if (!lineItemsError && lineItemsData) {
-        setLineItems(lineItemsData);
+        // Calculate line totals if not present
+        const itemsWithTotals = lineItemsData.map(item => ({
+          ...item,
+          line_total: item.line_total || calculateLineTotal(item),
+        }));
+        setLineItems(itemsWithTotals);
       }
 
       // Fetch agency info
@@ -154,11 +173,11 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
         setAgencyInfo({
           agency_name: agencyData.agency_name,
           logo_url: agencyData.logo_url,
-          address: agencyData.address,
-          city: agencyData.city,
-          state: agencyData.state,
-          postal_code: agencyData.postal_code,
-          country: agencyData.country,
+          address: agencyData.address_street || agencyData.address,
+          city: agencyData.address_city || agencyData.city,
+          state: agencyData.address_state || agencyData.state,
+          postal_code: agencyData.address_zip || agencyData.postal_code,
+          country: agencyData.address_country || agencyData.country,
           phone: agencyData.phone,
           email: agencyData.email,
           website: agencyData.website,
@@ -254,6 +273,10 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Loading Quotation</DialogTitle>
+            <DialogDescription>Please wait while we load the quotation details</DialogDescription>
+          </DialogHeader>
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -269,6 +292,10 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
         <DialogContent className="max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>Quotation Not Found</DialogTitle>
+            <DialogDescription>The requested quotation could not be found</DialogDescription>
+          </DialogHeader>
           <div className="text-center py-8">
             <p className="text-muted-foreground">Quotation not found</p>
           </div>
@@ -287,11 +314,15 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
         }
       `}</style>
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-0">
+        <DialogContent className="max-w-6xl max-h-[95vh] overflow-y-auto p-0 print:max-w-full print:max-h-full">
           <DialogHeader className="px-6 pt-6 pb-4 border-b no-print">
-          <div className="flex justify-between items-center">
             <DialogTitle>Quotation Preview</DialogTitle>
-            <div className="flex gap-2">
+            <DialogDescription>
+              Review your quotation details before sending or printing
+            </DialogDescription>
+          </DialogHeader>
+          <div className="px-6 pt-4 pb-4 border-b no-print">
+            <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={handlePrint}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print
@@ -305,17 +336,21 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
               </Button>
             </div>
           </div>
-        </DialogHeader>
 
-        <div id="quotation-preview-content" className="px-6 py-6 bg-white quotation-content">
+        <div id="quotation-preview-content" className="px-6 py-8 bg-white quotation-content print:p-4">
           {/* Header */}
-          <div className="flex justify-between items-start mb-8 border-b pb-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-start gap-6 mb-8 border-b pb-6">
             <div className="flex-1">
               {agencyInfo.logo_url && (
                 <img
                   src={agencyInfo.logo_url}
-                  alt="Agency Logo"
+                  alt={agencyInfo.agency_name || 'Agency Logo'}
                   className="h-16 mb-4 object-contain"
+                  onError={(e) => {
+                    // Hide image if it fails to load (invalid URI)
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                  }}
                 />
               )}
               <h2 className="text-2xl font-bold mb-2">
@@ -360,23 +395,37 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
                 )}
               </div>
             </div>
-            <div className="text-right">
-              <h1 className="text-3xl font-bold mb-2">QUOTATION</h1>
-              <div className="space-y-1 text-sm">
-                <p className="font-semibold">Quote #: {quotation.quote_number}</p>
-                <p className="text-muted-foreground">
-                  Date: {formatDate(quotation.created_at)}
-                </p>
-                <Badge className={getStatusColor(quotation.status)}>
-                  {quotation.status.toUpperCase()}
-                </Badge>
+            <div className="text-left md:text-right w-full md:w-auto">
+              <h1 className="text-3xl font-bold mb-3">QUOTATION</h1>
+              <div className="space-y-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Quote #: </span>
+                  <span className="font-semibold text-base">{quotation.quote_number || quotation.quotation_number || 'N/A'}</span>
+                </div>
+                {quotation.issue_date && (
+                  <div>
+                    <span className="text-muted-foreground">Issue Date: </span>
+                    <span className="font-medium">{formatDate(quotation.issue_date)}</span>
+                  </div>
+                )}
+                {!quotation.issue_date && (
+                  <div>
+                    <span className="text-muted-foreground">Date: </span>
+                    <span className="font-medium">{formatDate(quotation.created_at)}</span>
+                  </div>
+                )}
+                <div className="mt-2">
+                  <Badge className={getStatusColor(quotation.status)}>
+                    {quotation.status.toUpperCase()}
+                  </Badge>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Client Information */}
           {client && (
-            <div className="mb-8 grid grid-cols-2 gap-6">
+            <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <h3 className="font-semibold mb-2 text-sm text-muted-foreground">BILL TO:</h3>
                 <div className="space-y-1">
@@ -416,19 +465,33 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
               </div>
               <div>
                 <h3 className="font-semibold mb-2 text-sm text-muted-foreground">QUOTATION DETAILS:</h3>
-                <div className="space-y-1 text-sm">
-                  <p>
-                    <span className="text-muted-foreground">Title:</span>{' '}
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Title: </span>
                     <span className="font-medium">{quotation.title}</span>
-                  </p>
+                  </div>
+                  {quotation.issue_date && (
+                    <div>
+                      <span className="text-muted-foreground">Issue Date: </span>
+                      <span className="font-medium">{formatDate(quotation.issue_date)}</span>
+                    </div>
+                  )}
+                  {quotation.expiry_date && (
+                    <div>
+                      <span className="text-muted-foreground">Expiry Date: </span>
+                      <span className="font-medium">{formatDate(quotation.expiry_date)}</span>
+                    </div>
+                  )}
                   {quotation.valid_until && (
-                    <p>
-                      <span className="text-muted-foreground">Valid Until:</span>{' '}
+                    <div>
+                      <span className="text-muted-foreground">Valid Until: </span>
                       <span className="font-medium">{formatDate(quotation.valid_until)}</span>
-                    </p>
+                    </div>
                   )}
                   {quotation.description && (
-                    <p className="text-muted-foreground mt-2">{quotation.description}</p>
+                    <div className="mt-2 pt-2 border-t">
+                      <p className="text-muted-foreground whitespace-pre-line">{quotation.description}</p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -436,40 +499,54 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
           )}
 
           {/* Line Items Table */}
-          <div className="mb-6">
-            <table className="w-full border-collapse">
+          <div className="mb-6 overflow-x-auto">
+            <table className="w-full border-collapse min-w-[800px]">
               <thead>
-                <tr className="bg-muted">
-                  <th className="border border-border p-3 text-left font-semibold">Item</th>
-                  <th className="border border-border p-3 text-left font-semibold">Description</th>
-                  <th className="border border-border p-3 text-center font-semibold">Qty</th>
-                  <th className="border border-border p-3 text-right font-semibold">Unit Price</th>
-                  <th className="border border-border p-3 text-center font-semibold">Disc. %</th>
-                  <th className="border border-border p-3 text-right font-semibold">Total</th>
+                <tr className="bg-muted border-b-2 border-border">
+                  <th className="border border-border p-4 text-left font-semibold text-sm">#</th>
+                  <th className="border border-border p-4 text-left font-semibold text-sm w-[25%]">Item Name</th>
+                  <th className="border border-border p-4 text-left font-semibold text-sm w-[20%]">Description</th>
+                  <th className="border border-border p-4 text-center font-semibold text-sm w-[8%]">Qty</th>
+                  <th className="border border-border p-4 text-right font-semibold text-sm w-[12%]">Unit Price</th>
+                  <th className="border border-border p-4 text-center font-semibold text-sm w-[10%]">Disc. %</th>
+                  <th className="border border-border p-4 text-right font-semibold text-sm w-[15%]">Line Total</th>
                 </tr>
               </thead>
               <tbody>
-                {lineItems.length > 0 ? (
-                  lineItems.map((item, index) => (
-                    <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-muted/30'}>
-                      <td className="border border-border p-3">{item.item_name}</td>
-                      <td className="border border-border p-3 text-sm text-muted-foreground">
-                        {item.description || '-'}
-                      </td>
-                      <td className="border border-border p-3 text-center">{item.quantity}</td>
-                      <td className="border border-border p-3 text-right">{formatCurrency(item.unit_price)}</td>
-                      <td className="border border-border p-3 text-center">
-                        {item.discount_percentage > 0 ? `${item.discount_percentage}%` : '-'}
-                      </td>
-                      <td className="border border-border p-3 text-right font-medium">
-                        {formatCurrency(item.line_total)}
-                      </td>
-                    </tr>
-                  ))
+                {lineItems.length > 0 && lineItems.filter(item => item.item_name && item.item_name.trim()).length > 0 ? (
+                  lineItems
+                    .filter(item => item.item_name && item.item_name.trim())
+                    .map((item, index) => {
+                      const lineTotal = item.line_total || calculateLineTotal(item);
+                      return (
+                        <tr key={item.id} className={index % 2 === 0 ? 'bg-white' : 'bg-muted/20 hover:bg-muted/40 transition-colors'}>
+                          <td className="border border-border p-3 text-center text-muted-foreground font-medium">{index + 1}</td>
+                          <td className="border border-border p-3 font-medium">{item.item_name}</td>
+                          <td className="border border-border p-3 text-sm text-muted-foreground">
+                            {item.description || <span className="text-muted-foreground/50">-</span>}
+                          </td>
+                          <td className="border border-border p-3 text-center">{Number(item.quantity) || 0}</td>
+                          <td className="border border-border p-3 text-right font-medium">{formatCurrency(Number(item.unit_price) || 0)}</td>
+                          <td className="border border-border p-3 text-center">
+                            {item.discount_percentage && Number(item.discount_percentage) > 0 ? (
+                              <span className="text-orange-600 font-medium">{Number(item.discount_percentage).toFixed(1)}%</span>
+                            ) : (
+                              <span className="text-muted-foreground/50">-</span>
+                            )}
+                          </td>
+                          <td className="border border-border p-3 text-right font-semibold text-base">
+                            {formatCurrency(lineTotal)}
+                          </td>
+                        </tr>
+                      );
+                    })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="border border-border p-6 text-center text-muted-foreground">
-                      No line items found
+                    <td colSpan={7} className="border border-border p-8 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <FileText className="h-8 w-8 text-muted-foreground/50" />
+                        <p>No line items found</p>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -479,22 +556,34 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
 
           {/* Totals */}
           <div className="flex justify-end mb-6">
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md border border-border rounded-lg overflow-hidden">
               <table className="w-full">
                 <tbody>
-                  <tr>
-                    <td className="p-2 text-right text-muted-foreground">Subtotal:</td>
-                    <td className="p-2 text-right font-medium">{formatCurrency(quotation.subtotal)}</td>
+                  <tr className="bg-muted/30">
+                    <td className="p-3 text-right text-muted-foreground font-medium">Subtotal:</td>
+                    <td className="p-3 text-right font-semibold">{formatCurrency(Number(quotation.subtotal) || 0)}</td>
                   </tr>
+                  {quotation.discount && Number(quotation.discount) > 0 && (
+                    <tr>
+                      <td className="p-3 text-right text-muted-foreground">
+                        <span className="text-red-600">Discount:</span>
+                      </td>
+                      <td className="p-3 text-right font-semibold text-red-600">
+                        -{formatCurrency(Number(quotation.discount))}
+                      </td>
+                    </tr>
+                  )}
                   <tr>
-                    <td className="p-2 text-right text-muted-foreground">
-                      Tax ({quotation.tax_rate}%):
+                    <td className="p-3 text-right text-muted-foreground">
+                      Tax ({Number(quotation.tax_rate) || 0}%):
                     </td>
-                    <td className="p-2 text-right font-medium">{formatCurrency(quotation.tax_amount)}</td>
+                    <td className="p-3 text-right font-semibold">{formatCurrency(Number(quotation.tax_amount) || 0)}</td>
                   </tr>
-                  <tr className="border-t-2 border-foreground">
-                    <td className="p-2 text-right font-bold text-lg">Total Amount:</td>
-                    <td className="p-2 text-right font-bold text-lg">{formatCurrency(quotation.total_amount)}</td>
+                  <tr className="border-t-2 border-foreground bg-muted/50">
+                    <td className="p-4 text-right font-bold text-lg">Total Amount:</td>
+                    <td className="p-4 text-right font-bold text-xl text-primary">
+                      {formatCurrency(Number(quotation.total_amount) || 0)}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -502,32 +591,52 @@ const QuotationPreviewDialog: React.FC<QuotationPreviewDialogProps> = ({
           </div>
 
           {/* Terms & Conditions */}
-          {quotation.terms_conditions && (
-            <div className="mb-6 p-4 bg-muted rounded-lg">
-              <h3 className="font-semibold mb-2">Terms & Conditions:</h3>
-              <p className="text-sm whitespace-pre-line">{quotation.terms_conditions}</p>
+          {(quotation.terms_conditions || quotation.terms_and_conditions) && (
+            <div className="mb-6 p-5 bg-muted/50 rounded-lg border border-border">
+              <h3 className="font-semibold mb-3 text-base flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Terms & Conditions
+              </h3>
+              <div className="text-sm whitespace-pre-line text-foreground leading-relaxed">
+                {quotation.terms_conditions || quotation.terms_and_conditions}
+              </div>
             </div>
           )}
 
           {/* Notes */}
           {quotation.notes && (
-            <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <h3 className="font-semibold mb-2 text-blue-900">Notes:</h3>
-              <p className="text-sm text-blue-800 whitespace-pre-line">{quotation.notes}</p>
+            <div className="mb-6 p-5 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <h3 className="font-semibold mb-3 text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Internal Notes
+              </h3>
+              <p className="text-sm text-blue-800 dark:text-blue-200 whitespace-pre-line leading-relaxed">
+                {quotation.notes}
+              </p>
             </div>
           )}
 
           {/* Footer */}
-          <div className="mt-8 pt-6 border-t text-center text-sm text-muted-foreground">
-            <p>Thank you for your business!</p>
-            {quotation.valid_until && (
-              <p className="mt-2">
-                This quotation is valid until {formatDate(quotation.valid_until)}
+          <div className="mt-10 pt-6 border-t text-center space-y-2">
+            <p className="text-base font-semibold text-foreground">Thank you for your business!</p>
+            <div className="text-sm text-muted-foreground space-y-1">
+              {quotation.valid_until && (
+                <p>
+                  This quotation is valid until <span className="font-medium text-foreground">{formatDate(quotation.valid_until)}</span>
+                </p>
+              )}
+              {(quotation.expiry_date && quotation.expiry_date !== quotation.valid_until) && (
+                <p>
+                  Expiry Date: <span className="font-medium text-foreground">{formatDate(quotation.expiry_date)}</span>
+                </p>
+              )}
+              <p>
+                Generated on {formatDate(quotation.created_at)}
+                {quotation.updated_at !== quotation.created_at && (
+                  <span> • Last updated: {formatDate(quotation.updated_at)}</span>
+                )}
               </p>
-            )}
-            <p className="mt-2">
-              Generated on {formatDate(quotation.created_at)}
-            </p>
+            </div>
           </div>
         </div>
       </DialogContent>

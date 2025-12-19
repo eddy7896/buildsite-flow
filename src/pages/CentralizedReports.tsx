@@ -982,7 +982,7 @@ const CentralizedReports = () => {
                 return (
                   <Card 
                     key={template.id} 
-                    className="group cursor-pointer hover:shadow-lg transition-all duration-200 border hover:border-primary/20 flex flex-col h-full overflow-hidden"
+                    className="group cursor-pointer hover:shadow-lg border hover:border-primary/20 flex flex-col h-full overflow-hidden"
                   >
                     <CardHeader className="pb-3 space-y-2 flex-shrink-0">
                       <div className="flex items-start justify-between gap-2">
@@ -1087,7 +1087,7 @@ const CentralizedReports = () => {
                     return (
                       <Card 
                         key={template.id} 
-                        className="group cursor-pointer hover:shadow-lg transition-all duration-200 border hover:border-primary/20 flex flex-col h-full overflow-hidden"
+                        className="group cursor-pointer hover:shadow-lg border hover:border-primary/20 flex flex-col h-full overflow-hidden"
                       >
                         <CardHeader className="pb-3 space-y-2 flex-shrink-0">
                           <div className="flex items-start justify-between gap-2">
@@ -1189,7 +1189,7 @@ const CentralizedReports = () => {
               {customReports.map((report) => (
                 <Card 
                   key={report.id} 
-                  className="group cursor-pointer hover:shadow-lg transition-all duration-200 border hover:border-orange-200 dark:hover:border-orange-800 flex flex-col h-full overflow-hidden"
+                  className="group cursor-pointer hover:shadow-lg border hover:border-orange-200 dark:hover:border-orange-800 flex flex-col h-full overflow-hidden"
                 >
                   <CardHeader className="pb-3 space-y-2 flex-shrink-0">
                     <div className="flex items-start justify-between gap-2">

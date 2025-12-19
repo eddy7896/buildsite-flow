@@ -245,7 +245,25 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   },
 
   // Clients & CRM
-  '/clients': { 
+  '/clients': {
+    path: '/clients',
+    requiredRoles: [],
+    allowHigherRoles: false,
+    description: 'Client management'
+  },
+  '/clients/create': {
+    path: '/clients/create',
+    requiredRoles: ['sales_manager'],
+    allowHigherRoles: true,
+    description: 'Create new client'
+  },
+  '/clients/edit/:id': {
+    path: '/clients/edit/:id',
+    requiredRoles: ['sales_manager'],
+    allowHigherRoles: true,
+    description: 'Edit client'
+  },
+  '/clients-old': { 
     path: '/clients', 
     requiredRoles: [], 
     allowHigherRoles: false,

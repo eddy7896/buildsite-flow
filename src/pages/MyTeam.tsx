@@ -219,7 +219,7 @@ export default function MyTeam() {
           const RoleIcon = getRoleIcon(member.role);
           
           return (
-            <Card key={member.id} className="hover:shadow-lg transition-shadow">
+            <Card key={member.id} className="hover:shadow-lg">
               <CardHeader className="pb-4">
                 <div className="flex items-start space-x-4">
                   <Avatar className="h-12 w-12">

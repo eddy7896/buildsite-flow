@@ -59,7 +59,7 @@ interface AttendanceInsight {
 
 const Attendance = () => {
   const { toast } = useToast();
-  const { userRole } = useAuth();
+  const { userRole, user, profile } = useAuth();
   const { settings: agencySettings } = useAgencySettings();
   const [searchParams] = useSearchParams();
   
@@ -100,7 +100,7 @@ const Attendance = () => {
   );
 
   useEffect(() => {
-    if (date) {
+    if (date && user?.id) {
       fetchAttendanceData(date);
       if (isAdminView) {
         fetchWeeklyTrends();
@@ -108,23 +108,28 @@ const Attendance = () => {
         generateInsights();
       }
     }
-  }, [date, isAdminView, selectedPeriod, urlDepartmentId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, isAdminView, selectedPeriod, urlDepartmentId, user?.id]);
 
   const fetchAttendanceData = async (selectedDate: Date) => {
     try {
       setLoading(true);
       
       // Format date for query (YYYY-MM-DD)
+      // Note: Agency isolation is handled at the database connection level
       const dateStr = selectedDate.toISOString().split('T')[0];
       
       // If filtering by department, get user IDs in that department
       let departmentUserIds: string[] = [];
       if (urlDepartmentId) {
-        const { data: assignments } = await db
+        let assignmentsQuery = db
           .from('team_assignments')
           .select('user_id')
           .eq('department_id', urlDepartmentId)
           .eq('is_active', true);
+        
+        // Note: Agency isolation is handled at the database connection level
+        const { data: assignments } = await assignmentsQuery;
         
         if (assignments) {
           departmentUserIds = assignments.map((ta: any) => ta.user_id).filter(Boolean);
@@ -132,6 +137,8 @@ const Attendance = () => {
       }
       
       // Fetch attendance records for the selected date
+      // Note: Agency isolation is handled at the database connection level
+      // No need to filter by agency_id as each agency has its own database
       let attendanceQuery = db
         .from('attendance')
         .select('*')
@@ -148,6 +155,7 @@ const Attendance = () => {
       if (attendanceError) throw attendanceError;
 
       // Fetch all active employees to check who's absent
+      // Note: Agency isolation is handled at the database connection level
       let employeesQuery = db
         .from('employee_details')
         .select('user_id, first_name, last_name, is_active')
@@ -163,6 +171,7 @@ const Attendance = () => {
       if (employeesError) throw employeesError;
 
       // Fetch profiles for employee names
+      // Note: Agency isolation is handled at the database connection level
       const employeeIds = employeesData?.map(e => e.user_id).filter(Boolean) || [];
       let profiles: any[] = [];
       
@@ -179,17 +188,25 @@ const Attendance = () => {
       const profileMap = new Map(profiles.map((p: any) => [p.user_id, p.full_name]));
 
       // Check for leave requests that include this date (between start_date and end_date)
-      // Fixed: start_date <= dateStr AND end_date >= dateStr
-      const { data: leaveData, error: leaveError } = await db
+      // FIXED: Use user_id instead of employee_id (leave_requests table uses user_id)
+      // Note: Agency isolation is handled at the database connection level
+      let leaveQuery = db
         .from('leave_requests')
-        .select('employee_id, status, start_date, end_date')
+        .select('user_id, status, start_date, end_date')
         .gte('end_date', dateStr)
         .lte('start_date', dateStr)
         .in('status', ['approved', 'pending']);
+      
+      // Filter by department if specified
+      if (urlDepartmentId && departmentUserIds.length > 0) {
+        leaveQuery = leaveQuery.in('user_id', departmentUserIds);
+      }
+      
+      const { data: leaveData, error: leaveError } = await leaveQuery;
 
       if (leaveError) throw leaveError;
 
-      const onLeaveIds = new Set((leaveData || []).map((l: any) => l.employee_id));
+      const onLeaveIds = new Set((leaveData || []).map((l: any) => l.user_id));
 
       // Transform attendance data
       const attendanceRecords: AttendanceRecord[] = [];
@@ -266,19 +283,20 @@ const Attendance = () => {
 
       // Add employees on leave
       (leaveData || []).forEach((leave: any) => {
-        if (!presentIds.has(leave.employee_id)) {
-          const employee = employeesData?.find(e => e.user_id === leave.employee_id);
-          const fullName = profileMap.get(leave.employee_id) || 
+        const userId = leave.user_id; // Use user_id from leave_requests
+        if (!presentIds.has(userId)) {
+          const employee = employeesData?.find(e => e.user_id === userId);
+          const fullName = profileMap.get(userId) || 
             (employee ? `${employee.first_name} ${employee.last_name}`.trim() : 'Unknown Employee');
           
           attendanceRecords.push({
-            id: `leave-${leave.employee_id}`,
+            id: `leave-${userId}`,
             name: fullName,
             checkIn: '-',
             checkOut: '-',
             status: 'on-leave',
             hours: '0.0',
-            employee_id: leave.employee_id
+            employee_id: userId
           });
         }
       });
@@ -318,19 +336,25 @@ const Attendance = () => {
   const fetchReportData = async (startDate: Date, endDate: Date) => {
     try {
       setReportLoading(true);
+      
+      // Note: Agency isolation is handled at the database connection level
       const startStr = startDate.toISOString().split('T')[0];
       const endStr = endDate.toISOString().split('T')[0];
 
       // Fetch attendance records for the date range
-      const { data: attendanceData, error: attendanceError } = await db
+      // Note: Agency isolation is handled at the database connection level
+      let attendanceQuery = db
         .from('attendance')
         .select('*')
         .gte('date', startStr)
         .lte('date', endStr);
+      
+      const { data: attendanceData, error: attendanceError } = await attendanceQuery;
 
       if (attendanceError) throw attendanceError;
 
       // Fetch employees
+      // Note: Agency isolation is handled at the database connection level
       const { data: employeesData, error: employeesError } = await db
         .from('employee_details')
         .select('user_id, first_name, last_name, is_active')
@@ -339,6 +363,7 @@ const Attendance = () => {
       if (employeesError) throw employeesError;
 
       // Fetch profiles
+      // Note: Agency isolation is handled at the database connection level
       const employeeIds = employeesData?.map(e => e.user_id).filter(Boolean) || [];
       let profiles: any[] = [];
       
@@ -409,6 +434,7 @@ const Attendance = () => {
 
   const fetchWeeklyTrends = async () => {
     try {
+      // Note: Agency isolation is handled at the database connection level
       const days = selectedPeriod === 'week' ? 7 : 30;
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
@@ -420,11 +446,13 @@ const Attendance = () => {
         currentDate.setDate(startDate.getDate() + i);
         const dateStr = currentDate.toISOString().split('T')[0];
         
+        // Note: Agency isolation is handled at the database connection level
         const { data: attendanceData } = await db
           .from('attendance')
           .select('*')
           .eq('date', dateStr);
         
+        // Note: Agency isolation is handled at the database connection level
         const { data: employeesData } = await db
           .from('employee_details')
           .select('user_id')
@@ -469,9 +497,11 @@ const Attendance = () => {
     try {
       if (!date) return;
       
+      // Note: Agency isolation is handled at the database connection level
       const dateStr = date.toISOString().split('T')[0];
       
       // Fetch all active employees with their user_ids
+      // Note: Agency isolation is handled at the database connection level
       const { data: employeesData } = await db
         .from('employee_details')
         .select('user_id, is_active')
@@ -483,6 +513,7 @@ const Attendance = () => {
       }
       
       // Fetch profiles to get department information
+      // Note: Agency isolation is handled at the database connection level
       const userIds = employeesData.map((emp: any) => emp.user_id);
       const { data: profilesData } = await db
         .from('profiles')
@@ -496,6 +527,7 @@ const Attendance = () => {
       );
       
       // Fetch attendance for the date
+      // Note: Agency isolation is handled at the database connection level
       const { data: attendanceData } = await db
         .from('attendance')
         .select('*')

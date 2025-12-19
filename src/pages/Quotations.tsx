@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/database';
-import { useSearchParams } from 'react-router-dom';
-import QuotationFormDialog from '@/components/QuotationFormDialog';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import QuotationTemplateDialog from '@/components/QuotationTemplateDialog';
 import QuotationPreviewDialog from '@/components/QuotationPreviewDialog';
@@ -50,7 +51,7 @@ interface QuotationTemplate {
   id: string;
   name: string;
   description?: string;
-  template_content?: any;
+  template_data?: any;
   is_active: boolean;
   last_used?: string;
   created_at: string;
@@ -58,13 +59,15 @@ interface QuotationTemplate {
 
 const Quotations = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const auth = useAuth();
+  const user = auth?.user;
+  const profile = auth?.profile;
   const [searchTerm, setSearchTerm] = useState('');
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [templates, setTemplates] = useState<QuotationTemplate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [quotationFormOpen, setQuotationFormOpen] = useState(false);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
-  const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<QuotationTemplate | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
@@ -80,14 +83,25 @@ const Quotations = () => {
   const fetchQuotations = async () => {
     try {
       setLoading(true);
-      const { data, error } = await db
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        console.warn('No agency_id available for fetching quotations');
+        setQuotations([]);
+        setLoading(false);
+        return;
+      }
+
+      let query = db
         .from('quotations')
         .select('*')
+        .eq('agency_id', agencyId)
         .order('created_at', { ascending: false });
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
-      // Fetch client names
+      // Fetch client names (filtered by agency)
       const clientIds = [...new Set((data || []).map((q: any) => q.client_id).filter(Boolean))];
       let clientsMap = new Map();
 
@@ -95,6 +109,8 @@ const Quotations = () => {
         const { data: clientsData, error: clientsError } = await db
           .from('clients')
           .select('id, name, company_name')
+          .eq('agency_id', agencyId)
+          .eq('is_active', true)
           .in('id', clientIds);
 
         if (!clientsError && clientsData) {
@@ -150,26 +166,37 @@ const Quotations = () => {
 
   const fetchTemplates = async () => {
     try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        console.warn('No agency_id available for fetching templates');
+        setTemplates([]);
+        return;
+      }
+
       const { data, error } = await db
         .from('quotation_templates')
         .select('*')
+        .eq('agency_id', agencyId)
         .order('name', { ascending: true });
 
       if (error) throw error;
       setTemplates(data || []);
     } catch (error: any) {
       console.error('Error fetching templates:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch templates',
+        variant: 'destructive',
+      });
     }
   };
 
   const handleNewQuotation = () => {
-    setSelectedQuotation(null);
-    setQuotationFormOpen(true);
+    navigate('/quotations/new');
   };
 
   const handleEditQuotation = (quotation: Quotation) => {
-    setSelectedQuotation(quotation);
-    setQuotationFormOpen(true);
+    navigate(`/quotations/${quotation.id}`);
   };
 
   const handlePreviewQuotation = (quotation: Quotation) => {
@@ -183,6 +210,16 @@ const Quotations = () => {
     }
 
     try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        toast({
+          title: 'Error',
+          description: 'Agency ID not found',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       // Delete line items first
       const { error: lineItemsError } = await db
         .from('quotation_line_items')
@@ -191,11 +228,12 @@ const Quotations = () => {
 
       if (lineItemsError) throw lineItemsError;
 
-      // Delete quotation
+      // Delete quotation (with agency check)
       const { error: quotationError } = await db
         .from('quotations')
         .delete()
-        .eq('id', quotation.id);
+        .eq('id', quotation.id)
+        .eq('agency_id', agencyId);
 
       if (quotationError) throw quotationError;
 
@@ -217,12 +255,23 @@ const Quotations = () => {
 
   const handleSendQuotation = async (quotation: Quotation) => {
     try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        toast({
+          title: 'Error',
+          description: 'Agency ID not found',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       const { error } = await db
         .from('quotations')
         .update({ 
           status: 'sent',
         })
-        .eq('id', quotation.id);
+        .eq('id', quotation.id)
+        .eq('agency_id', agencyId);
 
       if (error) throw error;
 
@@ -248,15 +297,19 @@ const Quotations = () => {
     
     // Update template last_used if column exists
     try {
-      await db
-        .from('quotation_templates')
-        .update({ 
-          last_used: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', template.id);
-      
-      fetchTemplates();
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (agencyId) {
+        await db
+          .from('quotation_templates')
+          .update({ 
+            last_used: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', template.id)
+          .eq('agency_id', agencyId);
+        
+        fetchTemplates();
+      }
     } catch (error) {
       // Column might not exist, ignore error
       console.error('Error updating template:', error);
@@ -274,17 +327,69 @@ const Quotations = () => {
   };
 
   const handleDeleteTemplate = async (template: QuotationTemplate) => {
-    if (!confirm(`Are you sure you want to delete template "${template.name}"? This action cannot be undone.`)) {
-      return;
-    }
-
     try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        toast({
+          title: 'Error',
+          description: 'Agency ID not found',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Check if any quotations are using this template
+      const { data: quotationsUsingTemplate, error: checkError } = await db
+        .from('quotations')
+        .select('id, title')
+        .eq('template_id', template.id)
+        .eq('agency_id', agencyId);
+
+      if (checkError) throw checkError;
+
+      const quotationCount = quotationsUsingTemplate?.length || 0;
+
+      if (quotationCount > 0) {
+        const quotationList = quotationsUsingTemplate
+          ?.slice(0, 5)
+          .map(q => `"${q.title}"`)
+          .join(', ');
+        const moreText = quotationCount > 5 ? ` and ${quotationCount - 5} more` : '';
+        
+        const message = `Cannot delete template "${template.name}" because it is being used by ${quotationCount} quotation(s): ${quotationList}${moreText}.\n\nPlease remove the template reference from these quotations first, or delete the quotations.`;
+        
+        toast({
+          title: 'Cannot Delete Template',
+          description: message,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Confirm deletion if no quotations are using it
+      if (!confirm(`Are you sure you want to delete template "${template.name}"? This action cannot be undone.`)) {
+        return;
+      }
+
+      // Delete the template
       const { error } = await db
         .from('quotation_templates')
         .delete()
-        .eq('id', template.id);
+        .eq('id', template.id)
+        .eq('agency_id', agencyId);
 
-      if (error) throw error;
+      if (error) {
+        // Check if it's a foreign key constraint error
+        if (error.message?.includes('foreign key constraint') || error.message?.includes('violates foreign key')) {
+          toast({
+            title: 'Cannot Delete Template',
+            description: `This template is being used by one or more quotations. Please remove the template reference from those quotations first.`,
+            variant: 'destructive',
+          });
+          return;
+        }
+        throw error;
+      }
 
       toast({
         title: 'Success',
@@ -294,9 +399,18 @@ const Quotations = () => {
       fetchTemplates();
     } catch (error: any) {
       console.error('Error deleting template:', error);
+      
+      // Provide user-friendly error messages
+      let errorMessage = 'Failed to delete template';
+      if (error.message?.includes('foreign key constraint') || error.message?.includes('violates foreign key')) {
+        errorMessage = 'This template is being used by one or more quotations. Please remove the template reference from those quotations first.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: 'Error',
-        description: error.message || 'Failed to delete template',
+        description: errorMessage,
         variant: 'destructive',
       });
     }
@@ -449,7 +563,7 @@ const Quotations = () => {
                 </div>
               ) : (
                 filteredQuotations.map((quote) => (
-                  <Card key={quote.id} className="hover:shadow-md transition-shadow">
+                  <Card key={quote.id} className="hover:shadow-md">
                     <CardHeader className="pb-3">
                       <div className="flex justify-between items-start">
                         <div>
@@ -557,7 +671,7 @@ const Quotations = () => {
               </div>
             ) : (
               templates.map((template) => (
-                <Card key={template.id} className="hover:shadow-md transition-shadow">
+                <Card key={template.id} className="hover:shadow-md">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">{template.name}</CardTitle>
                     <p className="text-sm text-muted-foreground">{template.description || 'No description'}</p>
@@ -599,15 +713,6 @@ const Quotations = () => {
         </TabsContent>
       </Tabs>
 
-      <QuotationFormDialog
-        isOpen={quotationFormOpen}
-        onClose={() => {
-          setQuotationFormOpen(false);
-          setSelectedQuotation(null);
-        }}
-        quotation={selectedQuotation}
-        onQuotationSaved={handleQuotationSaved}
-      />
 
       <QuotationTemplateDialog
         isOpen={templateDialogOpen}

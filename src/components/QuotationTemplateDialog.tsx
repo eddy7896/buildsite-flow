@@ -9,15 +9,17 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/database';
 import { generateUUID } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 import { Plus, Trash2 } from 'lucide-react';
 
 interface QuotationTemplate {
   id?: string;
   name: string;
   description?: string;
-  template_content?: any;
+  template_data?: any;
   is_active: boolean;
   created_by?: string;
+  agency_id?: string;
 }
 
 interface QuotationTemplateDialogProps {
@@ -34,12 +36,14 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
   onTemplateSaved,
 }) => {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const auth = useAuth();
+  const user = auth?.user;
+  const profile = auth?.profile;
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<QuotationTemplate>({
     name: '',
     description: '',
-    template_content: {
+    template_data: {
       lineItems: [],
       terms_conditions: '',
       tax_rate: 18,
@@ -52,7 +56,7 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
       setFormData({
         name: template.name || '',
         description: template.description || '',
-        template_content: template.template_content || {
+        template_data: template.template_data || {
           lineItems: [],
           terms_conditions: '',
           tax_rate: 18,
@@ -63,7 +67,7 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
       setFormData({
         name: '',
         description: '',
-        template_content: {
+        template_data: {
           lineItems: [],
           terms_conditions: '',
           tax_rate: 18,
@@ -88,10 +92,21 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
     setLoading(true);
 
     try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId || !user?.id) {
+        toast({
+          title: 'Error',
+          description: 'Agency ID or User ID not found. Please ensure you are logged in.',
+          variant: 'destructive',
+        });
+        setLoading(false);
+        return;
+      }
+
       const templateData = {
         name: formData.name,
         description: formData.description || null,
-        template_content: formData.template_content,
+        template_data: formData.template_data,
         is_active: formData.is_active,
         updated_at: new Date().toISOString(),
       };
@@ -101,7 +116,8 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
         const { error } = await db
           .from('quotation_templates')
           .update(templateData)
-          .eq('id', template.id);
+          .eq('id', template.id)
+          .eq('agency_id', agencyId);
 
         if (error) throw error;
 
@@ -111,12 +127,12 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
         });
       } else {
         // Create new template
-        // Get user ID from auth context, or use default system user UUID
-        const userId = user?.id || '550e8400-e29b-41d4-a716-446655440010';
+        const userId = user.id;
         
         const newTemplate = {
           id: generateUUID(),
           ...templateData,
+          agency_id: agencyId,
           created_by: userId,
           created_at: new Date().toISOString(),
         };
@@ -148,11 +164,11 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
   };
 
   const addSampleLineItem = () => {
-    const lineItems = formData.template_content?.lineItems || [];
+    const lineItems = formData.template_data?.lineItems || [];
     setFormData(prev => ({
       ...prev,
-      template_content: {
-        ...prev.template_content,
+      template_data: {
+        ...prev.template_data,
         lineItems: [
           ...lineItems,
           {
@@ -168,22 +184,22 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
   };
 
   const removeLineItem = (index: number) => {
-    const lineItems = formData.template_content?.lineItems || [];
+    const lineItems = formData.template_data?.lineItems || [];
     setFormData(prev => ({
       ...prev,
-      template_content: {
-        ...prev.template_content,
+      template_data: {
+        ...prev.template_data,
         lineItems: lineItems.filter((_: any, i: number) => i !== index),
       },
     }));
   };
 
   const updateLineItem = (index: number, field: string, value: any) => {
-    const lineItems = formData.template_content?.lineItems || [];
+    const lineItems = formData.template_data?.lineItems || [];
     setFormData(prev => ({
       ...prev,
-      template_content: {
-        ...prev.template_content,
+      template_data: {
+        ...prev.template_data,
         lineItems: lineItems.map((item: any, i: number) =>
           i === index ? { ...item, [field]: value } : item
         ),
@@ -236,11 +252,11 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
               min="0"
               max="100"
               step="0.01"
-              value={formData.template_content?.tax_rate || 18}
+              value={formData.template_data?.tax_rate || 18}
               onChange={(e) => setFormData(prev => ({
                 ...prev,
-                template_content: {
-                  ...prev.template_content,
+                template_data: {
+                  ...prev.template_data,
                   tax_rate: Number(e.target.value),
                 },
               }))}
@@ -251,11 +267,11 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
             <Label htmlFor="terms_conditions">Default Terms & Conditions</Label>
             <Textarea
               id="terms_conditions"
-              value={formData.template_content?.terms_conditions || ''}
+              value={formData.template_data?.terms_conditions || ''}
               onChange={(e) => setFormData(prev => ({
                 ...prev,
-                template_content: {
-                  ...prev.template_content,
+                template_data: {
+                  ...prev.template_data,
                   terms_conditions: e.target.value,
                 },
               }))}
@@ -273,12 +289,12 @@ const QuotationTemplateDialog: React.FC<QuotationTemplateDialogProps> = ({
               </Button>
             </div>
             <div className="space-y-2 max-h-60 overflow-y-auto border rounded-lg p-3">
-              {(formData.template_content?.lineItems || []).length === 0 ? (
+              {(formData.template_data?.lineItems || []).length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   No line items. Click "Add Item" to add default items for this template.
                 </p>
               ) : (
-                (formData.template_content?.lineItems || []).map((item: any, index: number) => (
+                (formData.template_data?.lineItems || []).map((item: any, index: number) => (
                   <div key={index} className="grid grid-cols-12 gap-2 items-end p-2 border rounded">
                     <div className="col-span-4">
                       <Input

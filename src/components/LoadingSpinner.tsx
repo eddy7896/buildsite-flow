@@ -38,7 +38,7 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
       case 'refresh':
         return <RefreshCw className={spinnerClass} />;
       case 'network':
-        return <Wifi className={cn(spinnerClass, 'animate-pulse')} />;
+        return <Wifi className={spinnerClass} />;
       case 'dots':
         return (
           <div className="flex space-x-1">
@@ -46,7 +46,7 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
               <div
                 key={i}
                 className={cn(
-                  'rounded-full bg-current animate-pulse',
+                  'rounded-full bg-current',
                   size === 'sm' ? 'w-1 h-1' : 
                   size === 'md' ? 'w-2 h-2' :
                   size === 'lg' ? 'w-3 h-3' : 'w-4 h-4'
@@ -61,7 +61,7 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
         );
       case 'pulse':
         return (
-          <div className={cn(spinnerClass, 'rounded-full bg-current animate-pulse')} />
+          <div className={cn(spinnerClass, 'rounded-full bg-current')} />
         );
       default:
         return <Loader2 className={spinnerClass} />;

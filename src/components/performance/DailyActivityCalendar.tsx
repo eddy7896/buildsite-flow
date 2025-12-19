@@ -78,7 +78,7 @@ export function DailyActivityCalendar({
           <CardDescription>Loading calendar...</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[400px] bg-muted animate-pulse rounded" />
+          <div className="h-[400px] bg-muted rounded" />
         </CardContent>
       </Card>
     );

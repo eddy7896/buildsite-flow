@@ -97,9 +97,9 @@ const Auth = () => {
       <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden">
         {/* Animated gradient background */}
         <div className="absolute inset-0">
-          <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-emerald-500/20 rounded-full filter blur-[120px] animate-pulse" />
-          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-blue-600/15 rounded-full filter blur-[100px] animate-pulse" style={{ animationDelay: '1s' }} />
-          <div className="absolute top-1/2 left-1/3 w-[300px] h-[300px] bg-emerald-600/10 rounded-full filter blur-[80px] animate-pulse" style={{ animationDelay: '2s' }} />
+          <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-emerald-500/20 rounded-full filter blur-[120px]" />
+          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-blue-600/15 rounded-full filter blur-[100px]" />
+          <div className="absolute top-1/2 left-1/3 w-[300px] h-[300px] bg-emerald-600/10 rounded-full filter blur-[80px]" />
         </div>
 
         {/* Grid pattern */}
@@ -142,10 +142,10 @@ const Auth = () => {
             {features.map((feature, idx) => (
               <div 
                 key={idx} 
-                className="group p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-emerald-500/20 transition-all duration-300"
+                className="group p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-emerald-500/20"
               >
                 <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20 transition-colors">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20">
                     <feature.icon className="h-5 w-5 text-emerald-400" />
                   </div>
                   <div>
@@ -272,7 +272,7 @@ const Auth = () => {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -294,7 +294,7 @@ const Auth = () => {
 
                 <Button 
                   type="submit" 
-                  className="w-full h-11 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-medium shadow-lg shadow-emerald-500/20 transition-all duration-200" 
+                  className="w-full h-11 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-medium shadow-lg shadow-emerald-500/20" 
                   disabled={isLoading}
                 >
                   {isLoading ? (
@@ -327,7 +327,7 @@ const Auth = () => {
               <Link to="/agency-signup">
                 <Button 
                   variant="outline" 
-                  className="w-full h-11 border-slate-700/50 bg-transparent text-slate-300 hover:bg-slate-800/50 hover:text-white hover:border-slate-600 transition-all"
+                  className="w-full h-11 border-slate-700/50 bg-transparent text-slate-300 hover:bg-slate-800/50 hover:text-white hover:border-slate-600"
                 >
                   Create Your Agency Account
                   <ArrowRight className="ml-2 h-4 w-4" />

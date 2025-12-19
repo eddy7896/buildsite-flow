@@ -48,6 +48,7 @@ const MyLeave = React.lazy(() => import("./pages/MyLeave"));
 const Ledger = React.lazy(() => import("./pages/Ledger"));
 const CreateJournalEntry = React.lazy(() => import("./pages/CreateJournalEntry"));
 const Clients = React.lazy(() => import("./pages/Clients"));
+const CreateClient = React.lazy(() => import("./pages/CreateClient"));
 const Reports = React.lazy(() => import("./pages/Reports"));
 const Analytics = React.lazy(() => import("./pages/Analytics"));
 const ProjectManagement = React.lazy(() => import("./pages/ProjectManagement"));
@@ -59,6 +60,7 @@ const CreateEmployee = React.lazy(() => import("./pages/CreateEmployee"));
 const AssignUserRoles = React.lazy(() => import("./pages/AssignUserRoles"));
 const JobCosting = React.lazy(() => import("./pages/JobCosting"));
 const Quotations = React.lazy(() => import("./pages/Quotations"));
+const QuotationForm = React.lazy(() => import("./pages/QuotationForm"));
 const CRM = React.lazy(() => import("./pages/CRM"));
 const LeadDetail = React.lazy(() => import("./pages/LeadDetail"));
 const ActivityDetail = React.lazy(() => import("./pages/ActivityDetail"));
@@ -376,6 +378,28 @@ const AppContent = () => {
               />
               
               <Route 
+                path="/clients/create" 
+                element={
+                  <ProtectedRoute requiredRole="sales_manager">
+                    <DashboardLayout>
+                      <SuspenseRoute><CreateClient /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/clients/edit/:id" 
+                element={
+                  <ProtectedRoute requiredRole="sales_manager">
+                    <DashboardLayout>
+                      <SuspenseRoute><CreateClient /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
                 path="/reports" 
                 element={
                   <ProtectedRoute requiredRole="admin">
@@ -458,6 +482,28 @@ const AppContent = () => {
                   <ProtectedRoute>
                     <DashboardLayout>
                       <SuspenseRoute><Quotations /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/quotations/new" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><QuotationForm /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/quotations/:id" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><QuotationForm /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 

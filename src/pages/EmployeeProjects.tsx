@@ -185,7 +185,7 @@ const EmployeeProjects = () => {
           ) : (
             <div className="grid gap-4">
               {projects.map((project) => (
-                <Card key={project.id} className="hover:shadow-md transition-shadow">
+                <Card key={project.id} className="hover:shadow-md">
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>
@@ -234,7 +234,7 @@ const EmployeeProjects = () => {
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 
-                          className="bg-primary h-2 rounded-full transition-all duration-300" 
+                          className="bg-primary h-2 rounded-full" 
                           style={{ width: `${getProgressPercentage(project)}%` }}
                         ></div>
                       </div>
@@ -269,7 +269,7 @@ const EmployeeProjects = () => {
           ) : (
             <div className="grid gap-4">
               {jobs.map((job) => (
-                <Card key={job.id} className="hover:shadow-md transition-shadow">
+                <Card key={job.id} className="hover:shadow-md">
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <div>

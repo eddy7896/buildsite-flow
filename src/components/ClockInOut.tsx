@@ -10,18 +10,23 @@ import { toast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { generateUUID } from '@/lib/uuid';
 import { getAgencyId } from '@/utils/agencyUtils';
+import { useAgencySettings } from '@/hooks/useAgencySettings';
 
 interface AttendanceRecord {
   id: string;
+  user_id?: string;
   employee_id: string;
   date: string;
   check_in_time: string | null;
   check_out_time: string | null;
+  hours_worked?: number | null;
   total_hours: number | null;
   location: string | null;
   status: string;
   overtime_hours?: number | null;
   agency_id?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface LocationData {
@@ -220,6 +225,7 @@ const getLocation = (): Promise<LocationData> => {
 
 const ClockInOut = ({ compact = false }: ClockInOutProps) => {
   const { user, profile } = useAuth();
+  const { settings: agencySettings } = useAgencySettings();
   const [loading, setLoading] = useState(false);
   const [fetchingLocation, setFetchingLocation] = useState(false);
   const [todayAttendance, setTodayAttendance] = useState<AttendanceRecord | null>(null);
@@ -297,7 +303,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
       const { data, error } = await db
         .from('attendance')
         .select('*')
-        .eq('employee_id', user?.id || '')
+        .eq('user_id', user.id) // Use user_id as primary lookup
         .eq('date', today)
         .maybeSingle();
 
@@ -325,6 +331,37 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
     return Math.round((diffInMs / (1000 * 60 * 60)) * 100) / 100;
   };
 
+  // Check if clock-in is late based on agency working hours
+  const isLateClockIn = (checkInTime: string): boolean => {
+    if (!agencySettings?.working_hours_start) return false;
+    
+    const [hours, minutes] = agencySettings.working_hours_start.split(':').map(Number);
+    const workingStart = new Date();
+    workingStart.setHours(hours, minutes, 0, 0);
+    
+    const checkIn = new Date(checkInTime);
+    checkIn.setSeconds(0, 0);
+    
+    return checkIn > workingStart;
+  };
+
+  // Calculate overtime based on agency working hours
+  const calculateOvertime = (totalHours: number): number => {
+    if (!agencySettings?.working_hours_start || !agencySettings?.working_hours_end) {
+      // Default: 9 hours standard work day
+      return totalHours > 9 ? Math.round((totalHours - 9) * 100) / 100 : 0;
+    }
+    
+    const [startHours, startMinutes] = agencySettings.working_hours_start.split(':').map(Number);
+    const [endHours, endMinutes] = agencySettings.working_hours_end.split(':').map(Number);
+    
+    const startTime = startHours + startMinutes / 60;
+    const endTime = endHours + endMinutes / 60;
+    const standardHours = endTime - startTime;
+    
+    return totalHours > standardHours ? Math.round((totalHours - standardHours) * 100) / 100 : 0;
+  };
+
   const handleClockIn = async () => {
     if (!user?.id) {
       toast({
@@ -345,15 +382,23 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
       
       const now = new Date().toISOString();
       const today = format(new Date(), 'yyyy-MM-dd');
+      const agencyId = await getAgencyId(profile, user?.id);
+      
+      // Determine status based on clock-in time and agency working hours
+      let status = 'present';
+      if (isLateClockIn(now)) {
+        status = 'late';
+      }
 
       const attendanceData = {
         id: generateUUID(),
-        employee_id: user?.id || '',
+        user_id: user.id, // Required field
+        employee_id: user.id, // Will be synced by trigger if null
         date: today,
         check_in_time: now,
-        location: locationData.address,
-        status: 'present',
-        agency_id: await getAgencyId(profile, user?.id) || undefined,
+        location: locationData.address || null,
+        status: status,
+        agency_id: agencyId || null,
         created_at: now
       };
 
@@ -366,9 +411,14 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
       if (error) throw error;
 
       setTodayAttendance(data);
+      
+      const statusMessage = status === 'late' 
+        ? ' (Late arrival)' 
+        : '';
+      
       toast({
         title: "✅ Clocked In Successfully",
-        description: `Checked in at ${format(new Date(), 'HH:mm:ss')}${locationData.address !== 'Location unavailable' ? ` • ${locationData.address}` : ''}`
+        description: `Checked in at ${format(new Date(), 'HH:mm:ss')}${statusMessage}${locationData.address && locationData.address !== 'Location unavailable' ? ` • ${locationData.address}` : ''}`
       });
     } catch (error: any) {
       console.error('Clock in error:', error);
@@ -406,20 +456,22 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
         ? calculateHours(todayAttendance.check_in_time, now)
         : 0;
 
-      const overtimeHours = totalHours > 9 ? Math.round((totalHours - 9) * 100) / 100 : 0;
+      const overtimeHours = calculateOvertime(totalHours);
 
       // Create location string with both check-in and check-out locations
       const locationString = todayAttendance.location 
-        ? `In: ${todayAttendance.location} | Out: ${locationData.address}`
-        : locationData.address;
+        ? `In: ${todayAttendance.location} | Out: ${locationData.address || 'Location unavailable'}`
+        : (locationData.address || null);
 
       const { data, error } = await db
         .from('attendance')
         .update({
           check_out_time: now,
-          total_hours: totalHours,
+          hours_worked: totalHours, // Primary field
+          total_hours: totalHours, // For compatibility
           overtime_hours: overtimeHours,
           location: locationString
+          // updated_at is automatically set by the database service
         })
         .eq('id', todayAttendance.id)
         .select()
@@ -500,7 +552,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
             <div className="flex flex-col items-center gap-1">
               {canClockOut && (
                 <>
-                  <Badge variant="outline" className="text-green-600 border-green-200 animate-pulse">
+                  <Badge variant="outline" className="text-green-600 border-green-200">
                     <CheckCircle className="h-3 w-3 mr-1" />
                     Working
                   </Badge>
@@ -515,7 +567,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
               {isCompleted && (
                 <Badge variant="secondary">
                   <CheckCircle className="h-3 w-3 mr-1" />
-                  Completed ({Number(todayAttendance?.total_hours || 0).toFixed(1)}h)
+                  Completed ({Number(todayAttendance?.hours_worked || todayAttendance?.total_hours || 0).toFixed(1)}h)
                 </Badge>
               )}
               {canClockIn && (
@@ -689,7 +741,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
                   <div className="flex justify-between items-center p-2 bg-green-50 rounded border border-green-200">
                     <span className="text-sm text-green-700 font-medium">Total Hours</span>
                     <Badge variant="secondary" className="bg-green-100 text-green-800 font-mono">
-                      {Number(todayAttendance.total_hours || 0).toFixed(2)}h
+                      {Number(todayAttendance.hours_worked || todayAttendance.total_hours || 0).toFixed(2)}h
                     </Badge>
                   </div>
 
@@ -708,7 +760,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
               {canClockOut && (
                 <div className="flex justify-between items-center p-2 bg-green-50 rounded border border-green-200">
                   <span className="text-sm text-green-700 font-medium">Elapsed Time</span>
-                  <Badge variant="secondary" className="bg-green-100 text-green-800 font-mono animate-pulse">
+                  <Badge variant="secondary" className="bg-green-100 text-green-800 font-mono">
                     {getElapsedTime()}
                   </Badge>
                 </div>
@@ -775,7 +827,7 @@ const ClockInOut = ({ compact = false }: ClockInOutProps) => {
               <CheckCircle className="h-8 w-8 mx-auto text-green-600 mb-2" />
               <p className="text-green-800 font-medium">Day Complete!</p>
               <p className="text-sm text-green-600">
-                You worked {Number(todayAttendance?.total_hours || 0).toFixed(2)} hours today
+                You worked {Number(todayAttendance?.hours_worked || todayAttendance?.total_hours || 0).toFixed(2)} hours today
               </p>
             </div>
           )}

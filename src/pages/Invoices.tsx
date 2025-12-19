@@ -203,7 +203,7 @@ const Invoices = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6">
-        <Card className="transition-all hover:shadow-md">
+        <Card className="hover:shadow-md">
           <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
               <FileText className="h-6 w-6 lg:h-8 lg:w-8 text-blue-600 flex-shrink-0" />
@@ -214,7 +214,7 @@ const Invoices = () => {
             </div>
           </CardContent>
         </Card>
-        <Card className="transition-all hover:shadow-md">
+        <Card className="hover:shadow-md">
           <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
               <DollarSign className="h-6 w-6 lg:h-8 lg:w-8 text-green-600 flex-shrink-0" />
@@ -227,7 +227,7 @@ const Invoices = () => {
             </div>
           </CardContent>
         </Card>
-        <Card className="transition-all hover:shadow-md">
+        <Card className="hover:shadow-md">
           <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
               <Calendar className="h-6 w-6 lg:h-8 lg:w-8 text-yellow-600 flex-shrink-0" />
@@ -242,7 +242,7 @@ const Invoices = () => {
             </div>
           </CardContent>
         </Card>
-        <Card className="transition-all hover:shadow-md">
+        <Card className="hover:shadow-md">
           <CardContent className="pt-4 lg:pt-6">
             <div className="flex items-center">
               <TrendingUp className="h-6 w-6 lg:h-8 lg:w-8 text-red-600 flex-shrink-0" />
@@ -303,7 +303,7 @@ const Invoices = () => {
           ) : (
             <div className="space-y-4">
               {filteredInvoices.map((invoice) => (
-                <Card key={invoice.id} className="transition-all hover:shadow-md">
+                <Card key={invoice.id} className="hover:shadow-md">
                   <CardContent className="p-4 lg:p-6">
                     <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
                       {/* Invoice Details */}

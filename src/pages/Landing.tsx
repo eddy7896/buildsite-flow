@@ -93,10 +93,10 @@ export default function Landing() {
             </div>
             
             <nav className="hidden md:flex items-center gap-6">
-              <a href="#features" className="text-muted-foreground hover:text-foreground transition-colors">Features</a>
-              <a href="#benefits" className="text-muted-foreground hover:text-foreground transition-colors">Benefits</a>
-              <a href="#testimonials" className="text-muted-foreground hover:text-foreground transition-colors">Testimonials</a>
-              <Link to="/pricing" className="text-muted-foreground hover:text-foreground transition-colors">Pricing</Link>
+              <a href="#features" className="text-muted-foreground hover:text-foreground">Features</a>
+              <a href="#benefits" className="text-muted-foreground hover:text-foreground">Benefits</a>
+              <a href="#testimonials" className="text-muted-foreground hover:text-foreground">Testimonials</a>
+              <Link to="/pricing" className="text-muted-foreground hover:text-foreground">Pricing</Link>
             </nav>
 
             <div className="flex items-center gap-4">
@@ -162,7 +162,7 @@ export default function Landing() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => (
-              <Card key={index} className="border-border hover:border-primary/50 transition-colors">
+              <Card key={index} className="border-border hover:border-primary/50">
                 <CardContent className="p-6">
                   <feature.icon className="h-12 w-12 text-primary mb-4" />
                   <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>

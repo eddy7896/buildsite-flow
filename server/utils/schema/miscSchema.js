@@ -82,16 +82,20 @@ async function ensureHolidaysTable(client) {
       holiday_type TEXT DEFAULT 'public',
       is_recurring BOOLEAN DEFAULT false,
       description TEXT,
+      is_company_holiday BOOLEAN DEFAULT false,
+      is_national_holiday BOOLEAN DEFAULT false,
+      agency_id UUID,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      UNIQUE(holiday_date, name)
+      UNIQUE(holiday_date, name, agency_id)
     );
   `);
 
-  // Add date column if it doesn't exist (alias for holiday_date for frontend compatibility)
+  // Add missing columns and indexes for existing tables (migrate in-place)
   await client.query(`
     DO $$ 
     BEGIN
+      -- Add date column if it doesn't exist (alias for holiday_date for frontend compatibility)
       IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' 
@@ -101,10 +105,65 @@ async function ensureHolidaysTable(client) {
         ALTER TABLE public.holidays ADD COLUMN date DATE;
         -- Copy holiday_date to date for existing records
         UPDATE public.holidays SET date = holiday_date WHERE date IS NULL;
-        -- Create index
-        CREATE INDEX IF NOT EXISTS idx_holidays_date ON public.holidays(date);
+      END IF;
+
+      -- Add is_company_holiday column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'holidays' 
+        AND column_name = 'is_company_holiday'
+      ) THEN
+        ALTER TABLE public.holidays ADD COLUMN is_company_holiday BOOLEAN DEFAULT false;
+        -- Set default based on existing holiday_type if it exists
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'holidays' 
+          AND column_name = 'holiday_type'
+        ) THEN
+          UPDATE public.holidays SET is_company_holiday = (holiday_type = 'company') WHERE is_company_holiday IS NULL;
+        END IF;
+        UPDATE public.holidays SET is_company_holiday = false WHERE is_company_holiday IS NULL;
+      END IF;
+
+      -- Add is_national_holiday column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'holidays' 
+        AND column_name = 'is_national_holiday'
+      ) THEN
+        ALTER TABLE public.holidays ADD COLUMN is_national_holiday BOOLEAN DEFAULT false;
+        -- Set default based on existing holiday_type if it exists
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'holidays' 
+          AND column_name = 'holiday_type'
+        ) THEN
+          UPDATE public.holidays SET is_national_holiday = (holiday_type = 'public' OR holiday_type = 'national') WHERE is_national_holiday IS NULL;
+        END IF;
+        UPDATE public.holidays SET is_national_holiday = false WHERE is_national_holiday IS NULL;
+      END IF;
+
+      -- Add agency_id column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'holidays' 
+        AND column_name = 'agency_id'
+      ) THEN
+        ALTER TABLE public.holidays ADD COLUMN agency_id UUID;
       END IF;
     END $$;
+  `);
+
+  // Create indexes for performance and multi-tenancy filtering
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_holidays_date ON public.holidays(date);
+    CREATE INDEX IF NOT EXISTS idx_holidays_holiday_date ON public.holidays(holiday_date);
+    CREATE INDEX IF NOT EXISTS idx_holidays_agency_id ON public.holidays(agency_id);
   `);
 
   // Create trigger for sync_holidays_date function (after table exists)
@@ -131,10 +190,63 @@ async function ensureCompanyEventsTable(client) {
       end_date TIMESTAMP WITH TIME ZONE,
       location TEXT,
       is_all_day BOOLEAN DEFAULT false,
+      color TEXT DEFAULT '#3b82f6',
       created_by UUID REFERENCES public.users(id),
+      agency_id UUID,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
+  `);
+
+  // Add missing columns and indexes for existing tables (migrate in-place)
+  await client.query(`
+    DO $$
+    BEGIN
+      -- Add color column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+          AND table_name = 'company_events' 
+          AND column_name = 'color'
+      ) THEN
+        ALTER TABLE public.company_events ADD COLUMN color TEXT DEFAULT '#3b82f6';
+      END IF;
+
+      -- Add agency_id column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+          AND table_name = 'company_events' 
+          AND column_name = 'agency_id'
+      ) THEN
+        ALTER TABLE public.company_events ADD COLUMN agency_id UUID;
+      END IF;
+
+      -- Ensure is_all_day column exists (rename all_day if present)
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+          AND table_name = 'company_events' 
+          AND column_name = 'is_all_day'
+      ) THEN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+            AND table_name = 'company_events' 
+            AND column_name = 'all_day'
+        ) THEN
+          ALTER TABLE public.company_events RENAME COLUMN all_day TO is_all_day;
+        ELSE
+          ALTER TABLE public.company_events ADD COLUMN is_all_day BOOLEAN DEFAULT false;
+        END IF;
+      END IF;
+    END $$;
+  `);
+
+  // Indexes for performance and multi-tenancy filtering
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_company_events_agency_id ON public.company_events(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_company_events_start_date ON public.company_events(start_date);
   `);
 }
 

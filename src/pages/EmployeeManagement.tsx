@@ -1146,7 +1146,7 @@ const EmployeeManagement = () => {
                 return (
                   <Card 
                     key={employee.id} 
-                    className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-primary/20 flex flex-col h-full w-full"
+                    className="hover:shadow-lg border-l-4 border-l-primary/20 flex flex-col h-full w-full"
                   >
                     <CardHeader className="pb-3 flex-shrink-0">
                       <div className="flex items-start space-x-3">
