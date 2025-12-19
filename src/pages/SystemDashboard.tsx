@@ -12,6 +12,7 @@ import { SystemDashboardCharts } from '@/components/system/SystemDashboardCharts
 import { SupportTicketsWidget } from '@/components/system/SupportTicketsWidget';
 import { RealTimeUsageWidget } from '@/components/system/RealTimeUsageWidget';
 import PlanManagement from '@/components/system/PlanManagement';
+import { AgencySettings } from '@/components/system/AgencySettings';
 import { RefreshCw, AlertTriangle, CheckCircle, TrendingUp, LogOut } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -262,6 +263,7 @@ const SystemDashboard = () => {
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">
+            <AgencySettings agencies={agencies} onRefresh={refreshMetrics} />
             <PlanManagement />
           </TabsContent>
         </Tabs>

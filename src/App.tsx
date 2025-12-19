@@ -11,6 +11,14 @@ import { AgencyHeader } from "@/components/AgencyHeader";
 import { AuthRedirect } from "@/components/AuthRedirect";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+// Note: Route permissions are now automatically checked by ProtectedRoute component
+// using routePermissions.ts. The requiredRole prop is optional and can be omitted
+// to use auto-detection from routePermissions.
+import { TicketFloatingButton } from "@/components/TicketFloatingButton";
+import { ScrollToTop } from "@/components/ScrollToTop";
+import { useAuth } from "@/hooks/useAuth";
+// Initialize console logger on app load
+import "@/utils/consoleLogger";
 
 // Lazy load all page components for better code splitting
 const Index = React.lazy(() => import("./pages/Index"));
@@ -67,7 +75,7 @@ const EmployeePerformance = React.lazy(() => import("./pages/EmployeePerformance
 
 // Lazy load component modules
 const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
-const AdvancedPermissions = React.lazy(() => import('./components/AdvancedPermissions').then(m => ({ default: m.AdvancedPermissions })));
+const AdvancedPermissions = React.lazy(() => import('./components/AdvancedPermissions'));
 const AdvancedDashboard = React.lazy(() => import('./components/analytics/AdvancedDashboard').then(m => ({ default: m.AdvancedDashboard })));
 const DocumentManager = React.lazy(() => import('./components/documents/DocumentManager').then(m => ({ default: m.DocumentManager })));
 const MessageCenter = React.lazy(() => import('./components/communication/MessageCenter').then(m => ({ default: m.MessageCenter })));
@@ -105,17 +113,16 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
   </SidebarProvider>
 );
 
-const App = () => {
+const AppContent = () => {
+  const { user, loading } = useAuth();
+  
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <ErrorBoundary>
-          <AuthProvider>
-            <BrowserRouter>
-              <AuthRedirect />
-              <Routes>
+    <>
+      <BrowserRouter>
+        <ScrollToTop />
+        <AuthRedirect />
+        {!loading && user && <TicketFloatingButton />}
+        <Routes>
               <Route path="/" element={<SuspenseRoute><Landing /></SuspenseRoute>} />
               <Route path="/pricing" element={<SuspenseRoute><Pricing /></SuspenseRoute>} />
               <Route path="/auth" element={<SuspenseRoute><Auth /></SuspenseRoute>} />
@@ -613,7 +620,7 @@ const App = () => {
               <Route 
                 path="/permissions" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole={['super_admin', 'ceo', 'admin']}>
                     <DashboardLayout>
                       <SuspenseRoute><AdvancedPermissions /></SuspenseRoute>
                     </DashboardLayout>
@@ -677,8 +684,21 @@ const App = () => {
               />
               
               <Route path="*" element={<SuspenseRoute><NotFound /></SuspenseRoute>} />
-              </Routes>
-            </BrowserRouter>
+        </Routes>
+      </BrowserRouter>
+    </>
+  );
+};
+
+const App = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <ErrorBoundary>
+          <AuthProvider>
+            <AppContent />
           </AuthProvider>
         </ErrorBoundary>
       </TooltipProvider>

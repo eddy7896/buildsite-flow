@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { selectRecords } from '@/services/api/postgresql-service';
+import { selectRecords, selectOne } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
 import { getAgencyId } from '@/utils/agencyUtils';
 import { Plus, Trash2, ArrowLeft, Loader2 } from 'lucide-react';
@@ -23,6 +23,7 @@ interface JournalEntryLine {
 
 const CreateJournalEntry = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -39,16 +40,14 @@ const CreateJournalEntry = () => {
     ] as JournalEntryLine[],
   });
 
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
-
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       setAccountsLoading(true);
-      if (!user?.id) return;
+      if (!user?.id) {
+        setAccountsLoading(false);
+        return;
+      }
       
-      const { selectOne } = await import('@/services/api/postgresql-service');
       const userProfile = await selectOne('profiles', { user_id: user.id });
       const agencyId = await getAgencyId(userProfile, user.id);
       
@@ -58,25 +57,76 @@ const CreateJournalEntry = () => {
           description: 'Unable to determine agency. Please ensure you are logged in and have an agency assigned.',
           variant: 'destructive',
         });
+        setAccountsLoading(false);
         return;
       }
       
-      const accountsData = await selectRecords('chart_of_accounts', {
-        where: { is_active: true, agency_id: agencyId },
-        orderBy: 'account_code ASC',
-      });
-      setAccounts(accountsData || []);
-    } catch (error) {
+      let accountsData: any[] = [];
+      
+      // Strategy 1: Try with both filters
+      try {
+        accountsData = await selectRecords('chart_of_accounts', {
+          where: { agency_id: agencyId, is_active: true },
+          orderBy: 'account_code ASC',
+        });
+      } catch (err1: any) {
+        // Strategy 2: Try with only agency_id (ignore is_active)
+        try {
+          accountsData = await selectRecords('chart_of_accounts', {
+            where: { agency_id: agencyId },
+            orderBy: 'account_code ASC',
+          });
+          // Filter is_active in memory
+          accountsData = (accountsData || []).filter((acc: any) => acc.is_active !== false);
+        } catch (err2: any) {
+          // Strategy 3: Try without agency_id (fallback for schema without agency_id)
+          if (err2?.code === '42703' || String(err2?.message || '').includes('agency_id') || String(err2?.message || '').includes('column')) {
+            try {
+              accountsData = await selectRecords('chart_of_accounts', {
+                where: { is_active: true },
+                orderBy: 'account_code ASC',
+              });
+            } catch (err3: any) {
+              console.error('All attempts failed. Last error:', err3);
+              throw err3;
+            }
+          } else {
+            throw err2;
+          }
+        }
+      }
+      
+      const finalAccounts = Array.isArray(accountsData) ? accountsData : [];
+      
+      // Force React to recognize the state change by creating a new array reference
+      const accountsToSet = finalAccounts.length > 0 ? [...finalAccounts] : [];
+      setAccounts(accountsToSet);
+      
+      if (finalAccounts.length === 0) {
+        toast({
+          title: 'No Accounts Found',
+          description: 'No chart of accounts found for your agency. Please create accounts first in Financial Management.',
+          variant: 'default',
+        });
+      }
+    } catch (error: any) {
       console.error('Error fetching accounts:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load accounts',
+        description: error.message || 'Failed to load accounts. Please try again.',
         variant: 'destructive',
       });
+      setAccounts([]);
     } finally {
       setAccountsLoading(false);
     }
-  };
+  }, [user?.id, toast]);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchAccounts();
+    }
+  }, [user?.id, fetchAccounts]);
 
   const addLine = () => {
     setFormData(prev => ({
@@ -119,6 +169,12 @@ const CreateJournalEntry = () => {
   };
 
   const validateEntry = (): boolean => {
+    // #region agent log
+    if (typeof window !== 'undefined') {
+      fetch('http://127.0.0.1:7243/ingest/22c86675-c795-4ff4-bb93-66691570a89c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CreateJournalEntry.tsx:172',message:'validateEntry called',data:{hasDescription:!!formData.description.trim(),hasDate:!!formData.entry_date,linesCount:formData.lines.length,lines:formData.lines.map(l=>({hasAccount:!!l.account_id,debit:l.debit_amount,credit:l.credit_amount}))},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
+    }
+    // #endregion
+    
     if (!formData.description.trim()) {
       toast({
         title: 'Error',
@@ -137,6 +193,23 @@ const CreateJournalEntry = () => {
       return false;
     }
 
+    // Check if at least one line has an account and amount
+    const hasValidData = formData.lines.some(line => {
+      const hasAccount = !!line.account_id;
+      const debitAmount = typeof line.debit_amount === 'number' ? line.debit_amount : (parseFloat(String(line.debit_amount || 0)) || 0);
+      const creditAmount = typeof line.credit_amount === 'number' ? line.credit_amount : (parseFloat(String(line.credit_amount || 0)) || 0);
+      return hasAccount && (debitAmount > 0 || creditAmount > 0);
+    });
+
+    if (!hasValidData) {
+      toast({
+        title: 'Error',
+        description: 'Please enter at least one line with an account and amount',
+        variant: 'destructive',
+      });
+      return false;
+    }
+
     if (formData.lines.some(line => !line.account_id)) {
       toast({
         title: 'Error',
@@ -147,8 +220,18 @@ const CreateJournalEntry = () => {
     }
 
     for (const line of formData.lines) {
-      const hasDebit = (line.debit_amount || 0) > 0;
-      const hasCredit = (line.credit_amount || 0) > 0;
+      // Ensure amounts are numbers
+      const debitAmount = typeof line.debit_amount === 'number' ? line.debit_amount : (parseFloat(String(line.debit_amount || 0)) || 0);
+      const creditAmount = typeof line.credit_amount === 'number' ? line.credit_amount : (parseFloat(String(line.credit_amount || 0)) || 0);
+      
+      // Skip validation for lines without accounts (they'll be caught above)
+      if (!line.account_id) {
+        continue;
+      }
+      
+      const hasDebit = debitAmount > 0;
+      const hasCredit = creditAmount > 0;
+      
       if (!hasDebit && !hasCredit) {
         toast({
           title: 'Error',
@@ -167,8 +250,15 @@ const CreateJournalEntry = () => {
       }
     }
 
-    const totalDebits = formData.lines.reduce((sum, line) => sum + (parseFloat(line.debit_amount?.toString() || '0') || 0), 0);
-    const totalCredits = formData.lines.reduce((sum, line) => sum + (parseFloat(line.credit_amount?.toString() || '0') || 0), 0);
+    // Calculate totals with proper number handling
+    const totalDebits = formData.lines.reduce((sum, line) => {
+      const amount = typeof line.debit_amount === 'number' ? line.debit_amount : (parseFloat(String(line.debit_amount || 0)) || 0);
+      return sum + amount;
+    }, 0);
+    const totalCredits = formData.lines.reduce((sum, line) => {
+      const amount = typeof line.credit_amount === 'number' ? line.credit_amount : (parseFloat(String(line.credit_amount || 0)) || 0);
+      return sum + amount;
+    }, 0);
     
     if (Math.abs(totalDebits - totalCredits) > 0.01) {
       toast({
@@ -192,8 +282,15 @@ const CreateJournalEntry = () => {
     setLoading(true);
 
     try {
-      const totalDebits = formData.lines.reduce((sum, line) => sum + (line.debit_amount || 0), 0);
-      const totalCredits = formData.lines.reduce((sum, line) => sum + (line.credit_amount || 0), 0);
+      // Calculate totals with proper number handling
+      const totalDebits = formData.lines.reduce((sum, line) => {
+        const amount = typeof line.debit_amount === 'number' ? line.debit_amount : (parseFloat(String(line.debit_amount || 0)) || 0);
+        return sum + amount;
+      }, 0);
+      const totalCredits = formData.lines.reduce((sum, line) => {
+        const amount = typeof line.credit_amount === 'number' ? line.credit_amount : (parseFloat(String(line.credit_amount || 0)) || 0);
+        return sum + amount;
+      }, 0);
 
       const { selectOne, insertRecord } = await import('@/services/api/postgresql-service');
       const userProfile = user?.id ? await selectOne('profiles', { user_id: user.id }) : null;
@@ -223,15 +320,24 @@ const CreateJournalEntry = () => {
         total_credit: totalCredits,
         created_by: user?.id || null,
         agency_id: agencyId,
-      }, user?.id);
+      }, user?.id, agencyId);
 
       for (const line of formData.lines) {
+        // Ensure amounts are proper numbers (not strings or NaN)
+        const debitAmount = typeof line.debit_amount === 'number' && !isNaN(line.debit_amount) 
+          ? Math.max(0, Math.round(line.debit_amount * 100) / 100) 
+          : 0;
+        const creditAmount = typeof line.credit_amount === 'number' && !isNaN(line.credit_amount) 
+          ? Math.max(0, Math.round(line.credit_amount * 100) / 100) 
+          : 0;
+        
+        // journal_entry_lines doesn't have agency_id column - isolation is through parent journal_entries
         await insertRecord('journal_entry_lines', {
           journal_entry_id: newEntry.id,
           account_id: line.account_id,
           description: line.description.trim() || formData.description.trim(),
-          debit_amount: line.debit_amount || 0,
-          credit_amount: line.credit_amount || 0,
+          debit_amount: debitAmount,
+          credit_amount: creditAmount,
           line_number: line.line_number,
         }, user?.id);
       }
@@ -241,7 +347,13 @@ const CreateJournalEntry = () => {
         description: 'Journal entry created successfully',
       });
 
-      navigate('/ledger');
+      // Navigate back to the page we came from, or default to ledger
+      const fromPage = (location.state as any)?.from || 'ledger';
+      if (fromPage === 'financial-management') {
+        navigate('/financial-management');
+      } else {
+        navigate('/ledger');
+      }
     } catch (error: any) {
       console.error('Error saving journal entry:', error);
       toast({
@@ -254,9 +366,22 @@ const CreateJournalEntry = () => {
     }
   };
 
-  const totalDebits = formData.lines.reduce((sum, line) => sum + (line.debit_amount || 0), 0);
-  const totalCredits = formData.lines.reduce((sum, line) => sum + (line.credit_amount || 0), 0);
+  // Calculate totals for display with proper number handling
+  const totalDebits = formData.lines.reduce((sum, line) => {
+    const amount = typeof line.debit_amount === 'number' ? line.debit_amount : (parseFloat(String(line.debit_amount || 0)) || 0);
+    return sum + amount;
+  }, 0);
+  const totalCredits = formData.lines.reduce((sum, line) => {
+    const amount = typeof line.credit_amount === 'number' ? line.credit_amount : (parseFloat(String(line.credit_amount || 0)) || 0);
+    return sum + amount;
+  }, 0);
   const isBalanced = Math.abs(totalDebits - totalCredits) < 0.01;
+  
+  // #region agent log
+  if (typeof window !== 'undefined') {
+    fetch('http://127.0.0.1:7243/ingest/22c86675-c795-4ff4-bb93-66691570a89c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CreateJournalEntry.tsx:350',message:'Balance calculation',data:{totalDebits,totalCredits,isBalanced,linesCount:formData.lines.length,lines:formData.lines.map(l=>({debit:l.debit_amount,credit:l.credit_amount}))},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+  }
+  // #endregion
 
   if (accountsLoading) {
     return (
@@ -345,11 +470,41 @@ const CreateJournalEntry = () => {
 
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <Label className="text-lg">Journal Entry Lines *</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addLine}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Line
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Label className="text-lg">Journal Entry Lines *</Label>
+                  {accountsLoading && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Loading accounts...
+                    </span>
+                  )}
+                  {!accountsLoading && accounts.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      ({accounts.length} account{accounts.length !== 1 ? 's' : ''} available)
+                    </span>
+                  )}
+                  {!accountsLoading && accounts.length === 0 && (
+                    <span className="text-xs text-amber-600">
+                      No accounts found - create accounts in Financial Management
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={fetchAccounts}
+                    disabled={accountsLoading}
+                    title="Refresh accounts"
+                  >
+                    <Loader2 className={`h-4 w-4 ${accountsLoading ? 'animate-spin' : ''}`} />
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={addLine}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add Line
+                  </Button>
+                </div>
               </div>
 
               <div className="border rounded-lg p-4 space-y-4">
@@ -361,25 +516,71 @@ const CreateJournalEntry = () => {
                   <div className="col-span-1"></div>
                 </div>
 
-                {formData.lines.map((line, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-3">
-                      <Select
-                        value={line.account_id}
-                        onValueChange={(value) => updateLine(index, 'account_id', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select account" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {accounts.map((acc) => (
-                            <SelectItem key={acc.id} value={acc.id}>
-                              {acc.account_code} - {acc.account_name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                {formData.lines.map((line, index) => {
+                  return (
+                    <div key={index} className="grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-3">
+                        <Select
+                          value={line.account_id || undefined}
+                          onValueChange={(value) => {
+                            updateLine(index, 'account_id', value);
+                          }}
+                          disabled={accountsLoading || (accounts.length === 0 && !accountsLoading)}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder={accountsLoading ? "Loading accounts..." : accounts.length === 0 ? "No accounts available" : "Select account"} />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px] overflow-y-auto">
+                            {(() => {
+                              if (accountsLoading) {
+                                return (
+                                  <div className="px-2 py-1.5 text-sm text-muted-foreground flex items-center gap-2">
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                    Loading accounts...
+                                  </div>
+                                );
+                              }
+                              
+                              if (!Array.isArray(accounts) || accounts.length === 0) {
+                                return (
+                                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                    No accounts available. Please create accounts first in Financial Management.
+                                  </div>
+                                );
+                              }
+                              
+                              const validAccounts = accounts.filter((acc) => {
+                                return acc && acc.id;
+                              });
+                              
+                              if (validAccounts.length === 0) {
+                                return (
+                                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                    No valid accounts found
+                                  </div>
+                                );
+                              }
+                              
+                              return validAccounts.map((acc) => {
+                                const accountId = String(acc.id);
+                                const displayText = acc.account_code && acc.account_name 
+                                  ? `${acc.account_code} - ${acc.account_name}`
+                                  : acc.account_name || acc.account_code || 'Unnamed Account';
+                                
+                                return (
+                                  <SelectItem 
+                                    key={accountId} 
+                                    value={accountId}
+                                    className="cursor-pointer"
+                                  >
+                                    {displayText}
+                                  </SelectItem>
+                                );
+                              });
+                            })()}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     <div className="col-span-4">
                       <Input
                         value={line.description}
@@ -392,11 +593,27 @@ const CreateJournalEntry = () => {
                         type="number"
                         step="0.01"
                         min="0"
-                        value={line.debit_amount || ''}
+                        value={line.debit_amount > 0 ? line.debit_amount : ''}
                         onChange={(e) => {
-                          const val = parseFloat(e.target.value) || 0;
-                          updateLine(index, 'debit_amount', val);
-                          updateLine(index, 'credit_amount', 0);
+                          const inputValue = e.target.value.trim();
+                          
+                          // Handle empty input
+                          if (inputValue === '' || inputValue === '.') {
+                            updateLine(index, 'debit_amount', 0);
+                            updateLine(index, 'credit_amount', 0);
+                            return;
+                          }
+                          
+                          // Parse the number
+                          const numValue = parseFloat(inputValue);
+                          
+                          // Only update if it's a valid non-negative number
+                          if (!isNaN(numValue) && numValue >= 0) {
+                            // Round to 2 decimal places to match database precision
+                            const roundedValue = Math.round(numValue * 100) / 100;
+                            updateLine(index, 'debit_amount', roundedValue);
+                            updateLine(index, 'credit_amount', 0);
+                          }
                         }}
                         placeholder="0.00"
                       />
@@ -406,11 +623,27 @@ const CreateJournalEntry = () => {
                         type="number"
                         step="0.01"
                         min="0"
-                        value={line.credit_amount || ''}
+                        value={line.credit_amount > 0 ? line.credit_amount : ''}
                         onChange={(e) => {
-                          const val = parseFloat(e.target.value) || 0;
-                          updateLine(index, 'credit_amount', val);
-                          updateLine(index, 'debit_amount', 0);
+                          const inputValue = e.target.value.trim();
+                          
+                          // Handle empty input
+                          if (inputValue === '' || inputValue === '.') {
+                            updateLine(index, 'credit_amount', 0);
+                            updateLine(index, 'debit_amount', 0);
+                            return;
+                          }
+                          
+                          // Parse the number
+                          const numValue = parseFloat(inputValue);
+                          
+                          // Only update if it's a valid non-negative number
+                          if (!isNaN(numValue) && numValue >= 0) {
+                            // Round to 2 decimal places to match database precision
+                            const roundedValue = Math.round(numValue * 100) / 100;
+                            updateLine(index, 'credit_amount', roundedValue);
+                            updateLine(index, 'debit_amount', 0);
+                          }
                         }}
                         placeholder="0.00"
                       />
@@ -428,7 +661,8 @@ const CreateJournalEntry = () => {
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
 
                 <div className="grid grid-cols-12 gap-2 pt-2 border-t font-semibold">
                   <div className="col-span-7 text-right">Totals:</div>
@@ -452,15 +686,24 @@ const CreateJournalEntry = () => {
               <Button 
                 type="button" 
                 variant="outline" 
-                onClick={() => navigate('/ledger')}
+                onClick={() => {
+                  // Navigate back to the page we came from, or default to ledger
+                  const fromPage = (location.state as any)?.from || 'ledger';
+                  if (fromPage === 'financial-management') {
+                    navigate('/financial-management');
+                  } else {
+                    navigate('/ledger');
+                  }
+                }}
                 className="w-full sm:w-auto"
               >
                 Cancel
               </Button>
               <Button 
                 type="submit" 
-                disabled={loading || !isBalanced}
+                disabled={loading}
                 className="w-full sm:w-auto"
+                title={!isBalanced ? `Debits (₹${totalDebits.toFixed(2)}) must equal Credits (₹${totalCredits.toFixed(2)})` : ''}
               >
                 {loading ? (
                   <>

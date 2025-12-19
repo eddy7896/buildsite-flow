@@ -322,8 +322,8 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
       </div>
 
       {/* Kanban Board */}
-      <ScrollArea className="w-full">
-        <div className="flex gap-4 pb-4">
+      <div className="w-full overflow-x-auto">
+        <div className="flex gap-4 pb-4 min-w-max">
           {stages.map((stage) => {
             const stageLeads = leadsByStage[stage.stage_name] || [];
             const stageMetrics = getStageMetrics(stage.stage_name);
@@ -352,7 +352,7 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 };

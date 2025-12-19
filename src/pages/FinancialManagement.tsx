@@ -18,7 +18,6 @@ import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import ChartOfAccountFormDialog from '@/components/ChartOfAccountFormDialog';
 import JournalEntryFormDialog from '@/components/JournalEntryFormDialog';
 import JobCostItemsDialog from '@/components/JobCostItemsDialog';
-
 const FinancialManagement = () => {
   const { toast } = useToast();
   const { user, profile } = useAuth();
@@ -33,6 +32,9 @@ const FinancialManagement = () => {
   const [entriesLoading, setEntriesLoading] = useState(false);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [reportGenerating, setReportGenerating] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [accountTypeFilter, setAccountTypeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -51,16 +53,49 @@ const FinancialManagement = () => {
   const [selectedJobForCosts, setSelectedJobForCosts] = useState<any>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [transactionDetailsOpen, setTransactionDetailsOpen] = useState(false);
+  const [reportViewOpen, setReportViewOpen] = useState(false);
+  const [reportViewData, setReportViewData] = useState<{ title: string; data: any } | null>(null);
   const [currentPage, setCurrentPage] = useState({ accounts: 1, entries: 1, transactions: 1, jobs: 1 });
   const [pageSize] = useState(10);
   const [agencyId, setAgencyId] = useState<string | null>(null);
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  // Calculate account balances from journal entries
+  const [accountBalances, setAccountBalances] = useState<Record<string, number>>({});
+  const [balancesLoading, setBalancesLoading] = useState(false);
+
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      // Reset pagination when search changes
+      setCurrentPage({ accounts: 1, entries: 1, transactions: 1, jobs: 1 });
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   useEffect(() => {
     const initializeAgency = async () => {
-      const id = await getAgencyId(profile, user?.id);
-      setAgencyId(id);
-      if (id) {
-        fetchAllData(id);
+      // In multi-database architecture, agency_database in localStorage is the primary identifier
+      const agencyDatabase = localStorage.getItem('agency_database');
+      
+      // Try to get agency_id from multiple sources
+      let id: string | null = null;
+      
+      // First, try from localStorage (set during login)
+      const storedAgencyId = localStorage.getItem('agency_id');
+      if (storedAgencyId) {
+        id = storedAgencyId;
+      } else {
+        // Fallback to getAgencyId utility
+        id = await getAgencyId(profile, user?.id);
+      }
+      
+      // If we have agency_database, we can proceed even without agency_id
+      // (agency_id is mainly for backward compatibility)
+      if (agencyDatabase || id) {
+        setAgencyId(id || '00000000-0000-0000-0000-000000000000');
+        fetchAllData(id || '00000000-0000-0000-0000-000000000000');
       }
     };
 
@@ -195,35 +230,60 @@ const FinancialManagement = () => {
     setEntriesLoading(true);
     try {
       let entries: any[] = [];
-      if (effectiveAgencyId) {
+      
+      // Try multiple strategies to fetch journal entries
+      if (effectiveAgencyId && effectiveAgencyId !== '00000000-0000-0000-0000-000000000000') {
         try {
+          // Strategy 1: Fetch with agency_id filter
           entries = await selectRecords('journal_entries', {
             where: { agency_id: effectiveAgencyId },
             orderBy: 'entry_date DESC, created_at DESC',
           });
+          console.log(`Fetched journal entries with agency_id filter: ${entries?.length || 0} entries`);
         } catch (err: any) {
           // Fallback if agency_id column does not exist in current schema
-          if (err?.code === '42703' || String(err?.message || '').includes('agency_id')) {
-            console.warn('journal_entries has no agency_id column, falling back to all entries');
-            entries = await selectRecords('journal_entries', {
-              orderBy: 'entry_date DESC, created_at DESC',
-            });
+          if (err?.code === '42703' || String(err?.message || '').includes('agency_id') || String(err?.message || '').includes('does not exist')) {
+            console.warn('journal_entries has no agency_id column, trying fallback strategies');
+            try {
+              // Strategy 2: Fetch all entries and filter in memory
+              const allEntries = await selectRecords('journal_entries', {
+                orderBy: 'entry_date DESC, created_at DESC',
+              });
+              entries = (allEntries || []).filter((e: any) => 
+                !e.agency_id || e.agency_id === effectiveAgencyId
+              );
+              console.log(`Fetched journal entries (fallback): ${entries?.length || 0} entries from ${allEntries?.length || 0} total`);
+            } catch (fallbackErr: any) {
+              console.error('Fallback fetch also failed:', fallbackErr);
+              entries = [];
+            }
           } else {
             throw err;
           }
         }
       } else {
         // If no agency_id available, fetch all entries
-        entries = await selectRecords('journal_entries', {
-          orderBy: 'entry_date DESC, created_at DESC',
-        });
+        try {
+          entries = await selectRecords('journal_entries', {
+            orderBy: 'entry_date DESC, created_at DESC',
+          });
+          console.log(`Fetched journal entries (no agency filter): ${entries?.length || 0} entries`);
+        } catch (err: any) {
+          console.error('Error fetching journal entries without agency filter:', err);
+          entries = [];
+        }
       }
+      
       setJournalEntries(entries || []);
-    } catch (error) {
+      
+      if ((entries || []).length === 0) {
+        console.warn('No journal entries found. This may be normal if no entries have been created yet.');
+      }
+    } catch (error: any) {
       console.error('Error fetching journal entries:', error);
       toast({
         title: 'Error',
-        description: 'Failed to fetch journal entries',
+        description: `Failed to fetch journal entries: ${error?.message || 'Unknown error'}`,
         variant: 'destructive',
       });
       setJournalEntries([]);
@@ -258,7 +318,6 @@ const FinancialManagement = () => {
           LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
           WHERE je.status = 'posted' AND je.agency_id = $1
           ORDER BY je.entry_date DESC, COALESCE(jel.line_number, 1), jel.id ASC
-          LIMIT 100
         `;
         params = [effectiveAgencyId];
       } else {
@@ -279,7 +338,6 @@ const FinancialManagement = () => {
           LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
           WHERE je.status = 'posted'
           ORDER BY je.entry_date DESC, COALESCE(jel.line_number, 1), jel.id ASC
-          LIMIT 100
         `;
       }
       
@@ -309,7 +367,6 @@ const FinancialManagement = () => {
               LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
               WHERE je.status = 'posted'
               ORDER BY je.entry_date DESC, COALESCE(jel.line_number, 1), jel.id ASC
-              LIMIT 100
             `;
             txnData = await rawQuery(query, []);
           } else if (message.includes('line_number')) {
@@ -333,7 +390,6 @@ const FinancialManagement = () => {
                 LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
                 WHERE je.status = 'posted' AND je.agency_id = $1
                 ORDER BY je.entry_date DESC, jel.id ASC
-                LIMIT 100
               `;
               txnData = await rawQuery(query, [effectiveAgencyId]);
             } else {
@@ -354,7 +410,6 @@ const FinancialManagement = () => {
                 LEFT JOIN chart_of_accounts coa ON jel.account_id = coa.id
                 WHERE je.status = 'posted'
                 ORDER BY je.entry_date DESC, jel.id ASC
-                LIMIT 100
               `;
               txnData = await rawQuery(query, []);
             }
@@ -366,34 +421,45 @@ const FinancialManagement = () => {
         }
       }
       setTransactions(txnData || []);
-    } catch (error) {
+      console.log(`Fetched transactions: ${txnData?.length || 0} transactions`);
+      
+      if ((txnData || []).length === 0) {
+        console.warn('No transactions found. This may be normal if no journal entries have been posted yet.');
+      }
+    } catch (error: any) {
       console.error('Error fetching transactions:', error);
+      toast({
+        title: 'Warning',
+        description: `Could not fetch transactions: ${error?.message || 'Unknown error'}. Financial stats may be incomplete.`,
+        variant: 'default',
+      });
       setTransactions([]);
     } finally {
       setTransactionsLoading(false);
     }
   };
 
-  // Calculate account balances from journal entries
-  const [accountBalances, setAccountBalances] = useState<Record<string, number>>({});
-  const [balancesLoading, setBalancesLoading] = useState(false);
-
   // Fetch and calculate account balances - using useMemo and useEffect with proper dependencies
   useEffect(() => {
     const calculateAccountBalances = async () => {
       // Prevent running if already loading or no data
       const effectiveAgencyId = agencyId;
-      if (balancesLoading || !effectiveAgencyId || chartOfAccounts.length === 0) {
+      if (!effectiveAgencyId || chartOfAccounts.length === 0) {
         if (chartOfAccounts.length === 0) {
           setAccountBalances({});
         }
         return;
       }
 
+      // Prevent race conditions by checking if already loading
+      if (balancesLoading) {
+        return;
+      }
+
       setBalancesLoading(true);
       try {
-        // Use parameterized query - filter by journal_entries.agency_id only
-        // chart_of_accounts may not have agency_id column, so we filter through journal_entries
+        // Use parameterized query - filter by journal_entries.agency_id
+        // Also filter chart_of_accounts by agency_id if the column exists
         let query = `
           SELECT 
             coa.id as account_id,
@@ -405,16 +471,20 @@ const FinancialManagement = () => {
           LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id 
             AND je.status = 'posted' 
             AND je.agency_id = $1
+          WHERE (coa.agency_id = $1 OR coa.agency_id IS NULL)
           GROUP BY coa.id, coa.account_type
         `;
         
         let balancesData: any[] = [];
         try {
           balancesData = await rawQuery(query, [effectiveAgencyId]);
+          console.log(`Calculated account balances for ${balancesData.length} accounts`);
         } catch (err: any) {
+          const message = String(err?.message || '');
           // Fallback if agency_id column does not exist in current schema
-          if (err?.code === '42703' || String(err?.message || '').includes('agency_id')) {
-            console.warn('journal_entries has no agency_id column, falling back to all entries for balance calculation');
+          if (err?.code === '42703' || message.includes('agency_id') || message.includes('does not exist')) {
+            console.warn('agency_id column missing, using fallback query for balance calculation');
+            // Try without agency_id filter on chart_of_accounts
             query = `
               SELECT 
                 coa.id as account_id,
@@ -425,26 +495,59 @@ const FinancialManagement = () => {
               LEFT JOIN journal_entry_lines jel ON coa.id = jel.account_id
               LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id 
                 AND je.status = 'posted'
+                AND je.agency_id = $1
               GROUP BY coa.id, coa.account_type
             `;
-            balancesData = await rawQuery(query, []);
+            try {
+              balancesData = await rawQuery(query, [effectiveAgencyId]);
+              console.log(`Calculated account balances (fallback 1) for ${balancesData.length} accounts`);
+            } catch (err2: any) {
+              // Final fallback - no agency filtering
+              console.warn('Using final fallback - no agency filtering for balances');
+              query = `
+                SELECT 
+                  coa.id as account_id,
+                  coa.account_type,
+                  COALESCE(SUM(jel.debit_amount), 0) as total_debits,
+                  COALESCE(SUM(jel.credit_amount), 0) as total_credits
+                FROM chart_of_accounts coa
+                LEFT JOIN journal_entry_lines jel ON coa.id = jel.account_id
+                LEFT JOIN journal_entries je ON jel.journal_entry_id = je.id 
+                  AND je.status = 'posted'
+                GROUP BY coa.id, coa.account_type
+              `;
+              balancesData = await rawQuery(query, []);
+              console.log(`Calculated account balances (fallback 2) for ${balancesData.length} accounts`);
+            }
           } else {
             throw err;
           }
         }
         
         const balances: Record<string, number> = {};
+        let totalAssets = 0;
+        let totalLiabilities = 0;
+        let totalEquity = 0;
+        
         balancesData.forEach((row: any) => {
           const { account_id, account_type, total_debits, total_credits } = row;
           // For asset and expense: balance = debits - credits
           // For liability, equity, revenue: balance = credits - debits
+          let balance = 0;
           if (account_type === 'asset' || account_type === 'expense') {
-            balances[account_id] = parseFloat(total_debits || 0) - parseFloat(total_credits || 0);
+            balance = parseFloat(total_debits || 0) - parseFloat(total_credits || 0);
           } else {
-            balances[account_id] = parseFloat(total_credits || 0) - parseFloat(total_debits || 0);
+            balance = parseFloat(total_credits || 0) - parseFloat(total_debits || 0);
           }
+          balances[account_id] = balance;
+          
+          // Track totals for logging
+          if (account_type === 'asset') totalAssets += balance;
+          else if (account_type === 'liability') totalLiabilities += balance;
+          else if (account_type === 'equity') totalEquity += balance;
         });
         
+        console.log(`Account balances calculated - Assets: ₹${totalAssets.toLocaleString()}, Liabilities: ₹${totalLiabilities.toLocaleString()}, Equity: ₹${totalEquity.toLocaleString()}`);
         setAccountBalances(balances);
       } catch (error) {
         console.error('Error calculating account balances:', error);
@@ -454,14 +557,14 @@ const FinancialManagement = () => {
       }
     };
 
-    // Only calculate if we have accounts and agency_id
-    if (chartOfAccounts.length > 0 && agencyId) {
+    // Only calculate if we have accounts and agency_id, and not already loading
+    if (chartOfAccounts.length > 0 && agencyId && !balancesLoading) {
       calculateAccountBalances();
     } else if (chartOfAccounts.length === 0) {
       setAccountBalances({});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chartOfAccounts.length, agencyId]); // Only depend on length and agencyId to prevent infinite loops
+  }, [chartOfAccounts.length, agencyId, balancesLoading]); // Include balancesLoading to prevent race conditions
 
   // Calculate ledger summary first (needed by accountingStats)
   const ledgerSummary = React.useMemo(() => {
@@ -541,11 +644,17 @@ const FinancialManagement = () => {
   };
 
   const handleJobSaved = async () => {
+    // Optimistic update: refetch to get latest data
     await fetchJobs(agencyId);
   };
 
   const handleJobDeleted = async () => {
     if (jobToDelete) {
+      setDeleteLoading(true);
+      // Optimistic update: remove from UI immediately
+      const originalJobs = [...jobs];
+      setJobs(prev => prev.filter(job => job.id !== jobToDelete.id));
+      
       try {
         const { deleteRecord } = await import('@/services/api/postgresql-service');
         await deleteRecord('jobs', { id: jobToDelete.id });
@@ -553,13 +662,18 @@ const FinancialManagement = () => {
           title: 'Success',
           description: 'Job deleted successfully',
         });
-        fetchJobs();
+        // Refetch to ensure consistency
+        await fetchJobs(agencyId);
       } catch (error: any) {
+        // Rollback on error
+        setJobs(originalJobs);
         toast({
           title: 'Error',
           description: error.message || 'Failed to delete job',
           variant: 'destructive',
         });
+      } finally {
+        setDeleteLoading(false);
       }
     }
     setJobToDelete(null);
@@ -567,6 +681,7 @@ const FinancialManagement = () => {
   };
 
   const handleExportReport = async () => {
+    setExportLoading(true);
     try {
       // Export current view data to CSV
       const exportData = {
@@ -620,16 +735,18 @@ const FinancialManagement = () => {
         description: 'Financial data exported to CSV successfully',
       });
     } catch (error: any) {
-      console.error('Error exporting report:', error);
       toast({
         title: 'Error',
-        description: 'Failed to export report',
+        description: error.message || 'Failed to export report',
         variant: 'destructive',
       });
+    } finally {
+      setExportLoading(false);
     }
   };
 
   const handleGenerateReport = async (reportType: string) => {
+    setReportGenerating(reportType);
     try {
       let reportData: any = {};
       let reportTitle = '';
@@ -746,13 +863,28 @@ const FinancialManagement = () => {
       // Save report to database and navigate to reports page
       try {
         const { ReportService } = await import('@/services/api/reports');
+        
+        // Map report types to valid ReportService types
+        // ReportService accepts: 'attendance' | 'payroll' | 'leave' | 'employee' | 'project' | 'financial' | 'gst' | 'custom'
+        // All financial reports should use 'financial' type
+        const validReportType: 'attendance' | 'payroll' | 'leave' | 'employee' | 'project' | 'financial' | 'gst' | 'custom' = 'financial';
+        
+        // Store the actual report type in parameters for reference
+        const reportDataWithType = {
+          ...reportData,
+          _reportType: reportType, // Store original type for reference
+          _generatedAt: new Date().toISOString(),
+          _agencyId: agencyId,
+        };
+        
         const response = await ReportService.createReport({
           name: reportTitle,
           description: `Generated ${reportType} report from Financial Management`,
-          report_type: reportType as any,
-          parameters: reportData,
+          report_type: validReportType,
+          parameters: reportDataWithType,
           generated_by: user?.id,
           is_public: false,
+          agency_id: agencyId || undefined,
         }, { showLoading: true, showErrorToast: true });
         
         if (response.success) {
@@ -769,37 +901,16 @@ const FinancialManagement = () => {
           throw new Error(response.error || 'Failed to save report');
         }
       } catch (error: any) {
-        // If reports table doesn't exist or save fails, show in dialog
+        // If reports table doesn't exist or save fails, show in dialog instead of preview window
         console.warn('Could not save report to database:', error);
         
-        // Display report in a dialog or new window
-        const reportWindow = window.open('', '_blank');
-        if (reportWindow) {
-          reportWindow.document.write(`
-            <html>
-              <head>
-                <title>${reportTitle}</title>
-                <style>
-                  body { font-family: Arial, sans-serif; padding: 20px; }
-                  table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                  th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                  th { background-color: #f2f2f2; }
-                  .total { font-weight: bold; }
-                </style>
-              </head>
-              <body>
-                <h1>${reportTitle}</h1>
-                <p>Generated on: ${new Date().toLocaleString()}</p>
-                <pre>${JSON.stringify(reportData, null, 2)}</pre>
-              </body>
-            </html>
-          `);
-          reportWindow.document.close();
-        }
+        // Display report in a proper dialog component instead of preview window
+        setReportViewData({ title: reportTitle, data: reportData });
+        setReportViewOpen(true);
 
         toast({
           title: 'Report Generated',
-          description: `${reportTitle} has been generated`,
+          description: `${reportTitle} has been generated. View it below or navigate to Reports page.`,
         });
       }
     } catch (error: any) {
@@ -808,6 +919,8 @@ const FinancialManagement = () => {
         description: error.message || 'Failed to generate report',
         variant: 'destructive',
       });
+    } finally {
+      setReportGenerating(null);
     }
   };
 
@@ -827,6 +940,7 @@ const FinancialManagement = () => {
   };
 
   const handleAccountSaved = async () => {
+    // Optimistic update: refetch to get latest data
     await fetchChartOfAccounts(agencyId);
     // Reset account balances to trigger recalculation
     setAccountBalances({});
@@ -834,29 +948,62 @@ const FinancialManagement = () => {
 
   const handleAccountDeleted = async () => {
     if (accountToDelete) {
+      setDeleteLoading(true);
       try {
+        // Check if account has associated journal entry lines
+        const { selectRecords } = await import('@/services/api/postgresql-service');
+        const lines = await selectRecords('journal_entry_lines', {
+          where: { account_id: accountToDelete.id },
+          limit: 1,
+        });
+        
+        if (lines && lines.length > 0) {
+          toast({
+            title: 'Cannot Delete Account',
+            description: 'This account has associated journal entry lines. Please remove or reassign those entries before deleting the account.',
+            variant: 'destructive',
+          });
+          setAccountToDelete(null);
+          setDeleteDialogOpen(false);
+          setDeleteLoading(false);
+          return;
+        }
+
+        // Optimistic update: remove from UI immediately
+        const originalAccounts = [...chartOfAccounts];
+        setChartOfAccounts(prev => prev.filter(acc => acc.id !== accountToDelete.id));
+
         const { deleteRecord } = await import('@/services/api/postgresql-service');
         await deleteRecord('chart_of_accounts', { id: accountToDelete.id });
         toast({
           title: 'Success',
           description: 'Account deleted successfully',
         });
-        fetchChartOfAccounts();
+        // Refetch to ensure consistency
+        await fetchChartOfAccounts(agencyId);
       } catch (error: any) {
+        // Rollback on error
+        setChartOfAccounts(prev => {
+          const found = chartOfAccounts.find(acc => acc.id === accountToDelete.id);
+          return found ? [...prev, found] : prev;
+        });
         toast({
           title: 'Error',
           description: error.message || 'Failed to delete account',
           variant: 'destructive',
         });
+      } finally {
+        setDeleteLoading(false);
       }
     }
     setAccountToDelete(null);
     setDeleteDialogOpen(false);
   };
 
-  const handleNewEntry = async () => {
-    setSelectedEntry(null);
-    setEntryFormOpen(true);
+  const handleNewEntry = () => {
+    // Navigate to the CreateJournalEntry page instead of opening a dialog
+    // Pass state to indicate we came from financial-management
+    navigate('/ledger/create-entry', { state: { from: 'financial-management' } });
   };
 
   const handleEditEntry = async (entry: any) => {
@@ -877,11 +1024,24 @@ const FinancialManagement = () => {
   };
 
   const handleDeleteEntry = (entry: any) => {
+    // Extra confirmation for posted entries
+    if (entry.status === 'posted') {
+      const confirmed = window.confirm(
+        `Warning: This journal entry is POSTED and may affect your financial records.\n\n` +
+        `Entry: ${entry.entry_number}\n` +
+        `Date: ${new Date(entry.entry_date).toLocaleDateString()}\n\n` +
+        `Are you sure you want to delete this posted entry? This action cannot be undone.`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
     setEntryToDelete(entry);
     setDeleteDialogOpen(true);
   };
 
   const handleEntrySaved = async () => {
+    // Optimistic update: refetch to get latest data
     await Promise.all([
       fetchJournalEntries(agencyId),
       fetchTransactions(agencyId)
@@ -892,6 +1052,13 @@ const FinancialManagement = () => {
 
   const handleEntryDeleted = async () => {
     if (entryToDelete) {
+      setDeleteLoading(true);
+      // Optimistic update: remove from UI immediately
+      const originalEntries = [...journalEntries];
+      const originalTransactions = [...transactions];
+      setJournalEntries(prev => prev.filter(entry => entry.id !== entryToDelete.id));
+      setTransactions(prev => prev.filter(txn => txn.entry_number !== entryToDelete.entry_number));
+      
       try {
         const { executeTransaction } = await import('@/services/api/postgresql-service');
         await executeTransaction(async (client) => {
@@ -910,14 +1077,22 @@ const FinancialManagement = () => {
           title: 'Success',
           description: 'Journal entry deleted successfully',
         });
-        fetchJournalEntries();
-        fetchTransactions();
+        // Refetch to ensure consistency
+        await fetchJournalEntries(agencyId);
+        await fetchTransactions(agencyId);
+        // Reset account balances to trigger recalculation
+        setAccountBalances({});
       } catch (error: any) {
+        // Rollback on error
+        setJournalEntries(originalEntries);
+        setTransactions(originalTransactions);
         toast({
           title: 'Error',
           description: error.message || 'Failed to delete journal entry',
           variant: 'destructive',
         });
+      } finally {
+        setDeleteLoading(false);
       }
     }
     setEntryToDelete(null);
@@ -970,8 +1145,8 @@ const FinancialManagement = () => {
   };
 
   const filteredAccounts = chartOfAccounts.filter(account => {
-    const matchesSearch = (account.account_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (account.account_code || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (account.account_name || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      (account.account_code || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase());
     const matchesType = accountTypeFilter === 'all' || account.account_type === accountTypeFilter;
     return matchesSearch && matchesType;
   });
@@ -983,8 +1158,8 @@ const FinancialManagement = () => {
   const totalPagesAccounts = Math.ceil(filteredAccounts.length / pageSize);
 
   const filteredEntries = journalEntries.filter(entry => {
-    const matchesSearch = (entry.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (entry.entry_number || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (entry.description || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      (entry.entry_number || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || entry.status === statusFilter;
     const matchesDateRange = (!dateRange.start || new Date(entry.entry_date) >= new Date(dateRange.start)) &&
       (!dateRange.end || new Date(entry.entry_date) <= new Date(dateRange.end));
@@ -998,11 +1173,14 @@ const FinancialManagement = () => {
   const totalPagesEntries = Math.ceil(filteredEntries.length / pageSize);
 
   const filteredJobs = jobs.filter(job => {
-    const matchesSearch = job.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.job_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      job.client_id?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = job.title?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      job.job_number?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      job.client_id?.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesDateRange = (!dateRange.start || (job.start_date && new Date(job.start_date) >= new Date(dateRange.start))) &&
+      (!dateRange.end || (job.end_date && new Date(job.end_date) <= new Date(dateRange.end)) || 
+       (job.start_date && new Date(job.start_date) <= new Date(dateRange.end)));
+    return matchesSearch && matchesStatus && matchesDateRange;
   });
 
   const paginatedJobs = filteredJobs.slice(
@@ -1012,9 +1190,9 @@ const FinancialManagement = () => {
   const totalPagesJobs = Math.ceil(filteredJobs.length / pageSize);
 
   const filteredTransactions = transactions.filter(transaction => {
-    const matchesSearch = (transaction.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (transaction.reference || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (transaction.entry_number || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (transaction.description || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      (transaction.reference || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      (transaction.entry_number || '').toLowerCase().includes(debouncedSearchTerm.toLowerCase());
     const matchesDateRange = (!dateRange.start || new Date(transaction.date) >= new Date(dateRange.start)) &&
       (!dateRange.end || new Date(transaction.date) <= new Date(dateRange.end));
     return matchesSearch && matchesDateRange;
@@ -1027,27 +1205,60 @@ const FinancialManagement = () => {
   const totalPagesTransactions = Math.ceil(filteredTransactions.length / pageSize);
 
   // Show loading or error state if no agency
-  if (!agencyId && !loading && user?.id) {
+  // Check both agencyId and agency_database in localStorage
+  const agencyDatabase = typeof window !== 'undefined' ? localStorage.getItem('agency_database') : null;
+  const hasAgencyContext = agencyId || agencyDatabase;
+  
+  if (!hasAgencyContext && !loading && user?.id) {
     return (
       <div className="container mx-auto p-6">
         <Card>
           <CardContent className="p-8 text-center">
-            <p className="text-muted-foreground mb-4">Unable to determine agency. Please ensure you are logged in and have an agency assigned.</p>
-            <Button onClick={async () => {
-              const id = await getAgencyId();
-              if (id) {
-                setAgencyId(id);
-                fetchAllData(id);
-              } else {
-                toast({
-                  title: 'Error',
-                  description: 'Could not find agency. Please contact your administrator.',
-                  variant: 'destructive',
-                });
-              }
-            }}>
-              Retry
-            </Button>
+            <p className="text-muted-foreground mb-4">
+              Unable to determine agency. Please ensure you are logged in and have an agency assigned.
+              {!agencyDatabase && ' If you just created a new agency, please log out and log back in to refresh your session.'}
+            </p>
+            <div className="flex gap-2 justify-center">
+              <Button onClick={async () => {
+                // Check localStorage first
+                const storedAgencyId = localStorage.getItem('agency_id');
+                const storedAgencyDatabase = localStorage.getItem('agency_database');
+                
+                let id: string | null = null;
+                
+                if (storedAgencyId) {
+                  id = storedAgencyId;
+                } else if (storedAgencyDatabase) {
+                  // If we have database but no ID, use placeholder (database isolation handles multi-tenancy)
+                  id = '00000000-0000-0000-0000-000000000000';
+                } else {
+                  // Try to fetch from profile
+                  id = await getAgencyId(profile, user?.id);
+                }
+                
+                if (id || storedAgencyDatabase) {
+                  setAgencyId(id || '00000000-0000-0000-0000-000000000000');
+                  fetchAllData(id || '00000000-0000-0000-0000-000000000000');
+                } else {
+                  toast({
+                    title: 'Error',
+                    description: 'Could not find agency. If you just created a new agency, please log out and log back in.',
+                    variant: 'destructive',
+                  });
+                }
+              }}>
+                Retry
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  // Refresh the page to reload localStorage values
+                  window.location.reload();
+                }}
+              >
+                Refresh Page
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -1070,9 +1281,9 @@ const FinancialManagement = () => {
             <FileText className="h-4 w-4 mr-2" />
             Reports
           </Button>
-          <Button variant="outline" onClick={handleExportReport}>
+          <Button variant="outline" onClick={handleExportReport} disabled={exportLoading}>
             <Download className="h-4 w-4 mr-2" />
-            Export Report
+            {exportLoading ? 'Exporting...' : 'Export Report'}
           </Button>
           <Button onClick={handleNewEntry}>
             <Plus className="h-4 w-4 mr-2" />
@@ -1160,7 +1371,10 @@ const FinancialManagement = () => {
                   <Input
                     type="date"
                     value={dateRange.start}
-                    onChange={(e) => setDateRange(prev => ({ start: e.target.value, end: prev.end }))}
+                    onChange={(e) => {
+                      setDateRange(prev => ({ start: e.target.value, end: prev.end }));
+                      setCurrentPage({ accounts: 1, entries: 1, transactions: 1, jobs: 1 });
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
@@ -1168,12 +1382,18 @@ const FinancialManagement = () => {
                   <Input
                     type="date"
                     value={dateRange.end}
-                    onChange={(e) => setDateRange(prev => ({ start: prev.start, end: e.target.value }))}
+                    onChange={(e) => {
+                      setDateRange(prev => ({ start: prev.start, end: e.target.value }));
+                      setCurrentPage({ accounts: 1, entries: 1, transactions: 1, jobs: 1 });
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Account Type</Label>
-                  <Select value={accountTypeFilter} onValueChange={setAccountTypeFilter}>
+                  <Select value={accountTypeFilter} onValueChange={(value) => {
+                    setAccountTypeFilter(value);
+                    setCurrentPage({ accounts: 1, entries: 1, transactions: 1, jobs: 1 });
+                  }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -1189,7 +1409,10 @@ const FinancialManagement = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Status</Label>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <Select value={statusFilter} onValueChange={(value) => {
+                    setStatusFilter(value);
+                    setCurrentPage({ accounts: 1, entries: 1, transactions: 1, jobs: 1 });
+                  }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -1210,6 +1433,8 @@ const FinancialManagement = () => {
                     setDateRange({ start: '', end: '' });
                     setAccountTypeFilter('all');
                     setStatusFilter('all');
+                    setSearchTerm('');
+                    setCurrentPage({ accounts: 1, entries: 1, transactions: 1, jobs: 1 });
                   }}
                 >
                   Clear Filters
@@ -1294,7 +1519,12 @@ const FinancialManagement = () => {
                                 <Button variant="outline" size="sm" onClick={() => handleEditAccount(account)}>
                                   <Edit className="h-4 w-4" />
                                 </Button>
-                                <Button variant="outline" size="sm" onClick={() => handleDeleteAccount(account)}>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => handleDeleteAccount(account)}
+                                  disabled={deleteLoading}
+                                >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -1304,6 +1534,32 @@ const FinancialManagement = () => {
                       );
                     })
                   )}
+                </div>
+              )}
+              {totalPagesAccounts > 1 && (
+                <div className="flex items-center justify-between p-4 border-t">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {(currentPage.accounts - 1) * pageSize + 1} to {Math.min(currentPage.accounts * pageSize, filteredAccounts.length)} of {filteredAccounts.length} accounts
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => ({ ...prev, accounts: Math.max(1, prev.accounts - 1) }))}
+                      disabled={currentPage.accounts === 1}
+                    >
+                      Previous
+                    </Button>
+                    <div className="text-sm">Page {currentPage.accounts} of {totalPagesAccounts}</div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => ({ ...prev, accounts: Math.min(totalPagesAccounts, prev.accounts + 1) }))}
+                      disabled={currentPage.accounts === totalPagesAccounts}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               )}
             </TabsContent>
@@ -1370,7 +1626,12 @@ const FinancialManagement = () => {
                               <Edit className="h-4 w-4 mr-1" />
                               Edit
                             </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleDeleteEntry(entry)}>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={() => handleDeleteEntry(entry)}
+                              disabled={deleteLoading}
+                            >
                               <Trash2 className="h-4 w-4 mr-1" />
                               Delete
                             </Button>
@@ -1381,26 +1642,26 @@ const FinancialManagement = () => {
                   )}
                 </div>
               )}
-              {totalPagesAccounts > 1 && (
+              {totalPagesEntries > 1 && (
                 <div className="flex items-center justify-between p-4 border-t">
                   <div className="text-sm text-muted-foreground">
-                    Showing {(currentPage.accounts - 1) * pageSize + 1} to {Math.min(currentPage.accounts * pageSize, filteredAccounts.length)} of {filteredAccounts.length} accounts
+                    Showing {(currentPage.entries - 1) * pageSize + 1} to {Math.min(currentPage.entries * pageSize, filteredEntries.length)} of {filteredEntries.length} entries
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(prev => ({ ...prev, accounts: Math.max(1, prev.accounts - 1) }))}
-                      disabled={currentPage.accounts === 1}
+                      onClick={() => setCurrentPage(prev => ({ ...prev, entries: Math.max(1, prev.entries - 1) }))}
+                      disabled={currentPage.entries === 1}
                     >
                       Previous
                     </Button>
-                    <div className="text-sm">Page {currentPage.accounts} of {totalPagesAccounts}</div>
+                    <div className="text-sm">Page {currentPage.entries} of {totalPagesEntries}</div>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setCurrentPage(prev => ({ ...prev, accounts: Math.min(totalPagesAccounts, prev.accounts + 1) }))}
-                      disabled={currentPage.accounts === totalPagesAccounts}
+                      onClick={() => setCurrentPage(prev => ({ ...prev, entries: Math.min(totalPagesEntries, prev.entries + 1) }))}
+                      disabled={currentPage.entries === totalPagesEntries}
                     >
                       Next
                     </Button>
@@ -1487,7 +1748,12 @@ const FinancialManagement = () => {
                           <ExternalLink className="h-4 w-4 mr-1" />
                           View Details
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleDeleteJob(job)}>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleDeleteJob(job)}
+                          disabled={deleteLoading}
+                        >
                           <Trash2 className="h-4 w-4 mr-1" />
                           Delete
                         </Button>
@@ -1787,68 +2053,80 @@ const FinancialManagement = () => {
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card 
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className={`cursor-pointer hover:shadow-md transition-shadow ${reportGenerating === 'balance-sheet' ? 'opacity-50 pointer-events-none' : ''}`}
                   onClick={() => handleGenerateReport('balance-sheet')}
                 >
                   <CardContent className="p-6 text-center">
                     <BookOpen className="h-12 w-12 text-blue-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Balance Sheet</h3>
-                    <p className="text-sm text-muted-foreground">Assets, liabilities, and equity statement</p>
+                    <p className="text-sm text-muted-foreground">
+                      {reportGenerating === 'balance-sheet' ? 'Generating...' : 'Assets, liabilities, and equity statement'}
+                    </p>
                   </CardContent>
                 </Card>
                 
                 <Card 
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className={`cursor-pointer hover:shadow-md transition-shadow ${reportGenerating === 'profit-loss' ? 'opacity-50 pointer-events-none' : ''}`}
                   onClick={() => handleGenerateReport('profit-loss')}
                 >
                   <CardContent className="p-6 text-center">
                     <TrendingUp className="h-12 w-12 text-green-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Profit & Loss</h3>
-                    <p className="text-sm text-muted-foreground">Income and expenses statement</p>
+                    <p className="text-sm text-muted-foreground">
+                      {reportGenerating === 'profit-loss' ? 'Generating...' : 'Income and expenses statement'}
+                    </p>
                   </CardContent>
                 </Card>
                 
                 <Card 
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className={`cursor-pointer hover:shadow-md transition-shadow ${reportGenerating === 'trial-balance' ? 'opacity-50 pointer-events-none' : ''}`}
                   onClick={() => handleGenerateReport('trial-balance')}
                 >
                   <CardContent className="p-6 text-center">
                     <FileText className="h-12 w-12 text-purple-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Trial Balance</h3>
-                    <p className="text-sm text-muted-foreground">List of all account balances</p>
+                    <p className="text-sm text-muted-foreground">
+                      {reportGenerating === 'trial-balance' ? 'Generating...' : 'List of all account balances'}
+                    </p>
                   </CardContent>
                 </Card>
                 
                 <Card 
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className={`cursor-pointer hover:shadow-md transition-shadow ${reportGenerating === 'job-profitability' ? 'opacity-50 pointer-events-none' : ''}`}
                   onClick={() => handleGenerateReport('job-profitability')}
                 >
                   <CardContent className="p-6 text-center">
                     <Calculator className="h-12 w-12 text-orange-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Job Profitability</h3>
-                    <p className="text-sm text-muted-foreground">Job cost analysis and margins</p>
+                    <p className="text-sm text-muted-foreground">
+                      {reportGenerating === 'job-profitability' ? 'Generating...' : 'Job cost analysis and margins'}
+                    </p>
                   </CardContent>
                 </Card>
                 
                 <Card 
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className={`cursor-pointer hover:shadow-md transition-shadow ${reportGenerating === 'cash-flow' ? 'opacity-50 pointer-events-none' : ''}`}
                   onClick={() => handleGenerateReport('cash-flow')}
                 >
                   <CardContent className="p-6 text-center">
                     <DollarSign className="h-12 w-12 text-indigo-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Cash Flow</h3>
-                    <p className="text-sm text-muted-foreground">Cash receipts and payments</p>
+                    <p className="text-sm text-muted-foreground">
+                      {reportGenerating === 'cash-flow' ? 'Generating...' : 'Cash receipts and payments'}
+                    </p>
                   </CardContent>
                 </Card>
                 
                 <Card 
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className={`cursor-pointer hover:shadow-md transition-shadow ${reportGenerating === 'monthly-summary' ? 'opacity-50 pointer-events-none' : ''}`}
                   onClick={() => handleGenerateReport('monthly-summary')}
                 >
                   <CardContent className="p-6 text-center">
                     <Calendar className="h-12 w-12 text-pink-600 mx-auto mb-4" />
                     <h3 className="font-semibold mb-2">Monthly Summary</h3>
-                    <p className="text-sm text-muted-foreground">Monthly financial overview</p>
+                    <p className="text-sm text-muted-foreground">
+                      {reportGenerating === 'monthly-summary' ? 'Generating...' : 'Monthly financial overview'}
+                    </p>
                   </CardContent>
                 </Card>
               </div>
@@ -1877,6 +2155,61 @@ const FinancialManagement = () => {
         entry={selectedEntry}
         onEntrySaved={handleEntrySaved}
       />
+
+      {/* Report View Dialog - Replaces preview window */}
+      <Dialog open={reportViewOpen} onOpenChange={setReportViewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{reportViewData?.title || 'Financial Report'}</DialogTitle>
+            <DialogDescription>
+              Generated on: {new Date().toLocaleString()}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {reportViewData?.data && (
+              <div className="space-y-4">
+                {/* Render report data in a readable format */}
+                <div className="bg-muted p-4 rounded-lg">
+                  <pre className="text-sm overflow-auto whitespace-pre-wrap">
+                    {JSON.stringify(reportViewData.data, null, 2)}
+                  </pre>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      // Export as JSON
+                      const blob = new Blob([JSON.stringify(reportViewData.data, null, 2)], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = `${reportViewData.title.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export JSON
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setReportViewOpen(false);
+                      navigate('/reports');
+                    }}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Go to Reports
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setReportViewOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <DeleteConfirmDialog
         isOpen={deleteDialogOpen}
@@ -1909,10 +2242,114 @@ const FinancialManagement = () => {
         }}
         jobId={selectedJobForCosts?.id || ''}
         jobTitle={selectedJobForCosts?.title}
-        onItemsUpdated={() => {
-          fetchJobs();
+        onItemsUpdated={async () => {
+          await fetchJobs(agencyId);
         }}
       />
+
+      {/* Transaction Details Dialog */}
+      <Dialog open={transactionDetailsOpen} onOpenChange={setTransactionDetailsOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Transaction Details</DialogTitle>
+            <DialogDescription>
+              Journal Entry: {selectedTransaction?.entry_number || 'N/A'}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedTransaction && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Entry Date</Label>
+                  <p className="text-sm font-semibold">
+                    {new Date(selectedTransaction.entry_date).toLocaleDateString()}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                  <Badge className={getStatusColor(selectedTransaction.status)}>
+                    {selectedTransaction.status}
+                  </Badge>
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-sm font-medium text-muted-foreground">Description</Label>
+                  <p className="text-sm">{selectedTransaction.description || 'N/A'}</p>
+                </div>
+                {selectedTransaction.reference && (
+                  <div className="col-span-2">
+                    <Label className="text-sm font-medium text-muted-foreground">Reference</Label>
+                    <p className="text-sm">{selectedTransaction.reference}</p>
+                  </div>
+                )}
+              </div>
+
+              {selectedTransaction.lines && selectedTransaction.lines.length > 0 && (
+                <div>
+                  <Label className="text-sm font-medium mb-3 block">Journal Entry Lines</Label>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Account</th>
+                          <th className="px-4 py-2 text-left text-sm font-medium">Description</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium">Debit</th>
+                          <th className="px-4 py-2 text-right text-sm font-medium">Credit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedTransaction.lines.map((line: any, index: number) => {
+                          const account = chartOfAccounts.find(acc => acc.id === line.account_id);
+                          return (
+                            <tr key={line.id || index} className="border-t">
+                              <td className="px-4 py-2 text-sm">
+                                {account ? `${account.account_code} - ${account.account_name}` : 'N/A'}
+                              </td>
+                              <td className="px-4 py-2 text-sm">{line.description || 'N/A'}</td>
+                              <td className="px-4 py-2 text-sm text-right">
+                                {line.debit_amount > 0 ? `₹${parseFloat(line.debit_amount || 0).toLocaleString()}` : '-'}
+                              </td>
+                              <td className="px-4 py-2 text-sm text-right">
+                                {line.credit_amount > 0 ? `₹${parseFloat(line.credit_amount || 0).toLocaleString()}` : '-'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot className="bg-muted font-semibold">
+                        <tr>
+                          <td colSpan={2} className="px-4 py-2 text-sm">Total</td>
+                          <td className="px-4 py-2 text-sm text-right">
+                            ₹{selectedTransaction.total_debit ? parseFloat(selectedTransaction.total_debit).toLocaleString() : '0.00'}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-right">
+                            ₹{selectedTransaction.total_credit ? parseFloat(selectedTransaction.total_credit).toLocaleString() : '0.00'}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setTransactionDetailsOpen(false);
+              setSelectedTransaction(null);
+            }}>
+              Close
+            </Button>
+            {selectedTransaction && (
+              <Button onClick={() => {
+                setTransactionDetailsOpen(false);
+                handleEditEntry(selectedTransaction);
+              }}>
+                Edit Entry
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

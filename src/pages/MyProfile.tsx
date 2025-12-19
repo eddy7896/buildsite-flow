@@ -10,7 +10,7 @@ import { Save, Edit, Upload, User, Mail, Phone, MapPin, Calendar, Briefcase, Loa
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { selectOne, upsertRecord, rawQuery } from '@/services/api/postgresql-service';
+import { selectOne, updateRecord, insertRecord, rawQuery } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 import type { AppRole } from '@/utils/roleUtils';
 
@@ -239,7 +239,10 @@ const MyProfile = () => {
       const employeeId = formData.employee_id || profile.employee_id || `EMP-${user.id.substring(0, 8).toUpperCase()}`;
       
       try {
-        await upsertRecord('employee_details', {
+        // Check if employee_details exists for this user
+        const existingEmployee = await selectOne('employee_details', { user_id: user.id });
+        
+        const employeeData = {
           user_id: user.id,
           employee_id: employeeId,
           first_name: formData.first_name || '',
@@ -254,7 +257,15 @@ const MyProfile = () => {
           is_active: true,
           agency_id: agencyId,
           updated_at: new Date().toISOString()
-        }, 'user_id');
+        };
+
+        if (existingEmployee) {
+          // Update existing record
+          await updateRecord('employee_details', employeeData, { user_id: user.id });
+        } else {
+          // Insert new record
+          await insertRecord('employee_details', employeeData);
+        }
       } catch (employeeError) {
         console.warn('Employee details upsert failed (may require additional fields):', employeeError);
         // This is okay - employee_details is optional and may have required fields we don't have

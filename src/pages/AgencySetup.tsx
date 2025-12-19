@@ -221,6 +221,11 @@ export default function AgencySetup() {
     },
   });
 
+  // Scroll to top on mount and step changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [currentStep]);
+
   // Check if setup is already complete
   useEffect(() => {
     const checkSetupStatus = async () => {
@@ -231,8 +236,8 @@ export default function AgencySetup() {
           return;
         }
 
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        const apiBaseUrl = API_URL.replace(/\/api\/?$/, '');
+        const { getApiBaseUrl } = await import('@/config/api');
+        const apiBaseUrl = getApiBaseUrl();
         
         const response = await fetch(`${apiBaseUrl}/api/agencies/check-setup?database=${encodeURIComponent(agencyDatabase || '')}`, {
           method: 'GET',
@@ -260,12 +265,274 @@ export default function AgencySetup() {
     checkSetupStatus();
   }, [navigate]);
 
+  // Prefill from both main DB and agency DB agency_settings
+  useEffect(() => {
+    const prefillFromSettings = async () => {
+      try {
+        const agencyId = localStorage.getItem('agency_id');
+        const agencyDatabase = localStorage.getItem('agency_database');
+        
+        if (!agencyId && !agencyDatabase) return;
+
+        const { getApiBaseUrl } = await import('@/config/api');
+        const apiBaseUrl = getApiBaseUrl();
+
+        // Fetch from both sources in parallel
+        const [mainDbResponse, agencyDbResponse] = await Promise.allSettled([
+          // Main DB settings (for modules, primary_focus, etc.)
+          agencyId ? fetch(`${apiBaseUrl}/api/system/agency-settings/${encodeURIComponent(agencyId)}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
+            },
+          }) : Promise.resolve(null),
+          
+          // Agency DB settings (for detailed onboarding data)
+          agencyDatabase ? fetch(`${apiBaseUrl}/api/agencies/agency-settings?database=${encodeURIComponent(agencyDatabase)}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
+              'X-Agency-Database': agencyDatabase,
+            },
+          }) : Promise.resolve(null),
+        ]);
+
+        // Parse main DB settings
+        let mainSettings = null;
+        if (mainDbResponse.status === 'fulfilled' && mainDbResponse.value && mainDbResponse.value.ok) {
+          try {
+            const mainData = await mainDbResponse.value.json();
+            mainSettings = mainData?.data?.settings || mainData.settings;
+            console.log('[AgencySetup] Loaded main DB settings:', { 
+              agency_name: mainSettings?.agency_name, 
+              industry: mainSettings?.industry,
+              phone: mainSettings?.phone,
+              employee_count: mainSettings?.employee_count 
+            });
+          } catch (error) {
+            console.warn('[AgencySetup] Failed to parse main DB settings:', error);
+          }
+        } else if (mainDbResponse.status === 'rejected') {
+          console.warn('[AgencySetup] Main DB settings fetch rejected:', mainDbResponse.reason);
+        }
+
+        // Parse agency DB settings
+        let agencySettings = null;
+        if (agencyDbResponse.status === 'fulfilled' && agencyDbResponse.value && agencyDbResponse.value.ok) {
+          try {
+            const agencyData = await agencyDbResponse.value.json();
+            agencySettings = agencyData?.data?.settings || agencyData.settings;
+            console.log('[AgencySetup] Loaded agency DB settings:', { 
+              agency_name: agencySettings?.agency_name, 
+              industry: agencySettings?.industry,
+              phone: agencySettings?.phone,
+              employee_count: agencySettings?.employee_count 
+            });
+          } catch (error) {
+            console.warn('[AgencySetup] Failed to parse agency DB settings:', error);
+          }
+        } else if (agencyDbResponse.status === 'rejected') {
+          console.warn('[AgencySetup] Agency DB settings fetch rejected:', agencyDbResponse.reason);
+        }
+
+        // Merge settings intelligently (agency DB takes precedence for detailed fields)
+        // But skip default values like "My Agency" and prefer main DB in those cases
+        const agencyNameFromAgencyDb = agencySettings?.agency_name;
+        const agencyNameFromMainDb = mainSettings?.agency_name;
+        // Use agency DB name only if it's not empty and not the default "My Agency"
+        const finalAgencyName = (agencyNameFromAgencyDb && 
+                                 agencyNameFromAgencyDb !== '' && 
+                                 agencyNameFromAgencyDb !== 'My Agency')
+          ? agencyNameFromAgencyDb
+          : (agencyNameFromMainDb || agencyNameFromAgencyDb);
+        
+        const mergedSettings = {
+          ...mainSettings,
+          ...agencySettings,
+          // Use the final agency name (prefer main DB if agency DB has default)
+          agency_name: finalAgencyName,
+          industry: agencySettings?.industry || mainSettings?.industry,
+          phone: agencySettings?.phone || mainSettings?.phone,
+          employee_count: agencySettings?.employee_count || mainSettings?.employee_count,
+          enable_gst: typeof agencySettings?.enable_gst === 'boolean' 
+            ? agencySettings.enable_gst 
+            : (typeof mainSettings?.enable_gst === 'boolean' ? mainSettings.enable_gst : undefined),
+          modules: agencySettings?.modules || mainSettings?.modules,
+        };
+
+        if (!mergedSettings && !mainSettings && !agencySettings) return;
+
+        // Build address object from structured fields - check both agency DB and main DB
+        const addressObj = agencySettings?.address || (
+          (agencySettings && (
+            agencySettings.address_street || agencySettings.address_city || agencySettings.address_state
+              ? {
+                  street: agencySettings.address_street || '',
+                  city: agencySettings.address_city || '',
+                  state: agencySettings.address_state || '',
+                  zipCode: agencySettings.address_zip || '',
+                  country: agencySettings.address_country || '',
+                }
+              : null
+          )) ||
+          (mainSettings && (
+            mainSettings.address_street || mainSettings.address_city || mainSettings.address_state
+              ? {
+                  street: mainSettings.address_street || '',
+                  city: mainSettings.address_city || '',
+                  state: mainSettings.address_state || '',
+                  zipCode: mainSettings.address_zip || '',
+                  country: mainSettings.address_country || '',
+                }
+              : null
+          ))
+        );
+
+        // Only update if we have actual data to prefill
+        // Check if we have any settings data (even if agency_name is default, we might have other fields)
+        const hasDataToPrefill = (mergedSettings && Object.keys(mergedSettings).length > 0) || 
+                                  agencySettings || 
+                                  mainSettings;
+        
+        console.log('[AgencySetup] Prefill check:', {
+          hasDataToPrefill,
+          finalAgencyName,
+          agencyNameFromAgencyDb,
+          agencyNameFromMainDb,
+          mergedSettingsAgencyName: mergedSettings?.agency_name
+        });
+        
+        if (hasDataToPrefill) {
+          console.log('[AgencySetup] Prefilling form with settings data');
+          
+          // Load logo preview if logo_url exists
+          const logoUrl = agencySettings?.logo_url || mainSettings?.logo_url;
+          if (logoUrl) {
+            setLogoPreview(logoUrl);
+          }
+          
+          // Determine the company name to use - prefer main DB if agency DB has default
+          const companyNameToUse = finalAgencyName || mergedSettings?.agency_name;
+          
+          // Helper function to get value only if it's not empty/null
+          const getValue = (value: any, fallback: any) => {
+            return (value && value !== '' && value !== null && value !== undefined) ? value : fallback;
+          };
+          
+          // Get industry from all sources
+          const industryValue = mergedSettings?.industry || agencySettings?.industry || mainSettings?.industry;
+          // Get employee count from all sources
+          const employeeCountValue = mergedSettings?.employee_count || agencySettings?.employee_count || mainSettings?.employee_count;
+          // Get phone from all sources
+          const phoneValue = mergedSettings?.phone || agencySettings?.phone || mainSettings?.phone;
+          
+          console.log('[AgencySetup] Prefilling values:', {
+            companyName: companyNameToUse,
+            industry: industryValue,
+            employeeCount: employeeCountValue,
+            phone: phoneValue,
+            enableGST: mergedSettings?.enable_gst,
+            address: addressObj
+          });
+          
+          setFormData(prev => ({
+            ...prev,
+            // Company Profile - use the final merged agency name (which skips "My Agency" default)
+            companyName: getValue(companyNameToUse, prev.companyName),
+            companyTagline: getValue(agencySettings?.company_tagline, prev.companyTagline),
+            // Industry - check both sources and ensure it matches one of the valid options
+            industry: getValue(industryValue, prev.industry),
+            businessType: getValue(agencySettings?.business_type, prev.businessType),
+            foundedYear: getValue(agencySettings?.founded_year, prev.foundedYear),
+            // Employee count - map companySize to employeeCount format if needed
+            employeeCount: getValue(employeeCountValue, prev.employeeCount),
+            description: getValue(agencySettings?.description, prev.description),
+            
+            // Business Details
+            legalName: getValue(agencySettings?.legal_name, prev.legalName),
+            registrationNumber: getValue(agencySettings?.registration_number, prev.registrationNumber),
+            taxId: getValue(agencySettings?.tax_id, prev.taxId),
+            taxIdType: getValue(agencySettings?.tax_id_type, prev.taxIdType),
+            // Address - merge address object with existing, only update fields that have values
+            address: addressObj ? {
+              street: getValue(addressObj.street, prev.address.street),
+              city: getValue(addressObj.city, prev.address.city),
+              state: getValue(addressObj.state, prev.address.state),
+              zipCode: getValue(addressObj.zipCode, prev.address.zipCode),
+              country: getValue(addressObj.country, prev.address.country),
+            } : prev.address,
+            // Phone - check both sources
+            phone: getValue(phoneValue, prev.phone),
+            email: getValue(agencySettings?.email, prev.email),
+            website: getValue(agencySettings?.website, prev.website),
+            socialMedia: {
+              linkedin: agencySettings?.social_linkedin || prev.socialMedia.linkedin,
+              twitter: agencySettings?.social_twitter || prev.socialMedia.twitter,
+              facebook: agencySettings?.social_facebook || prev.socialMedia.facebook,
+            },
+            
+            // Financial Setup
+            currency: getValue(agencySettings?.currency, prev.currency),
+            fiscalYearStart: getValue(agencySettings?.fiscal_year_start, prev.fiscalYearStart),
+            paymentTerms: getValue(agencySettings?.payment_terms, prev.paymentTerms),
+            invoicePrefix: getValue(agencySettings?.invoice_prefix, prev.invoicePrefix),
+            taxRate: agencySettings?.tax_rate !== undefined && agencySettings?.tax_rate !== null
+              ? agencySettings.tax_rate.toString()
+              : prev.taxRate,
+            // Enable GST - check both sources
+            enableGST: mergedSettings?.enable_gst !== undefined 
+              ? mergedSettings.enable_gst 
+              : (mainSettings?.enable_gst !== undefined ? mainSettings.enable_gst : prev.enableGST),
+            gstNumber: getValue(agencySettings?.gst_number, prev.gstNumber),
+            bankDetails: {
+              accountName: agencySettings?.bank_account_name || prev.bankDetails.accountName,
+              accountNumber: agencySettings?.bank_account_number || prev.bankDetails.accountNumber,
+              bankName: agencySettings?.bank_name || prev.bankDetails.bankName,
+              routingNumber: agencySettings?.bank_routing_number || prev.bankDetails.routingNumber,
+              swiftCode: agencySettings?.bank_swift_code || prev.bankDetails.swiftCode,
+            },
+            
+            // Preferences
+            timezone: agencySettings?.timezone || prev.timezone,
+            dateFormat: agencySettings?.date_format || prev.dateFormat,
+            timeFormat: agencySettings?.time_format || prev.timeFormat,
+            weekStart: agencySettings?.week_start || prev.weekStart,
+            language: agencySettings?.language || prev.language,
+            notifications: {
+              email: agencySettings?.notifications_email !== undefined ? agencySettings.notifications_email : prev.notifications.email,
+              sms: agencySettings?.notifications_sms !== undefined ? agencySettings.notifications_sms : prev.notifications.sms,
+              push: agencySettings?.notifications_push !== undefined ? agencySettings.notifications_push : prev.notifications.push,
+              weeklyReport: agencySettings?.notifications_weekly_report !== undefined ? agencySettings.notifications_weekly_report : prev.notifications.weeklyReport,
+              monthlyReport: agencySettings?.notifications_monthly_report !== undefined ? agencySettings.notifications_monthly_report : prev.notifications.monthlyReport,
+            },
+            features: {
+              enablePayroll: mergedSettings?.modules?.finance ?? agencySettings?.features_enable_payroll ?? prev.features.enablePayroll,
+              enableProjects: mergedSettings?.modules?.projects ?? agencySettings?.features_enable_projects ?? prev.features.enableProjects,
+              enableCRM: mergedSettings?.modules?.people ?? agencySettings?.features_enable_crm ?? prev.features.enableCRM,
+              enableInventory: mergedSettings?.modules?.inventory ?? agencySettings?.features_enable_inventory ?? prev.features.enableInventory,
+              enableReports: mergedSettings?.modules?.reports ?? agencySettings?.features_enable_reports ?? prev.features.enableReports,
+            },
+          }));
+        } else {
+          console.log('[AgencySetup] No settings data found to prefill');
+        }
+      } catch (error) {
+        // Non-fatal: setup can be completed manually even if prefill fails
+        console.warn('Failed to prefill AgencySetup from settings:', error);
+      }
+    };
+
+    prefillFromSettings();
+  }, []);
+
   if (isCheckingSetup) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="text-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Checking setup status...</p>
+          <p className="text-slate-600 dark:text-slate-400">Checking setup status...</p>
         </div>
       </div>
     );
@@ -369,8 +636,8 @@ export default function AgencySetup() {
 
     setIsLoading(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      const apiBaseUrl = API_URL.replace(/\/api\/?$/, '');
+      const { getApiBaseUrl } = await import('@/config/api');
+      const apiBaseUrl = getApiBaseUrl();
       
       const agencyDatabase = localStorage.getItem('agency_database');
       
@@ -385,6 +652,12 @@ export default function AgencySetup() {
         });
       }
 
+      // Normalize team members: ensure all have role='department_head' (backend will enforce this too)
+      const normalizedTeamMembers = formData.teamMembers.map(member => ({
+        ...member,
+        role: 'department_head', // Force department_head role for all team members in setup
+      }));
+
       const response = await fetch(`${apiBaseUrl}/api/agencies/complete-setup`, {
         method: 'POST',
         headers: {
@@ -394,6 +667,7 @@ export default function AgencySetup() {
         },
         body: JSON.stringify({
           ...formData,
+          teamMembers: normalizedTeamMembers,
           logo: logoBase64,
           database: agencyDatabase,
         }),
@@ -402,6 +676,25 @@ export default function AgencySetup() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.error || 'Failed to complete setup');
+      }
+
+      const result = await response.json().catch(() => ({} as any));
+
+      // If backend returned a CSV of department head credentials, trigger a download
+      if (result?.teamCredentialsCsv) {
+        try {
+          const blob = new Blob([result.teamCredentialsCsv], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', 'department-head-credentials.csv');
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          console.warn('Failed to trigger CSV download for team credentials:', e);
+        }
       }
 
       toast({
@@ -427,104 +720,109 @@ export default function AgencySetup() {
   const totalSteps = SETUP_STEPS.length;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 py-8 px-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-            Complete Your Agency Setup
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Let's configure your agency to get you started in just a few steps
-          </p>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-24 md:pb-8">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        {/* Professional Header */}
+        <div className="mb-6 md:mb-8">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
+              <Building2 className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">
+                Agency Setup
+              </h1>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+                Configure your workspace settings
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Progress Card */}
-        <Card className="mb-6 border-0 shadow-xl">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 bg-gradient-to-br from-primary to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <CurrentStepIcon className="h-8 w-8 text-white" />
+        {/* Professional Progress Section */}
+        <Card className="mb-6 border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <CardHeader className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 px-4 md:px-6 py-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
+                  <CurrentStepIcon className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <CardTitle className="text-2xl mb-1">
+                  <CardTitle className="text-lg md:text-xl font-semibold text-slate-900 dark:text-white">
                     {SETUP_STEPS[currentStep - 1]?.title}
                   </CardTitle>
-                  <CardDescription className="text-base">
+                  <CardDescription className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
                     {SETUP_STEPS[currentStep - 1]?.description}
                   </CardDescription>
                 </div>
               </div>
-              <Badge variant="outline" className="text-sm px-4 py-2">
+              <Badge variant="secondary" className="text-xs font-medium px-3 py-1">
                 Step {currentStep} of {totalSteps}
               </Badge>
             </div>
             
-            {/* Enhanced Progress Bar */}
+            {/* Professional Progress Bar */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm mb-2">
-                <span className="font-medium text-muted-foreground">Progress</span>
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-slate-700 dark:text-slate-300">Overall Progress</span>
                 <span className="font-semibold text-primary">{Math.round(progress)}%</span>
               </div>
-              <Progress value={progress} className="h-3" />
-              <div className="flex justify-between items-center">
-                {SETUP_STEPS.map((step, idx) => (
-                  <TooltipProvider key={step.id}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex flex-col items-center gap-2 flex-1">
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center transition-all ${
-                            idx + 1 < currentStep
-                              ? 'bg-primary text-white shadow-lg scale-110'
-                              : idx + 1 === currentStep
-                              ? 'bg-primary text-white shadow-lg scale-110 ring-4 ring-primary/20'
-                              : 'bg-muted text-muted-foreground'
-                          }`}>
-                            {idx + 1 < currentStep ? (
-                              <CheckCircle2 className="h-5 w-5" />
-                            ) : (
-                              <step.icon className="h-5 w-5" />
-                            )}
-                          </div>
-                          <span className={`text-xs font-medium text-center hidden md:block ${
-                            idx + 1 <= currentStep ? 'text-primary' : 'text-muted-foreground'
-                          }`}>
-                            {step.title}
-                          </span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{step.description}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                ))}
+              <Progress value={progress} className="h-2" />
+              {/* Step Indicators */}
+              <div className="flex items-center justify-between pt-2">
+                {SETUP_STEPS.map((step, idx) => {
+                  const isCompleted = idx + 1 < currentStep;
+                  const isCurrent = idx + 1 === currentStep;
+                  const StepIcon = step.icon;
+                  
+                  return (
+                    <div key={step.id} className="flex flex-col items-center gap-2 flex-1">
+                      <div className={`h-8 w-8 rounded-full flex items-center justify-center transition-all ${
+                        isCompleted
+                          ? 'bg-primary text-white'
+                          : isCurrent
+                          ? 'bg-primary text-white ring-2 ring-primary/30'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                      }`}>
+                        {isCompleted ? (
+                          <CheckCircle2 className="h-4 w-4" />
+                        ) : (
+                          <StepIcon className="h-4 w-4" />
+                        )}
+                      </div>
+                      <span className={`text-[10px] font-medium text-center hidden sm:block max-w-[60px] ${
+                        isCurrent ? 'text-primary' : isCompleted ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-600'
+                      }`}>
+                        {step.title.split(' ')[0]}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </CardHeader>
         </Card>
 
-        {/* Step Content */}
-        <Card className="border-0 shadow-xl">
-          <CardContent className="p-8">
+        {/* Step Content - Professional Window Design */}
+        <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm mb-20 md:mb-0">
+          <CardContent className="p-4 md:p-6 lg:p-8">
             {/* Step 1: Company Profile */}
             {currentStep === 1 && (
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-2xl font-semibold mb-2 flex items-center gap-3">
-                    <Building2 className="h-6 w-6 text-primary" />
+              <div className="space-y-6">
+                <div className="pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <h3 className="text-lg md:text-xl font-semibold mb-1.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                    <Building2 className="h-5 w-5 text-primary" />
                     Company Profile
                   </h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                     Tell us about your company. This information will be used throughout the platform.
                   </p>
                 </div>
 
-                <div className="grid gap-8">
+                <div className="grid gap-6">
                   {/* Logo Upload */}
-                  <div className="space-y-4">
-                    <Label className="text-base font-semibold">Company Logo</Label>
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Company Logo</Label>
                     <div className="flex items-center gap-6">
                       <div className="h-32 w-32 rounded-lg border-2 border-dashed border-muted-foreground/25 flex items-center justify-center bg-muted/50 overflow-hidden">
                         {logoPreview ? (
@@ -561,9 +859,9 @@ export default function AgencySetup() {
 
                   <Separator />
 
-                  <div className="grid md:grid-cols-2 gap-6">
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="companyName" className="text-base">
+                      <Label htmlFor="companyName" className="text-sm font-medium text-slate-700 dark:text-slate-300">
                         Company Name <span className="text-destructive">*</span>
                       </Label>
                       <Input
@@ -571,33 +869,37 @@ export default function AgencySetup() {
                         placeholder="Enter your company name"
                         value={formData.companyName}
                         onChange={(e) => setFormData(prev => ({ ...prev, companyName: e.target.value }))}
-                        className="h-11"
+                        className="h-11 md:h-11 text-base"
+                        autoComplete="organization"
+                        inputMode="text"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="companyTagline">Company Tagline</Label>
+                      <Label htmlFor="companyTagline" className="text-sm font-medium text-slate-700 dark:text-slate-300">Company Tagline</Label>
                       <Input
                         id="companyTagline"
                         placeholder="Your company's tagline or slogan"
                         value={formData.companyTagline}
                         onChange={(e) => setFormData(prev => ({ ...prev, companyTagline: e.target.value }))}
-                        className="h-11"
+                        className="h-11 md:h-11 text-base"
+                        autoComplete="off"
+                        inputMode="text"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="industry">Industry</Label>
+                      <Label htmlFor="industry" className="text-sm font-medium text-slate-700 dark:text-slate-300">Industry</Label>
                       <Select
                         value={formData.industry}
                         onValueChange={(value) => setFormData(prev => ({ ...prev, industry: value }))}
                       >
-                        <SelectTrigger className="h-11">
+                        <SelectTrigger className="h-11 md:h-11 text-base">
                           <SelectValue placeholder="Select industry" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="max-h-[300px]">
                           {INDUSTRY_OPTIONS.map((industry) => (
-                            <SelectItem key={industry} value={industry}>
+                            <SelectItem key={industry} value={industry} className="text-base">
                               {industry}
                             </SelectItem>
                           ))}
@@ -606,7 +908,7 @@ export default function AgencySetup() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="businessType">Business Type</Label>
+                      <Label htmlFor="businessType" className="text-sm font-medium text-slate-700 dark:text-slate-300">Business Type</Label>
                       <Select
                         value={formData.businessType}
                         onValueChange={(value) => setFormData(prev => ({ ...prev, businessType: value }))}
@@ -624,19 +926,21 @@ export default function AgencySetup() {
                       </Select>
                     </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="foundedYear">Year Founded</Label>
-                      <Input
-                        id="foundedYear"
-                        type="number"
-                        placeholder="e.g., 2020"
-                        value={formData.foundedYear}
-                        onChange={(e) => setFormData(prev => ({ ...prev, foundedYear: e.target.value }))}
-                        className="h-11"
-                        min="1900"
-                        max={new Date().getFullYear()}
-                      />
-                    </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="foundedYear" className="text-sm font-medium text-slate-700 dark:text-slate-300">Year Founded</Label>
+                        <Input
+                          id="foundedYear"
+                          type="number"
+                          placeholder="e.g., 2020"
+                          value={formData.foundedYear}
+                          onChange={(e) => setFormData(prev => ({ ...prev, foundedYear: e.target.value }))}
+                          className="h-11 md:h-11 text-base"
+                          min="1900"
+                          max={new Date().getFullYear()}
+                          inputMode="numeric"
+                          autoComplete="off"
+                        />
+                      </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="employeeCount">Number of Employees</Label>
@@ -659,14 +963,15 @@ export default function AgencySetup() {
                     </div>
 
                     <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="description">Company Description</Label>
+                      <Label htmlFor="description" className="text-sm font-medium text-slate-700 dark:text-slate-300">Company Description</Label>
                       <Textarea
                         id="description"
                         placeholder="Brief description of your company..."
                         value={formData.description}
                         onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                         rows={4}
-                        className="resize-none"
+                        className="resize-none text-base"
+                        autoComplete="off"
                       />
                     </div>
                   </div>
@@ -676,34 +981,36 @@ export default function AgencySetup() {
 
             {/* Step 2: Business Details */}
             {currentStep === 2 && (
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-2xl font-semibold mb-2 flex items-center gap-3">
-                    <FileText className="h-6 w-6 text-primary" />
+              <div className="space-y-6">
+                <div className="pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <h3 className="text-lg md:text-xl font-semibold mb-1.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                    <FileText className="h-5 w-5 text-primary" />
                     Business Details
                   </h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                     Legal and contact information for your business
                   </p>
                 </div>
 
                 <Tabs defaultValue="legal" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="legal">Legal Info</TabsTrigger>
-                    <TabsTrigger value="address">Address</TabsTrigger>
-                    <TabsTrigger value="contact">Contact</TabsTrigger>
+                  <TabsList className="grid w-full grid-cols-3 h-auto">
+                    <TabsTrigger value="legal" className="text-xs md:text-sm py-2 md:py-2.5 px-2 md:px-4">Legal Info</TabsTrigger>
+                    <TabsTrigger value="address" className="text-xs md:text-sm py-2 md:py-2.5 px-2 md:px-4">Address</TabsTrigger>
+                    <TabsTrigger value="contact" className="text-xs md:text-sm py-2 md:py-2.5 px-2 md:px-4">Contact</TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="legal" className="space-y-6 mt-6">
-                    <div className="grid md:grid-cols-2 gap-6">
+                  <TabsContent value="legal" className="space-y-4 md:space-y-6 mt-4 md:mt-6">
+                    <div className="grid md:grid-cols-2 gap-4 md:gap-6">
                       <div className="space-y-2">
-                        <Label htmlFor="legalName">Legal Business Name</Label>
+                        <Label htmlFor="legalName" className="text-sm font-medium text-slate-700 dark:text-slate-300">Legal Business Name</Label>
                         <Input
                           id="legalName"
                           placeholder="As registered with authorities"
                           value={formData.legalName}
                           onChange={(e) => setFormData(prev => ({ ...prev, legalName: e.target.value }))}
-                          className="h-11"
+                          className="h-11 md:h-11 text-base"
+                          autoComplete="organization"
+                          inputMode="text"
                         />
                       </div>
 
@@ -719,7 +1026,7 @@ export default function AgencySetup() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="taxIdType">Tax ID Type</Label>
+                        <Label htmlFor="taxIdType" className="text-sm font-medium text-slate-700 dark:text-slate-300">Tax ID Type</Label>
                         <Select
                           value={formData.taxIdType}
                           onValueChange={(value) => setFormData(prev => ({ ...prev, taxIdType: value }))}
@@ -753,7 +1060,7 @@ export default function AgencySetup() {
                   <TabsContent value="address" className="space-y-6 mt-6">
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="space-y-2 md:col-span-2">
-                        <Label htmlFor="street">Street Address</Label>
+                        <Label htmlFor="street" className="text-sm font-medium text-slate-700 dark:text-slate-300">Street Address</Label>
                         <Input
                           id="street"
                           placeholder="123 Main Street"
@@ -767,7 +1074,7 @@ export default function AgencySetup() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="city">City</Label>
+                        <Label htmlFor="city" className="text-sm font-medium text-slate-700 dark:text-slate-300">City</Label>
                         <Input
                           id="city"
                           placeholder="City"
@@ -781,7 +1088,7 @@ export default function AgencySetup() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="state">State/Province</Label>
+                        <Label htmlFor="state" className="text-sm font-medium text-slate-700 dark:text-slate-300">State/Province</Label>
                         <Input
                           id="state"
                           placeholder="State or Province"
@@ -795,7 +1102,7 @@ export default function AgencySetup() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="zipCode">ZIP/Postal Code</Label>
+                        <Label htmlFor="zipCode" className="text-sm font-medium text-slate-700 dark:text-slate-300">ZIP/Postal Code</Label>
                         <Input
                           id="zipCode"
                           placeholder="12345"
@@ -809,7 +1116,7 @@ export default function AgencySetup() {
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="country">Country</Label>
+                        <Label htmlFor="country" className="text-sm font-medium text-slate-700 dark:text-slate-300">Country</Label>
                         <Input
                           id="country"
                           placeholder="Country"
@@ -827,7 +1134,7 @@ export default function AgencySetup() {
                   <TabsContent value="contact" className="space-y-6 mt-6">
                     <div className="grid md:grid-cols-2 gap-6">
                       <div className="space-y-2">
-                        <Label htmlFor="phone">Phone Number</Label>
+                        <Label htmlFor="phone" className="text-sm font-medium text-slate-700 dark:text-slate-300">Phone Number</Label>
                         <div className="relative">
                           <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                           <Input
@@ -836,13 +1143,15 @@ export default function AgencySetup() {
                             placeholder="+1 (555) 123-4567"
                             value={formData.phone}
                             onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                            className="h-11 pl-10"
+                            className="h-11 md:h-11 pl-10 text-base"
+                            autoComplete="tel"
+                            inputMode="tel"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="email">Business Email</Label>
+                        <Label htmlFor="email" className="text-sm font-medium text-slate-700 dark:text-slate-300">Business Email</Label>
                         <div className="relative">
                           <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                           <Input
@@ -851,13 +1160,15 @@ export default function AgencySetup() {
                             placeholder="contact@company.com"
                             value={formData.email}
                             onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                            className="h-11 pl-10"
+                            className="h-11 md:h-11 pl-10 text-base"
+                            autoComplete="email"
+                            inputMode="email"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="website">Website</Label>
+                        <Label htmlFor="website" className="text-sm font-medium text-slate-700 dark:text-slate-300">Website</Label>
                         <div className="relative">
                           <Globe className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                           <Input
@@ -866,13 +1177,15 @@ export default function AgencySetup() {
                             placeholder="https://yourcompany.com"
                             value={formData.website}
                             onChange={(e) => setFormData(prev => ({ ...prev, website: e.target.value }))}
-                            className="h-11 pl-10"
+                            className="h-11 md:h-11 pl-10 text-base"
+                            autoComplete="url"
+                            inputMode="url"
                           />
                         </div>
                       </div>
 
                       <div className="space-y-2">
-                        <Label htmlFor="linkedin">LinkedIn</Label>
+                        <Label htmlFor="linkedin" className="text-sm font-medium text-slate-700 dark:text-slate-300">LinkedIn</Label>
                         <Input
                           id="linkedin"
                           type="url"
@@ -893,40 +1206,44 @@ export default function AgencySetup() {
 
             {/* Step 3: Departments - Enhanced */}
             {currentStep === 3 && (
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-2xl font-semibold mb-2 flex items-center gap-3">
-                    <Briefcase className="h-6 w-6 text-primary" />
+              <div className="space-y-6">
+                <div className="pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <h3 className="text-lg md:text-xl font-semibold mb-1.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                    <Briefcase className="h-5 w-5 text-primary" />
                     Organizational Structure
                   </h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                     Set up your departments and organizational hierarchy
                   </p>
                 </div>
 
                 <div className="space-y-4">
                   {formData.departments.map((dept, index) => (
-                    <Card key={dept.id} className="p-6 border-2">
-                      <div className="flex items-start justify-between mb-4">
-                        <Badge variant="outline" className="text-sm">
-                          Department {index + 1}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              departments: prev.departments.filter((_, i) => i !== index)
-                            }));
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="grid md:grid-cols-2 gap-4">
+                    <Card key={dept.id} className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                      <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-sm font-semibold text-slate-900 dark:text-white">
+                            Department {index + 1}
+                          </CardTitle>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                departments: prev.departments.filter((_, i) => i !== index)
+                              }));
+                            }}
+                            className="h-8 w-8 p-0 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Department Name *</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department Name *</Label>
                           <Input
                             value={dept.name}
                             onChange={(e) => {
@@ -939,7 +1256,7 @@ export default function AgencySetup() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Department Manager</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department Manager</Label>
                           <Input
                             value={dept.manager}
                             onChange={(e) => {
@@ -952,7 +1269,7 @@ export default function AgencySetup() {
                           />
                         </div>
                         <div className="space-y-2 md:col-span-2">
-                          <Label>Description</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Description</Label>
                           <Textarea
                             value={dept.description}
                             onChange={(e) => {
@@ -966,7 +1283,7 @@ export default function AgencySetup() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Annual Budget (Optional)</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Annual Budget (Optional)</Label>
                           <div className="relative">
                             <DollarSign className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             <Input
@@ -978,11 +1295,14 @@ export default function AgencySetup() {
                                 setFormData(prev => ({ ...prev, departments: updated }));
                               }}
                               placeholder="0.00"
-                              className="h-11 pl-10"
+                              className="h-11 md:h-11 pl-10 text-base"
+                              inputMode="decimal"
+                              autoComplete="off"
                             />
                           </div>
                         </div>
                       </div>
+                      </CardContent>
                     </Card>
                   ))}
 
@@ -1007,10 +1327,10 @@ export default function AgencySetup() {
                   </Button>
 
                   {formData.departments.length === 0 && (
-                    <Card className="p-8 text-center border-dashed">
-                      <Briefcase className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                      <p className="text-muted-foreground mb-2">No departments added yet</p>
-                      <p className="text-sm text-muted-foreground">
+                    <Card className="p-6 text-center border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+                      <Briefcase className="h-10 w-10 mx-auto mb-3 text-slate-400 dark:text-slate-500" />
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">No departments added yet</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         You can add departments now or later from the department management page
                       </p>
                     </Card>
@@ -1021,29 +1341,29 @@ export default function AgencySetup() {
 
             {/* Step 4: Financial Setup */}
             {currentStep === 4 && (
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-2xl font-semibold mb-2 flex items-center gap-3">
-                    <DollarSign className="h-6 w-6 text-primary" />
+              <div className="space-y-6">
+                <div className="pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <h3 className="text-lg md:text-xl font-semibold mb-1.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                    <DollarSign className="h-5 w-5 text-primary" />
                     Financial Configuration
                   </h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                     Configure currency, billing, and financial settings
                   </p>
                 </div>
 
-                <div className="grid gap-8">
-                  <Card className="p-6">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <CreditCard className="h-5 w-5" />
+                <div className="grid gap-6">
+                  <Card className="border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <CreditCard className="h-4 w-4 text-primary" />
                         Currency & Billing
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="grid md:grid-cols-2 gap-6">
+                    <CardContent className="pt-4 space-y-4">
+                      <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Base Currency</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Base Currency</Label>
                           <Select
                             value={formData.currency}
                             onValueChange={(value) => setFormData(prev => ({ ...prev, currency: value }))}
@@ -1073,18 +1393,20 @@ export default function AgencySetup() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Default Payment Terms (Days)</Label>
-                          <Input
-                            type="number"
-                            placeholder="30"
-                            value={formData.paymentTerms}
-                            onChange={(e) => setFormData(prev => ({ ...prev, paymentTerms: e.target.value }))}
-                            className="h-11"
-                          />
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Default Payment Terms (Days)</Label>
+                            <Input
+                              type="number"
+                              placeholder="30"
+                              value={formData.paymentTerms}
+                              onChange={(e) => setFormData(prev => ({ ...prev, paymentTerms: e.target.value }))}
+                              className="h-11 md:h-11 text-base"
+                              inputMode="numeric"
+                              autoComplete="off"
+                            />
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Invoice Prefix</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Invoice Prefix</Label>
                           <Input
                             placeholder="INV"
                             value={formData.invoicePrefix}
@@ -1096,25 +1418,27 @@ export default function AgencySetup() {
                     </CardContent>
                   </Card>
 
-                  <Card className="p-6">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Receipt className="h-5 w-5" />
+                  <Card className="border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <Receipt className="h-4 w-4 text-primary" />
                         Tax Settings
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="grid md:grid-cols-2 gap-6">
+                    <CardContent className="pt-4 space-y-4">
+                      <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Default Tax Rate (%)</Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={formData.taxRate}
-                            onChange={(e) => setFormData(prev => ({ ...prev, taxRate: e.target.value }))}
-                            className="h-11"
-                          />
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Default Tax Rate (%)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={formData.taxRate}
+                              onChange={(e) => setFormData(prev => ({ ...prev, taxRate: e.target.value }))}
+                              className="h-11 md:h-11 text-base"
+                              inputMode="decimal"
+                              autoComplete="off"
+                            />
                         </div>
 
                         <div className="space-y-2 flex items-center gap-4">
@@ -1130,7 +1454,7 @@ export default function AgencySetup() {
 
                         {formData.enableGST && (
                           <div className="space-y-2 md:col-span-2">
-                            <Label>GST/VAT Number</Label>
+                            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">GST/VAT Number</Label>
                             <Input
                               placeholder="Enter GST/VAT number"
                               value={formData.gstNumber}
@@ -1143,17 +1467,17 @@ export default function AgencySetup() {
                     </CardContent>
                   </Card>
 
-                  <Card className="p-6">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Landmark className="h-5 w-5" />
+                  <Card className="border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <Landmark className="h-4 w-4 text-primary" />
                         Bank Details (Optional)
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="grid md:grid-cols-2 gap-6">
+                    <CardContent className="pt-4 space-y-4">
+                      <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Account Name</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Account Name</Label>
                           <Input
                             placeholder="Account holder name"
                             value={formData.bankDetails.accountName}
@@ -1166,7 +1490,7 @@ export default function AgencySetup() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Account Number</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Account Number</Label>
                           <Input
                             placeholder="Account number"
                             value={formData.bankDetails.accountNumber}
@@ -1179,7 +1503,7 @@ export default function AgencySetup() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Bank Name</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Bank Name</Label>
                           <Input
                             placeholder="Bank name"
                             value={formData.bankDetails.bankName}
@@ -1192,7 +1516,7 @@ export default function AgencySetup() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Routing/SWIFT Code</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Routing/SWIFT Code</Label>
                           <Input
                             placeholder="Routing or SWIFT code"
                             value={formData.bankDetails.routingNumber}
@@ -1212,40 +1536,44 @@ export default function AgencySetup() {
 
             {/* Step 5: Team Members - Enhanced */}
             {currentStep === 5 && (
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-2xl font-semibold mb-2 flex items-center gap-3">
-                    <Users className="h-6 w-6 text-primary" />
-                    Team Members
+              <div className="space-y-6">
+                <div className="pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <h3 className="text-lg md:text-xl font-semibold mb-1.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                    <Users className="h-5 w-5 text-primary" />
+                    Department Heads
                   </h3>
-                  <p className="text-muted-foreground">
-                    Add your team members. You can invite more later from the employee management page.
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                    Add the key department heads who should lead each area. Other employees can be added later from the employee management page.
                   </p>
                 </div>
 
                 <div className="space-y-4">
                   {formData.teamMembers.map((member, index) => (
-                    <Card key={index} className="p-6 border-2">
-                      <div className="flex items-start justify-between mb-4">
-                        <Badge variant="outline" className="text-sm">
-                          Member {index + 1}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              teamMembers: prev.teamMembers.filter((_, i) => i !== index)
-                            }));
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="grid md:grid-cols-2 gap-4">
+                    <Card key={index} className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                      <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-sm font-semibold text-slate-900 dark:text-white">
+                            Team Member {index + 1}
+                          </CardTitle>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                teamMembers: prev.teamMembers.filter((_, i) => i !== index)
+                              }));
+                            }}
+                            className="h-8 w-8 p-0 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Full Name *</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Full Name *</Label>
                           <Input
                             value={member.name}
                             onChange={(e) => {
@@ -1258,7 +1586,7 @@ export default function AgencySetup() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Email Address *</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Address *</Label>
                           <Input
                             type="email"
                             value={member.email}
@@ -1268,11 +1596,13 @@ export default function AgencySetup() {
                               setFormData(prev => ({ ...prev, teamMembers: updated }));
                             }}
                             placeholder="john@company.com"
-                            className="h-11"
+                            className="h-11 md:h-11 text-base"
+                            autoComplete="email"
+                            inputMode="email"
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Job Title</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Job Title</Label>
                           <Input
                             value={member.title}
                             onChange={(e) => {
@@ -1285,7 +1615,7 @@ export default function AgencySetup() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Department</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Department</Label>
                           <Select
                             value={member.department}
                             onValueChange={(value) => {
@@ -1308,29 +1638,15 @@ export default function AgencySetup() {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>Role</Label>
-                          <Select
-                            value={member.role}
-                            onValueChange={(value) => {
-                              const updated = [...formData.teamMembers];
-                              updated[index].role = value;
-                              setFormData(prev => ({ ...prev, teamMembers: updated }));
-                            }}
-                          >
-                            <SelectTrigger className="h-11">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="employee">Employee</SelectItem>
-                              <SelectItem value="hr">HR Manager</SelectItem>
-                              <SelectItem value="finance_manager">Finance Manager</SelectItem>
-                              <SelectItem value="project_manager">Project Manager</SelectItem>
-                              <SelectItem value="admin">Administrator</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Role</Label>
+                          <Input
+                            value="Department Head"
+                            disabled
+                            className="h-11 bg-muted cursor-not-allowed"
+                          />
                         </div>
                         <div className="space-y-2">
-                          <Label>Phone</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Phone</Label>
                           <Input
                             type="tel"
                             value={member.phone}
@@ -1340,10 +1656,13 @@ export default function AgencySetup() {
                               setFormData(prev => ({ ...prev, teamMembers: updated }));
                             }}
                             placeholder="+1 (555) 123-4567"
-                            className="h-11"
+                            className="h-11 md:h-11 text-base"
+                            autoComplete="tel"
+                            inputMode="tel"
                           />
                         </div>
                       </div>
+                      </CardContent>
                     </Card>
                   ))}
 
@@ -1356,7 +1675,7 @@ export default function AgencySetup() {
                         teamMembers: [...prev.teamMembers, {
                           name: '',
                           email: '',
-                          role: 'employee',
+                          role: 'department_head',
                           department: '',
                           phone: '',
                           title: ''
@@ -1369,10 +1688,10 @@ export default function AgencySetup() {
                   </Button>
 
                   {formData.teamMembers.length === 0 && (
-                    <Card className="p-8 text-center border-dashed">
-                      <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                      <p className="text-muted-foreground mb-2">No team members added yet</p>
-                      <p className="text-sm text-muted-foreground">
+                    <Card className="p-6 text-center border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
+                      <Users className="h-10 w-10 mx-auto mb-3 text-slate-400 dark:text-slate-500" />
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">No team members added yet</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         You can add team members now or later from the employee management page
                       </p>
                     </Card>
@@ -1383,29 +1702,29 @@ export default function AgencySetup() {
 
             {/* Step 6: Preferences */}
             {currentStep === 6 && (
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-2xl font-semibold mb-2 flex items-center gap-3">
-                    <Settings className="h-6 w-6 text-primary" />
+              <div className="space-y-6">
+                <div className="pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <h3 className="text-lg md:text-xl font-semibold mb-1.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                    <Settings className="h-5 w-5 text-primary" />
                     System Preferences
                   </h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                     Configure your system preferences and notification settings
                   </p>
                 </div>
 
-                <div className="grid gap-8">
-                  <Card className="p-6">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Globe2 className="h-5 w-5" />
+                <div className="grid gap-6">
+                  <Card className="border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <Globe2 className="h-4 w-4 text-primary" />
                         Localization
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="grid md:grid-cols-2 gap-6">
+                    <CardContent className="pt-4 space-y-4">
+                      <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label>Timezone</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Timezone</Label>
                           <Select
                             value={formData.timezone}
                             onValueChange={(value) => setFormData(prev => ({ ...prev, timezone: value }))}
@@ -1424,7 +1743,7 @@ export default function AgencySetup() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Date Format</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Date Format</Label>
                           <Select
                             value={formData.dateFormat}
                             onValueChange={(value) => setFormData(prev => ({ ...prev, dateFormat: value }))}
@@ -1443,7 +1762,7 @@ export default function AgencySetup() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Time Format</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Time Format</Label>
                           <Select
                             value={formData.timeFormat}
                             onValueChange={(value) => setFormData(prev => ({ ...prev, timeFormat: value }))}
@@ -1459,7 +1778,7 @@ export default function AgencySetup() {
                         </div>
 
                         <div className="space-y-2">
-                          <Label>Week Starts On</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Week Starts On</Label>
                           <Select
                             value={formData.weekStart}
                             onValueChange={(value) => setFormData(prev => ({ ...prev, weekStart: value }))}
@@ -1478,17 +1797,17 @@ export default function AgencySetup() {
                     </CardContent>
                   </Card>
 
-                  <Card className="p-6">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Bell className="h-5 w-5" />
+                  <Card className="border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <Bell className="h-4 w-4 text-primary" />
                         Notifications
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="pt-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label>Email Notifications</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Email Notifications</Label>
                           <p className="text-sm text-muted-foreground">Receive notifications via email</p>
                         </div>
                         <Switch
@@ -1502,7 +1821,7 @@ export default function AgencySetup() {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label>SMS Notifications</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">SMS Notifications</Label>
                           <p className="text-sm text-muted-foreground">Receive notifications via SMS</p>
                         </div>
                         <Switch
@@ -1516,7 +1835,7 @@ export default function AgencySetup() {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label>Push Notifications</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Push Notifications</Label>
                           <p className="text-sm text-muted-foreground">Receive browser push notifications</p>
                         </div>
                         <Switch
@@ -1530,7 +1849,7 @@ export default function AgencySetup() {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label>Weekly Reports</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Weekly Reports</Label>
                           <p className="text-sm text-muted-foreground">Receive weekly summary reports</p>
                         </div>
                         <Switch
@@ -1544,7 +1863,7 @@ export default function AgencySetup() {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label>Monthly Reports</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Monthly Reports</Label>
                           <p className="text-sm text-muted-foreground">Receive monthly summary reports</p>
                         </div>
                         <Switch
@@ -1558,17 +1877,17 @@ export default function AgencySetup() {
                     </CardContent>
                   </Card>
 
-                  <Card className="p-6">
-                    <CardHeader className="pb-4">
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Zap className="h-5 w-5" />
+                  <Card className="border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <Zap className="h-4 w-4 text-primary" />
                         Feature Preferences
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="pt-4 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label>Payroll Management</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Payroll Management</Label>
                           <p className="text-sm text-muted-foreground">Enable payroll features</p>
                         </div>
                         <Switch
@@ -1582,7 +1901,7 @@ export default function AgencySetup() {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label>Project Management</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Project Management</Label>
                           <p className="text-sm text-muted-foreground">Enable project tracking</p>
                         </div>
                         <Switch
@@ -1596,7 +1915,7 @@ export default function AgencySetup() {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label>CRM</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">CRM</Label>
                           <p className="text-sm text-muted-foreground">Enable customer relationship management</p>
                         </div>
                         <Switch
@@ -1610,7 +1929,7 @@ export default function AgencySetup() {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label>Inventory Management</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Inventory Management</Label>
                           <p className="text-sm text-muted-foreground">Enable inventory tracking</p>
                         </div>
                         <Switch
@@ -1624,7 +1943,7 @@ export default function AgencySetup() {
                       <Separator />
                       <div className="flex items-center justify-between">
                         <div className="space-y-0.5">
-                          <Label>Advanced Reports</Label>
+                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Advanced Reports</Label>
                           <p className="text-sm text-muted-foreground">Enable advanced reporting features</p>
                         </div>
                         <Switch
@@ -1643,70 +1962,70 @@ export default function AgencySetup() {
 
             {/* Step 7: Review & Complete */}
             {currentStep === 7 && (
-              <div className="space-y-8">
-                <div>
-                  <h3 className="text-2xl font-semibold mb-2 flex items-center gap-3">
-                    <CheckCircle2 className="h-6 w-6 text-primary" />
+              <div className="space-y-6">
+                <div className="pb-2 border-b border-slate-200 dark:border-slate-800">
+                  <h3 className="text-lg md:text-xl font-semibold mb-1.5 flex items-center gap-2 text-slate-900 dark:text-white">
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
                     Review & Complete Setup
                   </h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                     Review all your information before completing the setup
                   </p>
                 </div>
 
-                <div className="grid gap-6">
+                <div className="grid gap-4">
                   {/* Company Profile */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Building2 className="h-5 w-5" />
+                  <Card className="border border-slate-200 dark:border-slate-800">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <Building2 className="h-4 w-4 text-primary" />
                         Company Profile
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="pt-4 space-y-3">
                       <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                          <Label className="text-muted-foreground">Company Name</Label>
-                          <p className="font-medium">{formData.companyName || 'Not provided'}</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Company Name</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{formData.companyName || <span className="text-slate-400 dark:text-slate-500 italic">Not provided</span>}</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Industry</Label>
-                          <p className="font-medium">{formData.industry || 'Not provided'}</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Industry</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{formData.industry || <span className="text-slate-400 dark:text-slate-500 italic">Not provided</span>}</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Business Type</Label>
-                          <p className="font-medium">{formData.businessType || 'Not provided'}</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Business Type</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{formData.businessType || <span className="text-slate-400 dark:text-slate-500 italic">Not provided</span>}</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Employees</Label>
-                          <p className="font-medium">{formData.employeeCount || 'Not provided'}</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Employees</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{formData.employeeCount || <span className="text-slate-400 dark:text-slate-500 italic">Not provided</span>}</p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
 
                   {/* Business Details */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <FileText className="h-5 w-5" />
+                  <Card className="border border-slate-200 dark:border-slate-800">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <FileText className="h-4 w-4 text-primary" />
                         Business Details
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="pt-4 space-y-3">
                       <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                          <Label className="text-muted-foreground">Legal Name</Label>
-                          <p className="font-medium">{formData.legalName || 'Not provided'}</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Legal Name</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{formData.legalName || <span className="text-slate-400 dark:text-slate-500 italic">Not provided</span>}</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Tax ID</Label>
-                          <p className="font-medium">{formData.taxId || 'Not provided'}</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Tax ID</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{formData.taxId || <span className="text-slate-400 dark:text-slate-500 italic">Not provided</span>}</p>
                         </div>
                         <div className="md:col-span-2">
-                          <Label className="text-muted-foreground">Address</Label>
-                          <p className="font-medium">
-                            {formData.address.street || 'Not provided'}
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Address</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">
+                            {formData.address.street || <span className="text-slate-400 dark:text-slate-500 italic">Not provided</span>}
                             {formData.address.city && `, ${formData.address.city}`}
                             {formData.address.state && `, ${formData.address.state}`}
                             {formData.address.zipCode && ` ${formData.address.zipCode}`}
@@ -1717,51 +2036,51 @@ export default function AgencySetup() {
                   </Card>
 
                   {/* Departments */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Briefcase className="h-5 w-5" />
+                  <Card className="border border-slate-200 dark:border-slate-800">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <Briefcase className="h-4 w-4 text-primary" />
                         Departments ({formData.departments.length})
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="pt-4">
                       {formData.departments.length > 0 ? (
                         <div className="space-y-2">
                           {formData.departments.map((dept) => (
-                            <div key={dept.id} className="flex items-center gap-2 p-2 rounded bg-muted/50">
+                            <div key={dept.id} className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
                               <Check className="h-4 w-4 text-primary" />
-                              <span className="font-medium">{dept.name}</span>
-                              {dept.manager && <span className="text-sm text-muted-foreground">- {dept.manager}</span>}
+                              <span className="text-sm font-medium text-slate-900 dark:text-white">{dept.name}</span>
+                              {dept.manager && <span className="text-xs text-slate-500 dark:text-slate-400">- {dept.manager}</span>}
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-muted-foreground">No departments added</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">No departments added</p>
                       )}
                     </CardContent>
                   </Card>
 
                   {/* Financial */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <DollarSign className="h-5 w-5" />
+                  <Card className="border border-slate-200 dark:border-slate-800">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <DollarSign className="h-4 w-4 text-primary" />
                         Financial Settings
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="pt-4 space-y-3">
                       <div className="grid md:grid-cols-3 gap-4">
                         <div>
-                          <Label className="text-muted-foreground">Currency</Label>
-                          <p className="font-medium">{formData.currency}</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Currency</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{formData.currency}</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Payment Terms</Label>
-                          <p className="font-medium">{formData.paymentTerms} days</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Payment Terms</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{formData.paymentTerms} days</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Tax Rate</Label>
-                          <p className="font-medium">{formData.taxRate}%</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Tax Rate</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{formData.taxRate}%</p>
                         </div>
                       </div>
                     </CardContent>
@@ -1779,37 +2098,37 @@ export default function AgencySetup() {
                       {formData.teamMembers.length > 0 ? (
                         <div className="space-y-2">
                           {formData.teamMembers.map((member, idx) => (
-                            <div key={idx} className="flex items-center gap-2 p-2 rounded bg-muted/50">
+                            <div key={idx} className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
                               <Check className="h-4 w-4 text-primary" />
-                              <span className="font-medium">{member.name}</span>
-                              <span className="text-sm text-muted-foreground">({member.email})</span>
-                              <Badge variant="outline" className="ml-auto">{member.role}</Badge>
+                              <span className="text-sm font-medium text-slate-900 dark:text-white">{member.name}</span>
+                              <span className="text-xs text-slate-500 dark:text-slate-400">({member.email})</span>
+                              <Badge variant="secondary" className="ml-auto text-xs">{member.role}</Badge>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-muted-foreground">No team members added</p>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">No team members added</p>
                       )}
                     </CardContent>
                   </Card>
 
                   {/* Preferences */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2">
-                        <Settings className="h-5 w-5" />
+                  <Card className="border border-slate-200 dark:border-slate-800">
+                    <CardHeader className="pb-3 border-b border-slate-200 dark:border-slate-800">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
+                        <Settings className="h-4 w-4 text-primary" />
                         Preferences
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-3">
+                    <CardContent className="pt-4 space-y-3">
                       <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                          <Label className="text-muted-foreground">Timezone</Label>
-                          <p className="font-medium">{TIMEZONES.find(tz => tz.value === formData.timezone)?.label || formData.timezone}</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Timezone</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{TIMEZONES.find(tz => tz.value === formData.timezone)?.label || formData.timezone}</p>
                         </div>
                         <div>
-                          <Label className="text-muted-foreground">Date Format</Label>
-                          <p className="font-medium">{DATE_FORMATS.find(df => df.value === formData.dateFormat)?.label || formData.dateFormat}</p>
+                          <Label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Date Format</Label>
+                          <p className="text-sm font-medium text-slate-900 dark:text-white mt-1">{DATE_FORMATS.find(df => df.value === formData.dateFormat)?.label || formData.dateFormat}</p>
                         </div>
                       </div>
                     </CardContent>
@@ -1817,14 +2136,14 @@ export default function AgencySetup() {
                 </div>
 
                 <Card className="border-primary/50 bg-primary/5">
-                  <CardContent className="p-6">
-                    <div className="flex items-start gap-4">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <Info className="h-5 w-5 text-primary" />
+                  <CardContent className="p-4 md:p-6">
+                    <div className="flex items-start gap-3 md:gap-4">
+                      <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <Info className="h-4 w-4 md:h-5 md:w-5 text-primary" />
                       </div>
-                      <div className="flex-1">
-                        <h4 className="font-semibold mb-1">Ready to Complete Setup?</h4>
-                        <p className="text-sm text-muted-foreground">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold mb-1 text-sm md:text-base">Ready to Complete Setup?</h4>
+                        <p className="text-xs md:text-sm text-muted-foreground">
                           Once you complete the setup, you'll be redirected to your dashboard. 
                           You can always update these settings later from the settings page.
                         </p>
@@ -1835,20 +2154,21 @@ export default function AgencySetup() {
               </div>
             )}
 
-            {/* Navigation Buttons */}
-            <div className="flex justify-between items-center mt-8 pt-6 border-t">
+            {/* Navigation Buttons - Desktop */}
+            <div className="hidden md:flex justify-between items-center mt-8 pt-6 border-t border-slate-200 dark:border-slate-800">
               <Button
                 type="button"
                 variant="outline"
                 onClick={handleBack}
                 disabled={currentStep === 1 || isLoading}
                 size="lg"
+                className="border-slate-300 dark:border-slate-700"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
 
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                 <span>Step {currentStep} of {totalSteps}</span>
               </div>
 
@@ -1858,8 +2178,9 @@ export default function AgencySetup() {
                   onClick={handleNext}
                   disabled={isLoading}
                   size="lg"
+                  className="bg-primary hover:bg-primary/90 text-white"
                 >
-                  Next
+                  Continue
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               ) : (
@@ -1868,7 +2189,7 @@ export default function AgencySetup() {
                   onClick={handleComplete}
                   disabled={isLoading}
                   size="lg"
-                  className="min-w-[160px] bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90"
+                  className="min-w-[160px] bg-primary hover:bg-primary/90 text-white"
                 >
                   {isLoading ? (
                     <>
@@ -1877,7 +2198,7 @@ export default function AgencySetup() {
                     </>
                   ) : (
                     <>
-                      <Sparkles className="mr-2 h-4 w-4" />
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
                       Complete Setup
                     </>
                   )}
@@ -1886,6 +2207,64 @@ export default function AgencySetup() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Sticky Navigation Buttons - Mobile Only */}
+        <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-lg safe-area-inset-bottom">
+          <div className="max-w-5xl mx-auto px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleBack}
+                disabled={currentStep === 1 || isLoading}
+                size="default"
+                className="flex-1 max-w-[120px] border-slate-300 dark:border-slate-700"
+              >
+                <ArrowLeft className="mr-1.5 h-4 w-4" />
+                <span className="text-sm">Back</span>
+              </Button>
+
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 px-2">
+                <span className="font-medium">{currentStep}</span>
+                <span>/</span>
+                <span>{totalSteps}</span>
+              </div>
+
+              {currentStep < SETUP_STEPS.length ? (
+                <Button
+                  type="button"
+                  onClick={handleNext}
+                  disabled={isLoading}
+                  size="default"
+                  className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium"
+                >
+                  <span className="text-sm">Continue</span>
+                  <ArrowRight className="ml-1.5 h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handleComplete}
+                  disabled={isLoading}
+                  size="default"
+                  className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      <span className="text-sm">Completing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                      <span className="text-sm">Complete Setup</span>
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

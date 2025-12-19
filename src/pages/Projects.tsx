@@ -145,7 +145,9 @@ const Projects = () => {
         }),
         getEmployeesForAssignmentAuto(profile, user?.id).catch(() => []),
         selectRecords('departments', {
-          where: { agency_id: agencyId, is_active: true },
+          filters: [
+            { column: 'is_active', operator: 'eq', value: true }
+          ],
           orderBy: 'name ASC'
         }).catch(() => [])
       ]);

@@ -57,6 +57,7 @@ export class NotificationService extends BaseApiService {
       priority?: string;
       actionUrl?: string;
       expiresAt?: string;
+      agencyId?: string;
     },
     options: ApiOptions = {}
   ): Promise<ApiResponse<any>> {
@@ -69,7 +70,8 @@ export class NotificationService extends BaseApiService {
       p_metadata: data.metadata || {},
       p_priority: data.priority || 'normal',
       p_action_url: data.actionUrl,
-      p_expires_at: data.expiresAt
+      p_expires_at: data.expiresAt,
+      p_agency_id: data.agencyId
     }, options);
   }
 

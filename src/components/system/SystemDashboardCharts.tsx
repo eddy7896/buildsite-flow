@@ -1,5 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line } from 'recharts';
+import { AlertTriangle } from 'lucide-react';
 import type { SystemMetrics } from '@/hooks/useSystemAnalytics';
 
 interface SystemDashboardChartsProps {
@@ -7,20 +9,33 @@ interface SystemDashboardChartsProps {
 }
 
 export const SystemDashboardCharts = ({ metrics }: SystemDashboardChartsProps) => {
+  if (!metrics) {
+    return (
+      <Alert>
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          No metrics data available to display charts.
+        </AlertDescription>
+      </Alert>
+    );
+  }
   // Subscription plan data for pie chart
   const subscriptionData = [
-    { name: 'Basic', value: metrics.subscriptionPlans.basic, color: '#3B82F6' },
-    { name: 'Pro', value: metrics.subscriptionPlans.pro, color: '#10B981' },
-    { name: 'Enterprise', value: metrics.subscriptionPlans.enterprise, color: '#8B5CF6' },
+    { name: 'Basic', value: metrics.subscriptionPlans.basic || 0, color: '#3B82F6' },
+    { name: 'Pro', value: metrics.subscriptionPlans.pro || 0, color: '#10B981' },
+    { name: 'Enterprise', value: metrics.subscriptionPlans.enterprise || 0, color: '#8B5CF6' },
   ].filter(item => item.value > 0);
+
+  // Show message if no subscription data
+  const hasSubscriptionData = subscriptionData.length > 0;
 
   // Usage statistics for bar chart
   const usageData = [
-    { name: 'Projects', value: metrics.usageStats.totalProjects },
-    { name: 'Invoices', value: metrics.usageStats.totalInvoices },
-    { name: 'Clients', value: metrics.usageStats.totalClients },
-    { name: 'Attendance', value: metrics.usageStats.totalAttendanceRecords },
-  ];
+    { name: 'Projects', value: metrics.usageStats?.totalProjects || 0 },
+    { name: 'Invoices', value: metrics.usageStats?.totalInvoices || 0 },
+    { name: 'Clients', value: metrics.usageStats?.totalClients || 0 },
+    { name: 'Attendance', value: metrics.usageStats?.totalAttendanceRecords || 0 },
+  ].filter(item => item.value >= 0);
 
   // Simulated growth data for line chart (you would replace this with real data)
   const growthData = [
@@ -40,27 +55,33 @@ export const SystemDashboardCharts = ({ metrics }: SystemDashboardChartsProps) =
           <CardTitle>Subscription Plans Distribution</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={subscriptionData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {subscriptionData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+          {hasSubscriptionData ? (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={subscriptionData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {subscriptionData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-80 flex items-center justify-center text-muted-foreground">
+              <p>No subscription plan data available</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

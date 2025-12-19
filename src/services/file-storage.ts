@@ -11,7 +11,7 @@ export async function uploadFile(
   bucket: string,
   filePath: string,
   fileContent: Buffer | ArrayBuffer | Uint8Array | { length: number },
-  userId: string,
+  userId: string | null,
   mimeType: string = 'application/octet-stream'
 ): Promise<FileStorage> {
   // In a real implementation, this would:
@@ -36,7 +36,7 @@ export async function uploadFile(
     file_name: filePath.split('/').pop(),
     file_size: fileSize,
     mime_type: mimeType,
-    uploaded_by: userId,
+    uploaded_by: userId, // Can be null if user not available
   });
 
   return fileStorage;

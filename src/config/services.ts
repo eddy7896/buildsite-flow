@@ -1,4 +1,5 @@
 import { env } from './env';
+import { getApiRoot } from './api';
 
 // External service configuration
 export const services = {
@@ -43,6 +44,6 @@ export const getServiceConfig = <T extends keyof typeof services>(
 
 // API endpoints with full URLs
 export const getApiEndpoint = (endpoint: string) => {
-  const apiUrl = env.VITE_API_URL || 'http://localhost:3000';
-  return `${apiUrl}${endpoint}`;
+  const apiUrl = getApiRoot();
+  return `${apiUrl.replace(/\/$/, '')}${endpoint}`;
 };

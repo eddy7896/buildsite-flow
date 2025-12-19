@@ -22,7 +22,7 @@ import { generateUUID, isValidUUID } from '@/lib/uuid';
 import { useAuth } from "@/hooks/useAuth";
 import { insertRecord, updateRecord, selectOne, selectRecords } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
-import bcrypt from 'bcryptjs';
+import bcrypt from '@/lib/bcrypt';
 
 const formSchema = z.object({
   // Personal Information
@@ -230,6 +230,18 @@ const CreateEmployee = () => {
           email_confirmed: true,
       }, currentUserId);
 
+      // If a department was selected, resolve its name and ensure we have a valid department_id
+      let selectedDepartmentId: string | null = null;
+      let selectedDepartmentName: string | null = null;
+      if (values.department && values.department.trim() && values.department !== '__no_departments__') {
+        // values.department contains the department ID from the dropdown
+        const departmentRecord = await selectOne<Department>('departments', { id: values.department });
+        if (departmentRecord) {
+          selectedDepartmentId = departmentRecord.id;
+          selectedDepartmentName = departmentRecord.name;
+        }
+      }
+
       // Profile is automatically created by database trigger, so update it instead of inserting
       // Check if profile exists (it should, due to trigger)
       const existingProfile = await selectOne('profiles', { user_id: userId });
@@ -238,7 +250,8 @@ const CreateEmployee = () => {
           agency_id: agencyId,
           full_name: `${values.firstName} ${values.lastName}`,
           phone: values.phone,
-          department: values.department,
+          // Store the human-readable department name on the profile
+          department: selectedDepartmentName,
           position: values.position,
           hire_date: values.hireDate.toISOString().split('T')[0],
           is_active: true,
@@ -253,7 +266,7 @@ const CreateEmployee = () => {
               id: generateUUID(),
               user_id: userId,
               ...profileData,
-          }, currentUserId);
+          }, currentUserId, agencyId);
       }
 
       // Create employee details entry (this triggers audit log)
@@ -314,7 +327,22 @@ const CreateEmployee = () => {
           user_id: userId,
           role: values.role,
           agency_id: agencyId,
-      }, currentUserId);
+      }, currentUserId, agencyId);
+
+      // Create team assignment linking the user to the selected department (if any)
+      if (selectedDepartmentId) {
+        await insertRecord('team_assignments', {
+          id: generateUUID(),
+          user_id: userId,
+          department_id: selectedDepartmentId,
+          position_title: values.position,
+          role_in_department: values.role,
+          start_date: values.hireDate.toISOString().split('T')[0],
+          is_active: true,
+          agency_id: agencyId,
+          assigned_by: currentUserId,
+        }, currentUserId, agencyId);
+      }
 
       toast({
         title: "Success",
@@ -464,19 +492,14 @@ const CreateEmployee = () => {
   };
 
   // Fetch departments from database
+  // Note: In isolated database architecture, all records in this DB belong to the agency
+  // No need to filter by agency_id - just get all active departments
   const fetchDepartments = async () => {
     try {
-      const agencyId = await getAgencyId(profile, user?.id);
-      if (!agencyId) {
-        console.warn('No agency_id available for fetching departments');
-        return;
-      }
-
       const deptData = await selectRecords('departments', {
         select: 'id, name',
         filters: [
-          { column: 'is_active', operator: 'eq', value: true },
-          { column: 'agency_id', operator: 'eq', value: agencyId }
+          { column: 'is_active', operator: 'eq', value: true }
         ],
         orderBy: 'name ASC'
       });
@@ -1112,7 +1135,7 @@ const CreateEmployee = () => {
                             <SelectContent>
                               {departments.length > 0 ? (
                                 departments.map((dept) => (
-                                  <SelectItem key={dept.id} value={dept.name}>
+                                  <SelectItem key={dept.id} value={dept.id}>
                                     {dept.name}
                                   </SelectItem>
                                 ))

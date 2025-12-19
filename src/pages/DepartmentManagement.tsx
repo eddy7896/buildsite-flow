@@ -59,6 +59,7 @@ import { db } from '@/lib/database';
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { getAgencyId } from '@/utils/agencyUtils';
+import { selectRecords } from '@/services/api/postgresql-service';
 import { DepartmentFormDialog } from "@/components/DepartmentFormDialog";
 import { TeamAssignmentPanel } from "@/components/TeamAssignmentPanel";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
@@ -197,64 +198,63 @@ export default function DepartmentManagement() {
   const fetchDepartments = async () => {
     setLoading(true);
     try {
-      // Get agency_id from profile for filtering
-      // Note: In isolated database architecture, all records belong to the agency
-      // But we still filter by agency_id for consistency (or show NULL records for backward compatibility)
-      const agencyId = profile?.agency_id;
-      
-      // Build query - show records matching agency_id OR NULL (for backward compatibility)
-      let query = db.from("departments").select("*");
-      
-      if (agencyId) {
-        // Show departments with matching agency_id OR NULL (for records created before backfill)
-        query = query.or(`agency_id.eq.${agencyId},agency_id.is.null`);
-      }
-      
-      const { data, error } = await query.order("name");
+      // In isolated database architecture, all records in this DB belong to the agency
+      // No need to filter by agency_id - just get all active departments
+      const data = await selectRecords('departments', {
+        filters: [
+          { column: 'is_active', operator: 'eq', value: true }
+        ],
+        orderBy: 'name ASC'
+      });
 
-      if (error) throw error;
+      if (!data) throw new Error('Failed to fetch departments');
 
       // Get team assignment counts and related data for each department
       const departmentsWithCounts = await Promise.all(
         (data || []).map(async (dept) => {
-          // Count team assignments
-          const { data: countData, error: countError } = await db
-            .from("team_assignments")
-            .select("*")
-            .eq("department_id", dept.id)
-            .eq("is_active", true);
-          
-          if (countError) {
-            // Silently handle count errors - use 0 as default
+          // Count team assignments using PostgreSQL service
+          let count = 0;
+          try {
+            const teamAssignments = await selectRecords('team_assignments', {
+              filters: [
+                { column: 'department_id', operator: 'eq', value: dept.id },
+                { column: 'is_active', operator: 'eq', value: true }
+              ]
+            });
+            count = teamAssignments?.length || 0;
+          } catch (e) {
+            console.warn('Could not count team assignments for department:', dept.id, e);
           }
-          
-          const count = countData?.length || 0;
 
           // Fetch manager info if manager_id exists
           let manager = null;
           if (dept.manager_id) {
-            const { data: managerData, error: managerError } = await db
-              .from("profiles")
-              .select("full_name")
-              .eq("user_id", dept.manager_id)
-              .single();
-            
-            if (!managerError && managerData) {
-              manager = managerData;
+            try {
+              const managerData = await selectRecords('profiles', {
+                filters: [{ column: 'user_id', operator: 'eq', value: dept.manager_id }],
+                limit: 1
+              });
+              if (managerData && managerData.length > 0) {
+                manager = { full_name: managerData[0].full_name };
+              }
+            } catch (e) {
+              console.warn('Could not fetch manager for department:', dept.id, e);
             }
           }
 
           // Fetch parent department info if parent_department_id exists
           let parent_department = null;
           if (dept.parent_department_id) {
-            const { data: parentData, error: parentError } = await db
-              .from("departments")
-              .select("name")
-              .eq("id", dept.parent_department_id)
-              .single();
-            
-            if (!parentError && parentData) {
-              parent_department = parentData;
+            try {
+              const parentData = await selectRecords('departments', {
+                filters: [{ column: 'id', operator: 'eq', value: dept.parent_department_id }],
+                limit: 1
+              });
+              if (parentData && parentData.length > 0) {
+                parent_department = { name: parentData[0].name };
+              }
+            } catch (e) {
+              console.warn('Could not fetch parent department:', dept.id, e);
             }
           }
 
@@ -262,7 +262,7 @@ export default function DepartmentManagement() {
             ...dept,
             manager,
             parent_department,
-            _count: { team_assignments: count || 0 }
+            _count: { team_assignments: count }
           };
         })
       );

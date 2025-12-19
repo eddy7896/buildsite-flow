@@ -19,9 +19,16 @@ const { DATABASE_URL } = require('../config/constants');
 async function checkDomainAvailability(domain) {
   const mainClient = await pool.connect();
   try {
+    // Extract subdomain from input (in case full domain is passed)
+    // e.g., "company-id.app" -> "company-id" or just "company-id" -> "company-id"
+    const subdomain = domain.toLowerCase().trim().split('.')[0];
+    
+    // Check if any domain with this subdomain exists (regardless of suffix)
+    // This ensures uniqueness across all domain suffixes
     const result = await mainClient.query(
-      'SELECT id FROM public.agencies WHERE domain = $1',
-      [domain.toLowerCase().trim()]
+      `SELECT id FROM public.agencies 
+       WHERE domain LIKE $1 OR domain = $2`,
+      [`${subdomain}.%`, subdomain]
     );
     return result.rows.length === 0;
   } finally {
@@ -267,6 +274,58 @@ async function getSetupProgress(agencyDatabase) {
  * @param {Object} agencyData - Agency creation data
  * @returns {Promise<Object>} Created agency information
  */
+/**
+ * Parse address string into structured fields
+ * Handles formats like "123 Main St, City, State 12345, Country"
+ * @param {string} addressString - Address string to parse
+ * @returns {Object} Parsed address object with street, city, state, zipCode, country
+ */
+function parseAddressString(addressString) {
+  if (!addressString || typeof addressString !== 'string' || !addressString.trim()) {
+    return { street: null, city: null, state: null, zipCode: null, country: null };
+  }
+
+  const trimmed = addressString.trim();
+  
+  // Try to parse common formats
+  // Format: "Street, City, State ZIP, Country"
+  const commaPattern = /^(.+?),\s*(.+?),\s*(.+?)\s+(\d{5}(?:-\d{4})?)(?:,\s*(.+))?$/;
+  const match = trimmed.match(commaPattern);
+  
+  if (match) {
+    return {
+      street: match[1].trim() || null,
+      city: match[2].trim() || null,
+      state: match[3].trim() || null,
+      zipCode: match[4].trim() || null,
+      country: match[5] ? match[5].trim() : null,
+    };
+  }
+  
+  // Format: "Street, City, State, Country"
+  const simpleCommaPattern = /^(.+?),\s*(.+?),\s*(.+?)(?:,\s*(.+))?$/;
+  const simpleMatch = trimmed.match(simpleCommaPattern);
+  
+  if (simpleMatch) {
+    return {
+      street: simpleMatch[1].trim() || null,
+      city: simpleMatch[2].trim() || null,
+      state: simpleMatch[3].trim() || null,
+      zipCode: null,
+      country: simpleMatch[4] ? simpleMatch[4].trim() : null,
+    };
+  }
+  
+  // If no pattern matches, treat entire string as street
+  return {
+    street: trimmed,
+    city: null,
+    state: null,
+    zipCode: null,
+    country: null,
+  };
+}
+
 async function createAgency(agencyData) {
   const {
     agencyName,
@@ -276,6 +335,13 @@ async function createAgency(agencyData) {
     adminPassword,
     subscriptionPlan,
     phone,
+    // Optional onboarding metadata
+    primaryFocus,
+    enableGST,
+    modules,
+    industry,
+    companySize,
+    address,
   } = agencyData;
 
   // Validate required fields
@@ -293,7 +359,9 @@ async function createAgency(agencyData) {
   // Hash password
   const passwordHash = await bcrypt.hash(adminPassword, 10);
 
-  // Plan limits
+  // Plan limits – keep for backward compatibility, but pricing is feature-based.
+  // We still populate max_users for legacy code paths, but plans should be managed
+  // via feature flags in subscription_plans / plan_features, not per-user pricing.
   const planLimits = {
     starter: 5,
     professional: 25,
@@ -302,8 +370,31 @@ async function createAgency(agencyData) {
   const maxUsers = planLimits[subscriptionPlan] || 25;
 
   // Generate database name
+  // Extract subdomain from full domain (e.g., "company-id.app" -> "company-id")
   const { host, port, user, password } = parseDatabaseUrl();
-  const dbName = `agency_${domain.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${agencyId.substring(0, 8)}`;
+  let subdomain = domain || '';
+  // If domain contains a dot, extract the subdomain part (before first dot)
+  if (subdomain.includes('.')) {
+    subdomain = subdomain.split('.')[0];
+  }
+  const sanitizedDomain = subdomain
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'agency';
+
+  // PostgreSQL limits identifiers (like database names) to 63 bytes.
+  // We ensure the generated name never exceeds this limit by truncating
+  // the domain portion while preserving a unique suffix from the agencyId.
+  const prefix = 'agency_';
+  const suffix = `_${agencyId.substring(0, 8)}`;
+  const maxIdentifierLength = 63;
+  const maxDomainLength = Math.max(
+    1,
+    maxIdentifierLength - prefix.length - suffix.length
+  );
+  const truncatedDomain = sanitizedDomain.slice(0, maxDomainLength);
+  const dbName = `${prefix}${truncatedDomain}${suffix}`;
 
   const mainClient = await pool.connect();
   let postgresClient = null;
@@ -414,6 +505,142 @@ async function createAgency(agencyData) {
     
     console.log(`[API] ✅ Schema created and verified. Existing tables: ${existingTables.join(', ')}`);
 
+    // Create initial agency_settings row in agency database with onboarding data
+    console.log(`[API] Creating initial agency_settings in agency database`);
+    const parsedAddress = address ? parseAddressString(address) : { street: null, city: null, state: null, zipCode: null, country: null };
+    
+    // Ensure agency_settings table exists and has all required columns
+    await agencyDbClient.query(`
+      DO $$
+      BEGIN
+        -- Ensure table exists (should already exist from schema creation)
+        CREATE TABLE IF NOT EXISTS public.agency_settings (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          agency_name TEXT,
+          logo_url TEXT,
+          setup_complete BOOLEAN DEFAULT false,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        
+        -- Add all extended columns if they don't exist
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS industry TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS phone TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS address_street TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS address_city TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS address_state TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS address_zip TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS address_country TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS employee_count TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS enable_gst BOOLEAN DEFAULT false;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS company_tagline TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS business_type TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS founded_year TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS description TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS legal_name TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS registration_number TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS tax_id TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS tax_id_type TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS email TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS website TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS social_linkedin TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS social_twitter TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS social_facebook TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'USD';
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS fiscal_year_start TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS payment_terms TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS invoice_prefix TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS tax_rate DECIMAL(5,2) DEFAULT 0;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS gst_number TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS bank_account_name TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS bank_account_number TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS bank_name TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS bank_routing_number TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS bank_swift_code TEXT;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'UTC';
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS date_format TEXT DEFAULT 'MM/DD/YYYY';
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS time_format TEXT DEFAULT '12';
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS week_start TEXT DEFAULT 'Monday';
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS language TEXT DEFAULT 'en';
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS notifications_email BOOLEAN DEFAULT true;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS notifications_sms BOOLEAN DEFAULT false;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS notifications_push BOOLEAN DEFAULT true;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS notifications_weekly_report BOOLEAN DEFAULT true;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS notifications_monthly_report BOOLEAN DEFAULT true;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS features_enable_payroll BOOLEAN DEFAULT true;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS features_enable_projects BOOLEAN DEFAULT true;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS features_enable_crm BOOLEAN DEFAULT true;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS features_enable_inventory BOOLEAN DEFAULT false;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS features_enable_reports BOOLEAN DEFAULT true;
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS domain TEXT;
+      END $$;
+    `);
+    
+    // Insert or update initial agency_settings row with onboarding data
+    // Check if a row exists first, then update or insert accordingly
+    const existingCheck = await agencyDbClient.query(
+      `SELECT id FROM public.agency_settings LIMIT 1`
+    );
+    
+    if (existingCheck.rows.length > 0) {
+      // Update existing row
+      const existingId = existingCheck.rows[0].id;
+      await agencyDbClient.query(
+        `UPDATE public.agency_settings 
+        SET 
+          agency_name = COALESCE(NULLIF($1, ''), NULLIF($1, 'My Agency'), agency_name),
+          industry = COALESCE($2, industry),
+          phone = COALESCE($3, phone),
+          address_street = COALESCE($4, address_street),
+          address_city = COALESCE($5, address_city),
+          address_state = COALESCE($6, address_state),
+          address_zip = COALESCE($7, address_zip),
+          address_country = COALESCE($8, address_country),
+          employee_count = COALESCE($9, employee_count),
+          enable_gst = COALESCE($10, enable_gst),
+          domain = COALESCE($11, domain),
+          updated_at = NOW()
+        WHERE id = $12`,
+        [
+          agencyName || null, // Use provided agency name (null if not provided, won't update)
+          industry || null,
+          phone || null,
+          parsedAddress.street,
+          parsedAddress.city,
+          parsedAddress.state,
+          parsedAddress.zipCode,
+          parsedAddress.country,
+          companySize || null,
+          enableGST === true,
+          domain || null,
+          existingId,
+        ]
+      );
+    } else {
+      // Insert new row
+      await agencyDbClient.query(
+        `INSERT INTO public.agency_settings (
+          agency_name, industry, phone, address_street, address_city, address_state, address_zip, address_country,
+          employee_count, enable_gst, domain, setup_complete, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, false, NOW(), NOW())`,
+        [
+          agencyName || 'My Agency', // Use provided agency name or default
+          industry || null,
+          phone || null,
+          parsedAddress.street,
+          parsedAddress.city,
+          parsedAddress.state,
+          parsedAddress.zipCode,
+          parsedAddress.country,
+          companySize || null,
+          enableGST === true,
+          domain || null, // Store full domain (e.g., "company-id.app")
+        ]
+      );
+    }
+    
+    console.log(`[API] ✅ Initial agency_settings created in agency database`);
+
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(adminUserId)) {
@@ -469,22 +696,23 @@ async function createAgency(agencyData) {
       throw new Error('Profiles table does not have required columns');
     }
 
-    // Create admin profile
+    // Create admin profile WITH agency_id so they show up in queries
     console.log(`[API] Creating admin profile for: ${adminName}`);
     await agencyDbClient.query(
       `INSERT INTO public.profiles (
-        id, user_id, full_name, phone, is_active, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+        id, user_id, full_name, phone, agency_id, is_active, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
       ON CONFLICT (user_id) DO UPDATE SET
         full_name = EXCLUDED.full_name,
         phone = EXCLUDED.phone,
+        agency_id = COALESCE(EXCLUDED.agency_id, public.profiles.agency_id),
         updated_at = NOW()`,
-      [profileId, adminUserId, adminName, phone || null, true]
+      [profileId, adminUserId, adminName, phone || null, agencyId, true]
     );
     
     // Verify profile was created
     const profileCheck = await agencyDbClient.query(
-      `SELECT id, user_id, full_name FROM public.profiles WHERE user_id = $1`,
+      `SELECT id, user_id, full_name, agency_id FROM public.profiles WHERE user_id = $1`,
       [adminUserId]
     );
     
@@ -492,7 +720,38 @@ async function createAgency(agencyData) {
       throw new Error('Failed to create admin profile - profile not found after insert');
     }
     
-    console.log(`[API] ✅ Admin profile created: ${profileCheck.rows[0].full_name}`);
+    console.log(`[API] ✅ Admin profile created: ${profileCheck.rows[0].full_name} with agency_id: ${profileCheck.rows[0].agency_id}`);
+
+    // Create employee_details for admin so they show up in unified_employees and employee lists
+    const nameParts = String(adminName).trim().split(/\s+/);
+    const adminFirstName = nameParts[0] || '';
+    const adminLastName = nameParts.slice(1).join(' ') || adminFirstName;
+    
+    // Generate employee_id for admin (EMP-0001)
+    let adminEmployeeId = 'EMP-0001';
+    try {
+      const existingEmp = await agencyDbClient.query(
+        `SELECT employee_id FROM public.employee_details WHERE employee_id = $1 LIMIT 1`,
+        [adminEmployeeId]
+      );
+      if (existingEmp.rows.length > 0) {
+        // If EMP-0001 exists, use a timestamp-based one
+        const ts = Date.now().toString().slice(-6);
+        adminEmployeeId = `EMP-${ts}`;
+      }
+    } catch (e) {
+      console.warn('[API] Could not check existing employee_id, using EMP-0001:', e.message);
+    }
+
+    await agencyDbClient.query(
+      `INSERT INTO public.employee_details (
+        id, user_id, employee_id, agency_id, first_name, last_name, employment_type, is_active, created_at, updated_at
+      ) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, true, NOW(), NOW())
+      ON CONFLICT DO NOTHING`,
+      [adminUserId, adminEmployeeId, agencyId, adminFirstName, adminLastName, 'full_time']
+    );
+    
+    console.log(`[API] ✅ Admin employee_details created with employee_id: ${adminEmployeeId}`);
 
     // Remove employee role if exists
     await agencyDbClient.query(
@@ -542,6 +801,10 @@ async function createAgency(agencyData) {
           agency_id UUID REFERENCES public.agencies(id) ON DELETE CASCADE,
           agency_name TEXT,
           logo_url TEXT,
+          -- Optional onboarding metadata for pre-populating AgencySetup
+          primary_focus TEXT,
+          enable_gst BOOLEAN DEFAULT false,
+          modules JSONB,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
         )
@@ -566,16 +829,94 @@ async function createAgency(agencyData) {
           END IF;
         END $$;
       `);
+
+      // Ensure new onboarding metadata columns exist (for backward compatibility)
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS primary_focus TEXT
+      `);
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS enable_gst BOOLEAN DEFAULT false
+      `);
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS modules JSONB
+      `);
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS industry TEXT
+      `);
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS phone TEXT
+      `);
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS address_street TEXT
+      `);
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS address_city TEXT
+      `);
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS address_state TEXT
+      `);
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS address_zip TEXT
+      `);
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS address_country TEXT
+      `);
+      await mainClient.query(`
+        ALTER TABLE public.agency_settings 
+        ADD COLUMN IF NOT EXISTS employee_count TEXT
+      `);
       
-      // Insert agency settings
+      // Parse address if provided
+      const parsedAddress = address ? parseAddressString(address) : { street: null, city: null, state: null, zipCode: null, country: null };
+      
+      // Insert agency settings with all onboarding data
       await mainClient.query(
         `INSERT INTO public.agency_settings (
-          id, agency_id, agency_name, logo_url, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, NOW(), NOW())
+          id, agency_id, agency_name, logo_url, primary_focus, enable_gst, modules,
+          industry, phone, address_street, address_city, address_state, address_zip, address_country, employee_count,
+          created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW())
         ON CONFLICT (agency_id) DO UPDATE SET
           agency_name = EXCLUDED.agency_name,
+          primary_focus = COALESCE(EXCLUDED.primary_focus, public.agency_settings.primary_focus),
+          enable_gst = COALESCE(EXCLUDED.enable_gst, public.agency_settings.enable_gst),
+          modules = COALESCE(EXCLUDED.modules, public.agency_settings.modules),
+          industry = COALESCE(EXCLUDED.industry, public.agency_settings.industry),
+          phone = COALESCE(EXCLUDED.phone, public.agency_settings.phone),
+          address_street = COALESCE(EXCLUDED.address_street, public.agency_settings.address_street),
+          address_city = COALESCE(EXCLUDED.address_city, public.agency_settings.address_city),
+          address_state = COALESCE(EXCLUDED.address_state, public.agency_settings.address_state),
+          address_zip = COALESCE(EXCLUDED.address_zip, public.agency_settings.address_zip),
+          address_country = COALESCE(EXCLUDED.address_country, public.agency_settings.address_country),
+          employee_count = COALESCE(EXCLUDED.employee_count, public.agency_settings.employee_count),
           updated_at = NOW()`,
-        [agencySettingsId, agencyId, agencyName, null]
+        [
+          agencySettingsId,
+          agencyId,
+          agencyName,
+          null,
+          primaryFocus || null,
+          enableGST === true,
+          modules ? JSON.stringify(modules) : null,
+          industry || null,
+          phone || null,
+          parsedAddress.street,
+          parsedAddress.city,
+          parsedAddress.state,
+          parsedAddress.zipCode,
+          parsedAddress.country,
+          companySize || null,
+        ]
       );
 
       await mainClient.query('COMMIT');
@@ -806,6 +1147,26 @@ async function completeAgencySetup(agencyDatabase, setupData) {
     
     console.log(`[Setup] Starting setup completion for database: ${agencyDatabase} with agency_id: ${agencyId}`);
 
+    // Backfill: Ensure admin/owner profile has agency_id set (for existing agencies created before fix)
+    try {
+      const ownerUserId = await mainClient.query(
+        `SELECT owner_user_id FROM public.agencies WHERE id = $1 LIMIT 1`,
+        [agencyId]
+      );
+      if (ownerUserId.rows.length > 0 && ownerUserId.rows[0].owner_user_id) {
+        const ownerId = ownerUserId.rows[0].owner_user_id;
+        await agencyClient.query(
+          `UPDATE public.profiles 
+           SET agency_id = $1, updated_at = NOW() 
+           WHERE user_id = $2 AND (agency_id IS NULL OR agency_id != $1)`,
+          [agencyId, ownerId]
+        );
+        console.log(`[Setup] ✅ Backfilled agency_id for owner profile: ${ownerId}`);
+      }
+    } catch (backfillError) {
+      console.warn('[Setup] Could not backfill owner agency_id (non-fatal):', backfillError.message);
+    }
+
     // Ensure setup_complete column exists
     try {
       await agencyClient.query(`
@@ -908,13 +1269,15 @@ async function completeAgencySetup(agencyDatabase, setupData) {
       language: language || 'en',
     };
 
-    // Ensure agency_settings has at least one row
-    const settingsCheck = await agencyClient.query(`
-      SELECT id FROM public.agency_settings LIMIT 1
+    // Fetch existing settings to preserve data
+    const existingSettingsCheck = await agencyClient.query(`
+      SELECT * FROM public.agency_settings LIMIT 1
     `);
     
     let settingsId;
-    if (settingsCheck.rows.length === 0) {
+    let existingSettings = null;
+    
+    if (existingSettingsCheck.rows.length === 0) {
       // Insert a new row if none exists
       const insertResult = await agencyClient.query(`
         INSERT INTO public.agency_settings (id, agency_name, setup_complete, created_at, updated_at)
@@ -923,199 +1286,363 @@ async function completeAgencySetup(agencyDatabase, setupData) {
       `, [agencySettingsData.agency_name || 'My Agency']);
       settingsId = insertResult.rows[0].id;
     } else {
-      settingsId = settingsCheck.rows[0].id;
+      settingsId = existingSettingsCheck.rows[0].id;
+      existingSettings = existingSettingsCheck.rows[0];
     }
 
-    // Complete update query with ALL 50+ fields
+    // Complete update query with ALL 50+ fields, using COALESCE to preserve existing values
+    // Only update fields that have new values provided (non-null/non-empty)
     await agencyClient.query(`
       UPDATE public.agency_settings 
       SET 
-        agency_name = $1,
-        company_tagline = $2,
-        industry = $3,
-        business_type = $4,
-        founded_year = $5,
-        employee_count = $6,
-        description = $7,
-        legal_name = $8,
-        registration_number = $9,
-        tax_id = $10,
-        tax_id_type = $11,
-        address_street = $12,
-        address_city = $13,
-        address_state = $14,
-        address_zip = $15,
-        address_country = $16,
-        phone = $17,
-        email = $18,
-        website = $19,
-        logo_url = $20,
-        social_linkedin = $21,
-        social_twitter = $22,
-        social_facebook = $23,
-        currency = $24,
-        fiscal_year_start = $25,
-        payment_terms = $26,
-        invoice_prefix = $27,
-        tax_rate = $28,
-        enable_gst = $29,
-        gst_number = $30,
-        bank_account_name = $31,
-        bank_account_number = $32,
-        bank_name = $33,
-        bank_routing_number = $34,
-        bank_swift_code = $35,
-        timezone = $36,
-        date_format = $37,
-        time_format = $38,
-        week_start = $39,
-        language = $40,
-        notifications_email = $41,
-        notifications_sms = $42,
-        notifications_push = $43,
-        notifications_weekly_report = $44,
-        notifications_monthly_report = $45,
-        features_enable_payroll = $46,
-        features_enable_projects = $47,
-        features_enable_crm = $48,
-        features_enable_inventory = $49,
-        features_enable_reports = $50,
+        agency_name = COALESCE($1, agency_name),
+        company_tagline = COALESCE(NULLIF($2, ''), company_tagline),
+        industry = COALESCE(NULLIF($3, ''), industry),
+        business_type = COALESCE(NULLIF($4, ''), business_type),
+        founded_year = COALESCE(NULLIF($5, ''), founded_year),
+        employee_count = COALESCE(NULLIF($6, ''), employee_count),
+        description = COALESCE(NULLIF($7, ''), description),
+        legal_name = COALESCE(NULLIF($8, ''), legal_name),
+        registration_number = COALESCE(NULLIF($9, ''), registration_number),
+        tax_id = COALESCE(NULLIF($10, ''), tax_id),
+        tax_id_type = COALESCE(NULLIF($11, ''), tax_id_type),
+        address_street = COALESCE(NULLIF($12, ''), address_street),
+        address_city = COALESCE(NULLIF($13, ''), address_city),
+        address_state = COALESCE(NULLIF($14, ''), address_state),
+        address_zip = COALESCE(NULLIF($15, ''), address_zip),
+        address_country = COALESCE(NULLIF($16, ''), address_country),
+        phone = COALESCE(NULLIF($17, ''), phone),
+        email = COALESCE(NULLIF($18, ''), email),
+        website = COALESCE(NULLIF($19, ''), website),
+        logo_url = COALESCE($20, logo_url),
+        social_linkedin = COALESCE(NULLIF($21, ''), social_linkedin),
+        social_twitter = COALESCE(NULLIF($22, ''), social_twitter),
+        social_facebook = COALESCE(NULLIF($23, ''), social_facebook),
+        currency = COALESCE(NULLIF($24, ''), currency),
+        fiscal_year_start = COALESCE(NULLIF($25, ''), fiscal_year_start),
+        payment_terms = COALESCE(NULLIF($26, ''), payment_terms),
+        invoice_prefix = COALESCE(NULLIF($27, ''), invoice_prefix),
+        tax_rate = COALESCE($28, tax_rate),
+        enable_gst = COALESCE($29, enable_gst),
+        gst_number = COALESCE(NULLIF($30, ''), gst_number),
+        bank_account_name = COALESCE(NULLIF($31, ''), bank_account_name),
+        bank_account_number = COALESCE(NULLIF($32, ''), bank_account_number),
+        bank_name = COALESCE(NULLIF($33, ''), bank_name),
+        bank_routing_number = COALESCE(NULLIF($34, ''), bank_routing_number),
+        bank_swift_code = COALESCE(NULLIF($35, ''), bank_swift_code),
+        timezone = COALESCE(NULLIF($36, ''), timezone),
+        date_format = COALESCE(NULLIF($37, ''), date_format),
+        time_format = COALESCE(NULLIF($38, ''), time_format),
+        week_start = COALESCE(NULLIF($39, ''), week_start),
+        language = COALESCE(NULLIF($40, ''), language),
+        notifications_email = COALESCE($41, notifications_email),
+        notifications_sms = COALESCE($42, notifications_sms),
+        notifications_push = COALESCE($43, notifications_push),
+        notifications_weekly_report = COALESCE($44, notifications_weekly_report),
+        notifications_monthly_report = COALESCE($45, notifications_monthly_report),
+        features_enable_payroll = COALESCE($46, features_enable_payroll),
+        features_enable_projects = COALESCE($47, features_enable_projects),
+        features_enable_crm = COALESCE($48, features_enable_crm),
+        features_enable_inventory = COALESCE($49, features_enable_inventory),
+        features_enable_reports = COALESCE($50, features_enable_reports),
         setup_complete = true,
         updated_at = NOW()
       WHERE id = $51
     `, [
-      agencySettingsData.agency_name,
-      agencySettingsData.company_tagline,
-      agencySettingsData.industry,
-      agencySettingsData.business_type,
-      agencySettingsData.founded_year,
-      agencySettingsData.employee_count,
-      agencySettingsData.description,
-      agencySettingsData.legal_name,
-      agencySettingsData.registration_number,
-      agencySettingsData.tax_id,
-      agencySettingsData.tax_id_type,
-      agencySettingsData.address_street,
-      agencySettingsData.address_city,
-      agencySettingsData.address_state,
-      agencySettingsData.address_zip,
-      agencySettingsData.address_country,
-      agencySettingsData.phone,
-      agencySettingsData.email,
-      agencySettingsData.website,
-      agencySettingsData.logo_url,
-      socialMedia?.linkedin || null,
-      socialMedia?.twitter || null,
-      socialMedia?.facebook || null,
-      agencySettingsData.currency,
-      agencySettingsData.fiscal_year_start,
-      agencySettingsData.payment_terms,
-      agencySettingsData.invoice_prefix,
-      agencySettingsData.tax_rate,
-      agencySettingsData.enable_gst,
-      agencySettingsData.gst_number,
-      bankDetails?.accountName || null,
-      bankDetails?.accountNumber || null,
-      bankDetails?.bankName || null,
-      bankDetails?.routingNumber || null,
-      bankDetails?.swiftCode || null,
-      agencySettingsData.timezone,
-      agencySettingsData.date_format,
-      agencySettingsData.time_format,
-      agencySettingsData.week_start,
-      agencySettingsData.language,
-      notifications?.email || false,
-      notifications?.sms || false,
-      notifications?.push || false,
-      notifications?.weeklyReport || false,
-      notifications?.monthlyReport || false,
-      features?.enablePayroll || false,
-      features?.enableProjects || false,
-      features?.enableCRM || false,
-      features?.enableInventory || false,
-      features?.enableReports || false,
+      agencySettingsData.agency_name || existingSettings?.agency_name,
+      agencySettingsData.company_tagline || existingSettings?.company_tagline || null,
+      agencySettingsData.industry || existingSettings?.industry || null,
+      agencySettingsData.business_type || existingSettings?.business_type || null,
+      agencySettingsData.founded_year || existingSettings?.founded_year || null,
+      agencySettingsData.employee_count || existingSettings?.employee_count || null,
+      agencySettingsData.description || existingSettings?.description || null,
+      agencySettingsData.legal_name || existingSettings?.legal_name || null,
+      agencySettingsData.registration_number || existingSettings?.registration_number || null,
+      agencySettingsData.tax_id || existingSettings?.tax_id || null,
+      agencySettingsData.tax_id_type || existingSettings?.tax_id_type || null,
+      agencySettingsData.address_street || existingSettings?.address_street || null,
+      agencySettingsData.address_city || existingSettings?.address_city || null,
+      agencySettingsData.address_state || existingSettings?.address_state || null,
+      agencySettingsData.address_zip || existingSettings?.address_zip || null,
+      agencySettingsData.address_country || existingSettings?.address_country || null,
+      agencySettingsData.phone || existingSettings?.phone || null,
+      agencySettingsData.email || existingSettings?.email || null,
+      agencySettingsData.website || existingSettings?.website || null,
+      agencySettingsData.logo_url || existingSettings?.logo_url || null,
+      socialMedia?.linkedin || existingSettings?.social_linkedin || null,
+      socialMedia?.twitter || existingSettings?.social_twitter || null,
+      socialMedia?.facebook || existingSettings?.social_facebook || null,
+      agencySettingsData.currency || existingSettings?.currency || 'USD',
+      agencySettingsData.fiscal_year_start || existingSettings?.fiscal_year_start || '01-01',
+      agencySettingsData.payment_terms || existingSettings?.payment_terms || '30',
+      agencySettingsData.invoice_prefix || existingSettings?.invoice_prefix || 'INV',
+      agencySettingsData.tax_rate !== undefined ? agencySettingsData.tax_rate : (existingSettings?.tax_rate || 0),
+      agencySettingsData.enable_gst !== undefined ? agencySettingsData.enable_gst : (existingSettings?.enable_gst || false),
+      agencySettingsData.gst_number || existingSettings?.gst_number || null,
+      bankDetails?.accountName || existingSettings?.bank_account_name || null,
+      bankDetails?.accountNumber || existingSettings?.bank_account_number || null,
+      bankDetails?.bankName || existingSettings?.bank_name || null,
+      bankDetails?.routingNumber || existingSettings?.bank_routing_number || null,
+      bankDetails?.swiftCode || existingSettings?.bank_swift_code || null,
+      agencySettingsData.timezone || existingSettings?.timezone || 'UTC',
+      agencySettingsData.date_format || existingSettings?.date_format || 'MM/DD/YYYY',
+      agencySettingsData.time_format || existingSettings?.time_format || '12',
+      agencySettingsData.week_start || existingSettings?.week_start || 'Monday',
+      agencySettingsData.language || existingSettings?.language || 'en',
+      notifications?.email !== undefined ? notifications.email : (existingSettings?.notifications_email !== undefined ? existingSettings.notifications_email : true),
+      notifications?.sms !== undefined ? notifications.sms : (existingSettings?.notifications_sms !== undefined ? existingSettings.notifications_sms : false),
+      notifications?.push !== undefined ? notifications.push : (existingSettings?.notifications_push !== undefined ? existingSettings.notifications_push : true),
+      notifications?.weeklyReport !== undefined ? notifications.weeklyReport : (existingSettings?.notifications_weekly_report !== undefined ? existingSettings.notifications_weekly_report : true),
+      notifications?.monthlyReport !== undefined ? notifications.monthlyReport : (existingSettings?.notifications_monthly_report !== undefined ? existingSettings.notifications_monthly_report : true),
+      features?.enablePayroll !== undefined ? features.enablePayroll : (existingSettings?.features_enable_payroll !== undefined ? existingSettings.features_enable_payroll : true),
+      features?.enableProjects !== undefined ? features.enableProjects : (existingSettings?.features_enable_projects !== undefined ? existingSettings.features_enable_projects : true),
+      features?.enableCRM !== undefined ? features.enableCRM : (existingSettings?.features_enable_crm !== undefined ? existingSettings.features_enable_crm : true),
+      features?.enableInventory !== undefined ? features.enableInventory : (existingSettings?.features_enable_inventory !== undefined ? existingSettings.features_enable_inventory : false),
+      features?.enableReports !== undefined ? features.enableReports : (existingSettings?.features_enable_reports !== undefined ? existingSettings.features_enable_reports : true),
       settingsId,
     ]);
 
     // Create departments if provided
+    // Note: In isolated databases, agency_id should be NULL since agencies table doesn't exist here
     if (departments && departments.length > 0) {
       for (const dept of departments) {
         if (dept.name) {
-          // Check if department already exists
+          // Check if department already exists (by name only, since agency_id is NULL in isolated DBs)
           const existingDept = await agencyClient.query(`
-            SELECT id FROM public.departments WHERE name = $1 AND (agency_id = $2 OR agency_id IS NULL) LIMIT 1
-          `, [dept.name, agencyId]);
+            SELECT id FROM public.departments WHERE name = $1 LIMIT 1
+          `, [dept.name]);
           
           if (existingDept.rows.length > 0) {
-            // Update existing department (also set agency_id if it's NULL)
+            // Update existing department
             await agencyClient.query(`
               UPDATE public.departments 
-              SET description = $1, agency_id = $2, updated_at = NOW()
-              WHERE id = $3
-            `, [dept.description || '', agencyId, existingDept.rows[0].id]);
+              SET description = $1, updated_at = NOW()
+              WHERE id = $2
+            `, [dept.description || '', existingDept.rows[0].id]);
+            console.log(`[Setup] Updated existing department: ${dept.name}`);
           } else {
-            // Insert new department with agency_id
+            // Insert new department (agency_id is NULL in isolated databases)
             await agencyClient.query(`
               INSERT INTO public.departments (id, name, description, is_active, agency_id, created_at, updated_at)
-              VALUES (gen_random_uuid(), $1, $2, true, $3, NOW(), NOW())
-            `, [dept.name, dept.description || '', agencyId]);
+              VALUES (gen_random_uuid(), $1, $2, true, NULL, NOW(), NOW())
+            `, [dept.name, dept.description || '']);
+            console.log(`[Setup] Created new department: ${dept.name}`);
           }
         }
       }
     }
 
-    // Create team members if provided
+    // Create department heads if provided (team members in setup are treated as heads)
+    let teamCredentials = [];
     if (teamMembers && teamMembers.length > 0) {
       const bcrypt = require('bcrypt');
-      const defaultPassword = 'Welcome123!';
+
+      // Helper to generate a strong random password for first login
+      const generatePassword = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*';
+        let password = '';
+        for (let i = 0; i < 14; i++) {
+          password += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return password;
+      };
+
+      // Pre-load the latest employee_id to generate sequential IDs
+      // Note: In isolated databases, agency_id is NULL, so we query all records
+      let nextEmployeeNumber = 0;
+      try {
+        const latest = await agencyClient.query(
+          `SELECT employee_id FROM public.employee_details 
+           WHERE employee_id IS NOT NULL 
+           ORDER BY created_at DESC 
+           LIMIT 1`
+        );
+        if (latest.rows.length > 0 && latest.rows[0].employee_id) {
+          const match = String(latest.rows[0].employee_id).match(/(\d+)$/);
+          if (match) {
+            nextEmployeeNumber = parseInt(match[1], 10);
+          }
+        }
+      } catch (e) {
+        console.warn('[Setup] Could not determine last employee_id, starting from 0:', e.message);
+      }
+
+      const generateEmployeeId = async () => {
+        // Try sequential EMP-0001, EMP-0002, ...
+        nextEmployeeNumber += 1;
+        let candidate = `EMP-${String(nextEmployeeNumber).padStart(4, '0')}`;
+
+        try {
+          const exists = await agencyClient.query(
+            `SELECT 1 FROM public.employee_details WHERE employee_id = $1 LIMIT 1`,
+            [candidate]
+          );
+          if (exists.rows.length === 0) {
+            return candidate;
+          }
+        } catch (e) {
+          console.warn('[Setup] Error checking existing employee_id, using candidate anyway:', e.message);
+          return candidate;
+        }
+
+        // Fallback: timestamp-based id
+        const ts = Date.now().toString().slice(-6);
+        candidate = `EMP-${ts}`;
+        try {
+          const exists2 = await agencyClient.query(
+            `SELECT 1 FROM public.employee_details WHERE employee_id = $1 LIMIT 1`,
+            [candidate]
+          );
+          if (exists2.rows.length === 0) {
+            return candidate;
+          }
+        } catch {
+          // ignore and continue
+        }
+
+        // Final fallback: random UUID segment
+        const uuidRes = await agencyClient.query(`SELECT gen_random_uuid() as id`);
+        const rid = uuidRes.rows[0]?.id || '';
+        return `EMP-${String(rid).replace(/-/g, '').substring(0, 8).toUpperCase()}`;
+      };
+
       for (const member of teamMembers) {
         if (member.name && member.email) {
           try {
-            const existingUser = await agencyClient.query(`
-              SELECT id FROM public.users WHERE email = $1
-            `, [member.email.toLowerCase()]);
+            // Use a savepoint for each team member so one failure doesn't abort the whole transaction
+            await agencyClient.query('SAVEPOINT team_member_' + member.email.replace(/[^a-zA-Z0-9]/g, '_'));
+            const existingUser = await agencyClient.query(
+              `SELECT id FROM public.users WHERE email = $1`,
+              [member.email.toLowerCase()]
+            );
             if (existingUser.rows.length > 0) {
               console.log(`[Setup] User ${member.email} already exists, skipping creation`);
               continue;
             }
-            const passwordHash = await bcrypt.hash(defaultPassword, 10);
-            const userResult = await agencyClient.query(`
-              INSERT INTO public.users (id, email, password_hash, is_active, email_confirmed, created_at, updated_at)
-              VALUES (gen_random_uuid(), $1, $2, true, false, NOW(), NOW())
-              RETURNING id
-            `, [member.email.toLowerCase(), passwordHash]);
+
+            const plainPassword = generatePassword();
+            const passwordHash = await bcrypt.hash(plainPassword, 10);
+
+            const userResult = await agencyClient.query(
+              `INSERT INTO public.users (id, email, password_hash, is_active, email_confirmed, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, $2, true, false, NOW(), NOW())
+               RETURNING id`,
+              [member.email.toLowerCase(), passwordHash]
+            );
             const userId = userResult.rows[0].id;
-            // Insert profile with agency_id
-            await agencyClient.query(`
-              INSERT INTO public.profiles (id, user_id, full_name, phone, agency_id, created_at, updated_at)
-              VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW(), NOW())
-            `, [userId, member.name, member.phone || null, agencyId]);
-            const role = member.role || 'employee';
-            // Insert user_role with agency_id – match table schema (assigned_at, no created_at/updated_at)
-            await agencyClient.query(`
-              INSERT INTO public.user_roles (id, user_id, role, agency_id, assigned_at)
-              VALUES (gen_random_uuid(), $1, $2, $3, NOW())
-              ON CONFLICT (user_id, role, agency_id) DO NOTHING
-            `, [userId, role, agencyId]);
+
+            // Split full name into first/last for employee_details
+            const nameParts = String(member.name).trim().split(/\s+/);
+            const firstName = nameParts[0] || '';
+            const lastName = nameParts.slice(1).join(' ') || firstName;
+
+            // Generate a unique employee_id for this head of department
+            const employeeId = await generateEmployeeId();
+
+            // Insert profile (agency_id is NULL in isolated databases since agencies table doesn't exist here)
+            // The agency_id in profiles is used for multi-tenant main DB, but in isolated DBs it's not needed
+            await agencyClient.query(
+              `INSERT INTO public.profiles (id, user_id, full_name, phone, agency_id, created_at, updated_at)
+               VALUES (gen_random_uuid(), $1, $2, $3, NULL, NOW(), NOW())`,
+              [userId, member.name, member.phone || null]
+            );
+
+            // Create a basic employee_details record so heads have an employee_id and core metadata
+            // Note: agency_id is NULL in isolated databases
+            await agencyClient.query(
+              `INSERT INTO public.employee_details (
+                 id,
+                 user_id,
+                 employee_id,
+                 agency_id,
+                 first_name,
+                 last_name,
+                 employment_type,
+                 work_location,
+                 is_active,
+                 created_at,
+                 updated_at
+               )
+               VALUES (
+                 gen_random_uuid(),
+                 $1,
+                 $2,
+                 NULL,
+                 $3,
+                 $4,
+                 $5,
+                 NULL,
+                 true,
+                 NOW(),
+                 NOW()
+               )`,
+              [userId, employeeId, firstName, lastName, 'full_time']
+            );
+
+            // Ensure department heads are created with a valid role
+            // Note: app_role enum only supports: 'admin', 'hr', 'finance_manager', 'employee', 'super_admin', 'ceo', 'cfo'
+            // Use 'admin' for department heads since they need elevated permissions
+            const enforcedRole = 'admin';
+
+            // Insert user_role (agency_id is NULL in isolated databases)
+            await agencyClient.query(
+              `INSERT INTO public.user_roles (id, user_id, role, agency_id, assigned_at)
+               VALUES (gen_random_uuid(), $1, $2, NULL, NOW())
+               ON CONFLICT (user_id, role, agency_id) DO NOTHING`,
+              [userId, enforcedRole]
+            );
+
+            let departmentNameForCsv = '';
             if (member.department && member.department !== 'none') {
-              const deptResult = await agencyClient.query(`
-                SELECT id FROM public.departments WHERE name = $1 AND (agency_id = $2 OR agency_id IS NULL) LIMIT 1
-              `, [member.department, agencyId]);
+              // In isolated databases, agency_id is NULL, so query by name only
+              const deptResult = await agencyClient.query(
+                `SELECT id, name FROM public.departments WHERE name = $1 LIMIT 1`,
+                [member.department]
+              );
               if (deptResult.rows.length > 0) {
                 const deptId = deptResult.rows[0].id;
-                // Insert team_assignment with agency_id
-                await agencyClient.query(`
-                  INSERT INTO public.team_assignments (
+                departmentNameForCsv = deptResult.rows[0].name || member.department;
+                // Insert team_assignment (agency_id is NULL in isolated databases)
+                // role_in_department can be a text field, not enum, so we can use 'department_head' here
+                await agencyClient.query(
+                  `INSERT INTO public.team_assignments (
                     id, user_id, department_id, position_title, role_in_department, 
                     agency_id, start_date, is_active, created_at, updated_at
                   )
-                  VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), true, NOW(), NOW())
-                `, [userId, deptId, member.title || '', role, agencyId]);
+                  VALUES (gen_random_uuid(), $1, $2, $3, $4, NULL, NOW(), true, NOW(), NOW())`,
+                  [userId, deptId, member.title || 'Department Head', 'department_head']
+                );
+                console.log(`[Setup] Assigned ${member.name} to department: ${departmentNameForCsv}`);
+              } else {
+                console.warn(`[Setup] Department "${member.department}" not found for team member ${member.name}`);
               }
             }
-            console.log(`[Setup] Created team member: ${member.name} (${member.email})`);
+
+            // Collect credentials for CSV export (only for newly created users)
+            teamCredentials.push({
+              name: member.name,
+              email: member.email.toLowerCase(),
+              role: enforcedRole, // This is the app_role enum value ('admin')
+              department: departmentNameForCsv || member.department || '',
+              employeeId,
+              temporaryPassword: plainPassword,
+            });
+
+            console.log(
+              `[Setup] Created department head: ${member.name} (${member.email}) with employeeId ${employeeId} and role ${enforcedRole}`
+            );
+            // Release savepoint on success
+            await agencyClient.query('RELEASE SAVEPOINT team_member_' + member.email.replace(/[^a-zA-Z0-9]/g, '_'));
           } catch (memberError) {
             console.error(`[Setup] Error creating team member ${member.email}:`, memberError);
+            // Rollback to savepoint to continue with other team members
+            try {
+              await agencyClient.query('ROLLBACK TO SAVEPOINT team_member_' + member.email.replace(/[^a-zA-Z0-9]/g, '_'));
+              console.log(`[Setup] Rolled back team member ${member.email}, continuing with others`);
+            } catch (rollbackError) {
+              console.error(`[Setup] Error rolling back savepoint for ${member.email}:`, rollbackError);
+            }
+            // Continue with next team member instead of aborting entire transaction
           }
         }
       }
@@ -1123,6 +1650,37 @@ async function completeAgencySetup(agencyDatabase, setupData) {
 
     await agencyClient.query('COMMIT');
     console.log(`[Setup] Setup completed successfully for database: ${agencyDatabase}`);
+
+    // Build CSV with first-time login credentials for created department heads
+    let teamCredentialsCsv = '';
+    if (teamCredentials.length > 0) {
+      const header = 'Name,Email,Role,Department,Employee ID,Temporary Password';
+      const rows = teamCredentials.map((c) => {
+        const escape = (value) => {
+          if (value == null) return '';
+          const str = String(value);
+          if (/[",\n]/.test(str)) {
+            return `"${str.replace(/"/g, '""')}"`;
+          }
+          return str;
+        };
+        return [
+          escape(c.name),
+          escape(c.email),
+          escape(c.role),
+          escape(c.department),
+          escape(c.employeeId),
+          escape(c.temporaryPassword),
+        ].join(',');
+      });
+      teamCredentialsCsv = [header, ...rows].join('\n');
+    }
+
+    // Return metadata so API layer can expose credentials to frontend
+    return {
+      teamCredentials,
+      teamCredentialsCsv,
+    };
   } catch (error) {
     console.error(`[Setup] Error completing setup for ${agencyDatabase}:`, error);
     await agencyClient.query('ROLLBACK').catch(rollbackError => {

@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { insertRecord, updateRecord } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface ChartOfAccount {
   id?: string;
@@ -75,13 +76,14 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
       const { selectRecords } = await import('@/services/api/postgresql-service');
       if (!user?.id) return;
       
-      // Get agency_id from profile
+      // Get agency_id using utility function (handles multi-database architecture)
       const { selectOne } = await import('@/services/api/postgresql-service');
       const userProfile = profile || await selectOne('profiles', { user_id: user.id });
+      const agencyId = await getAgencyId(userProfile, user.id);
       
       let where: Record<string, any> = { is_active: true };
-      if (userProfile?.agency_id) {
-        where.agency_id = userProfile.agency_id;
+      if (agencyId) {
+        where.agency_id = agencyId;
       }
       
       const accounts = await selectRecords('chart_of_accounts', {
@@ -130,11 +132,16 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
         return;
       }
 
-      // Get agency_id from profile
+      // Get agency_id using utility function (handles multi-database architecture)
       const { selectOne } = await import('@/services/api/postgresql-service');
       const userProfile = profile || (user?.id ? await selectOne('profiles', { user_id: user.id }) : null);
+      const agencyId = await getAgencyId(userProfile, user?.id);
       
-      if (!userProfile?.agency_id && !account?.id) {
+      // Check if we have agency context (either agency_id or agency_database)
+      const agencyDatabase = localStorage.getItem('agency_database');
+      const hasAgencyContext = agencyId || agencyDatabase;
+      
+      if (!hasAgencyContext && !account?.id) {
         toast({
           title: 'Error',
           description: 'Unable to determine agency. Please ensure you are logged in.',
@@ -147,8 +154,8 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
       // Validate account code is unique within agency (if creating new or changing code)
       if (!account?.id || formData.account_code !== account.account_code) {
         let where: Record<string, any> = { account_code: formData.account_code.trim() };
-        if (userProfile?.agency_id) {
-          where.agency_id = userProfile.agency_id;
+        if (agencyId) {
+          where.agency_id = agencyId;
         }
         
         const existing = await selectOne('chart_of_accounts', where);
@@ -174,9 +181,9 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
       // Handle parent_account_id (matches database column name)
       cleanedData.parent_account_id = formData.parent_account_id || null;
       
-      // Add agency_id when creating new account
-      if (!account?.id && userProfile?.agency_id) {
-        cleanedData.agency_id = userProfile.agency_id;
+      // Add agency_id when creating new account (use getAgencyId result)
+      if (!account?.id && agencyId) {
+        cleanedData.agency_id = agencyId;
       }
 
       if (account?.id) {

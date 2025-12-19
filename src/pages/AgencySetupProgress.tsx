@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { getApiBaseUrl } from '@/config/api';
 import { PageContainer, PageHeader } from '@/components/layout';
 import {
   Loader2,
@@ -55,8 +56,7 @@ export default function AgencySetupProgress() {
           return;
         }
 
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        const apiBaseUrl = API_URL.replace(/\/api\/?$/, '');
+        const apiBaseUrl = getApiBaseUrl();
         
         const response = await fetch(`${apiBaseUrl}/api/agencies/check-setup?database=${encodeURIComponent(agencyDatabase)}&detailed=true`, {
           method: 'GET',

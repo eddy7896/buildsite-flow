@@ -128,7 +128,7 @@ export const PipelineCard: React.FC<PipelineCardProps> = ({
       className={`
         relative p-3 mb-2 cursor-pointer transition-all duration-200
         ${isDragging ? 'opacity-50 scale-95' : 'opacity-100'}
-        ${selected ? 'ring-2 ring-blue-500 bg-blue-50/50' : 'hover:shadow-md'}
+        hover:shadow-md
         ${isStale ? 'border-l-4 border-l-orange-500' : ''}
       `}
       onMouseEnter={() => setIsHovered(true)}

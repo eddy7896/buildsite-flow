@@ -210,6 +210,18 @@ async function ensureLeadsTable(client) {
           ALTER TABLE public.leads ADD COLUMN website TEXT;
         END IF;
 
+        -- Add pipeline_stage (for pipeline board integration)
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'leads' 
+          AND column_name = 'pipeline_stage'
+        ) THEN
+          ALTER TABLE public.leads ADD COLUMN pipeline_stage TEXT;
+          -- Sync existing stage values to pipeline_stage
+          UPDATE public.leads SET pipeline_stage = stage WHERE stage IS NOT NULL AND pipeline_stage IS NULL;
+        END IF;
+
         -- Add job_title
         IF NOT EXISTS (
           SELECT 1 FROM information_schema.columns 
@@ -280,6 +292,18 @@ async function ensureLeadsTable(client) {
           ALTER TABLE public.leads ADD COLUMN converted_to_client_id UUID REFERENCES public.clients(id);
         END IF;
 
+        -- Add pipeline_stage (for pipeline board integration)
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'leads' 
+          AND column_name = 'pipeline_stage'
+        ) THEN
+          ALTER TABLE public.leads ADD COLUMN pipeline_stage TEXT;
+          -- Sync existing stage values to pipeline_stage
+          UPDATE public.leads SET pipeline_stage = stage WHERE stage IS NOT NULL AND pipeline_stage IS NULL;
+        END IF;
+
         -- Create indexes
         CREATE INDEX IF NOT EXISTS idx_leads_status ON public.leads(status);
         CREATE INDEX IF NOT EXISTS idx_leads_priority ON public.leads(priority);
@@ -287,6 +311,7 @@ async function ensureLeadsTable(client) {
         CREATE INDEX IF NOT EXISTS idx_leads_lead_source_id ON public.leads(lead_source_id);
         CREATE INDEX IF NOT EXISTS idx_leads_due_date ON public.leads(due_date);
         CREATE INDEX IF NOT EXISTS idx_leads_follow_up_date ON public.leads(follow_up_date);
+        CREATE INDEX IF NOT EXISTS idx_leads_pipeline_stage ON public.leads(pipeline_stage);
       END $$;
     `);
   } catch (error) {

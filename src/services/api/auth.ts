@@ -251,12 +251,35 @@ export class AuthService extends BaseApiService {
 
   static setupAuthStateListener(callback: (event: string, session: any) => void) {
     // Check for token on storage change
-    const handleStorageChange = () => {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        callback('SIGNED_IN', { user: { id: token } });
-      } else {
-        callback('SIGNED_OUT', null);
+    const handleStorageChange = (e: StorageEvent | null) => {
+      try {
+        // Safely access storage event properties with additional checks
+        // Ensure e is a valid StorageEvent object with the expected properties
+        if (e && typeof e === 'object' && 'key' in e && 'newValue' in e && e.key === 'auth_token' && e.newValue !== undefined) {
+          const token = e.newValue || localStorage.getItem('auth_token');
+          if (token) {
+            callback('SIGNED_IN', { user: { id: token } });
+          } else {
+            callback('SIGNED_OUT', null);
+          }
+        } else {
+          // Fallback: check localStorage directly
+          const token = localStorage.getItem('auth_token');
+          if (token) {
+            callback('SIGNED_IN', { user: { id: token } });
+          } else {
+            callback('SIGNED_OUT', null);
+          }
+        }
+      } catch (error) {
+        // If any error occurs, fallback to checking localStorage directly
+        console.warn('Error handling storage event:', error);
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          callback('SIGNED_IN', { user: { id: token } });
+        } else {
+          callback('SIGNED_OUT', null);
+        }
       }
     };
 

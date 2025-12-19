@@ -251,9 +251,46 @@ class CRMService {
       orderBy: 'stage_order ASC'
     });
 
-    // If no custom stages exist, return default stages
+    // If no custom stages exist, create default stages in database
     if (stages.length === 0) {
-      return this.getDefaultStages(agencyId);
+      const defaultStages = this.getDefaultStages(agencyId);
+      // Insert default stages into database
+      const createdStages: PipelineStage[] = [];
+      for (const stage of defaultStages) {
+        try {
+          const created = await insertRecord<PipelineStage>(
+            'sales_pipeline',
+            {
+              stage_name: stage.stage_name,
+              stage_order: stage.stage_order,
+              description: stage.description,
+              probability: stage.probability,
+              color: stage.color,
+              is_active: stage.is_active,
+              agency_id: stage.agency_id,
+              created_at: stage.created_at,
+              updated_at: stage.updated_at,
+            },
+            userId,
+            agencyId
+          );
+          createdStages.push(created);
+        } catch (error: any) {
+          // If stage already exists (race condition), fetch it
+          console.warn(`Stage ${stage.stage_name} might already exist:`, error.message);
+        }
+      }
+      
+      // Fetch all stages again to get the created ones
+      const allStages = await selectRecords<PipelineStage>('sales_pipeline', {
+        filters: [
+          { column: 'agency_id', operator: 'eq', value: agencyId },
+          { column: 'is_active', operator: 'eq', value: true }
+        ],
+        orderBy: 'stage_order ASC'
+      });
+      
+      return allStages.length > 0 ? allStages : defaultStages;
     }
 
     return stages;

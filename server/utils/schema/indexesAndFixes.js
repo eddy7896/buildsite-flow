@@ -194,15 +194,57 @@ async function ensureReimbursementIndexes(client) {
  * Ensure all indexes for miscellaneous tables
  */
 async function ensureMiscIndexes(client) {
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id)`);
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_read_at ON public.notifications(read_at)`);
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(created_at)`);
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_company_events_start_date ON public.company_events(start_date)`);
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_holidays_holiday_date ON public.holidays(holiday_date)`);
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_holidays_date ON public.holidays(date)`);
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_reports_type ON public.reports(type)`);
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_reports_generated_at ON public.reports(generated_at)`);
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_file_storage_bucket_path ON public.file_storage(bucket_name, file_path)`);
+  // Check if tables exist before creating indexes
+  const tableCheck = await client.query(`
+    SELECT table_name 
+    FROM information_schema.tables 
+    WHERE table_schema = 'public' 
+    AND table_name IN ('notifications', 'company_events', 'holidays', 'reports', 'file_storage')
+  `);
+  
+  const existingTables = new Set(tableCheck.rows.map(r => r.table_name));
+  
+  if (existingTables.has('notifications')) {
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_read_at ON public.notifications(read_at)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(created_at)`);
+  }
+  
+  if (existingTables.has('company_events')) {
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_company_events_start_date ON public.company_events(start_date)`);
+  }
+  
+  if (existingTables.has('holidays')) {
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_holidays_holiday_date ON public.holidays(holiday_date)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_holidays_date ON public.holidays(date)`);
+  }
+  
+  if (existingTables.has('reports')) {
+    // Check if report_type column exists (it should, but verify for safety)
+    const columnCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+      AND table_name = 'reports' 
+      AND column_name IN ('report_type', 'type')
+    `);
+    
+    const hasReportType = columnCheck.rows.some(r => r.column_name === 'report_type');
+    const hasType = columnCheck.rows.some(r => r.column_name === 'type');
+    
+    // Create index on report_type if it exists, otherwise on type (for backward compatibility)
+    if (hasReportType) {
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_reports_type ON public.reports(report_type)`);
+    } else if (hasType) {
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_reports_type ON public.reports(type)`);
+    }
+    
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_reports_generated_at ON public.reports(generated_at)`);
+  }
+  
+  if (existingTables.has('file_storage')) {
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_file_storage_bucket_path ON public.file_storage(bucket_name, file_path)`);
+  }
 }
 
 /**

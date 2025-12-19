@@ -448,6 +448,72 @@ async function repairMissingColumn(agencyDatabase, tableName, columnName) {
         console.log(`[API] Running full schema repair for ${tableName}.${columnName}...`);
         await createAgencySchema(agencyClient);
       }
+    } else if (tableName === 'reports') {
+      // Handle reports table columns
+      console.log(`[API] 🔧 Adding ${columnName} to reports table...`);
+      try {
+        if (columnName === 'report_type') {
+          // First check if 'type' column exists and rename it
+          const typeCheck = await agencyClient.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'reports' 
+            AND column_name IN ('type', 'report_type')
+          `);
+          
+          const hasType = typeCheck.rows.some(r => r.column_name === 'type');
+          const hasReportType = typeCheck.rows.some(r => r.column_name === 'report_type');
+          
+          console.log(`[API] Reports table check - hasType: ${hasType}, hasReportType: ${hasReportType}`);
+          
+          if (hasType && !hasReportType) {
+            await agencyClient.query('ALTER TABLE public.reports RENAME COLUMN type TO report_type');
+            console.log(`[API] ✅ Renamed 'type' to 'report_type' in reports table`);
+          } else if (!hasReportType) {
+            // Check if table has any rows - if it does, we need to handle NOT NULL constraint
+            const rowCount = await agencyClient.query('SELECT COUNT(*) as count FROM public.reports');
+            const count = parseInt(rowCount.rows[0].count);
+            
+            if (count > 0) {
+              // Table has data, add as nullable first, then set default and make NOT NULL
+              await agencyClient.query('ALTER TABLE public.reports ADD COLUMN report_type TEXT');
+              await agencyClient.query('UPDATE public.reports SET report_type = \'custom\' WHERE report_type IS NULL');
+              await agencyClient.query('ALTER TABLE public.reports ALTER COLUMN report_type SET NOT NULL');
+              await agencyClient.query('ALTER TABLE public.reports ALTER COLUMN report_type SET DEFAULT \'custom\'');
+            } else {
+              // Empty table, can add as NOT NULL directly
+              await agencyClient.query('ALTER TABLE public.reports ADD COLUMN report_type TEXT NOT NULL DEFAULT \'custom\'');
+            }
+            console.log(`[API] ✅ Added report_type column to reports table`);
+          } else {
+            console.log(`[API] ℹ️ report_type column already exists in reports table`);
+          }
+        } else if (columnName === 'file_name') {
+          await agencyClient.query('ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS file_name TEXT');
+        } else if (columnName === 'file_size') {
+          await agencyClient.query('ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS file_size BIGINT');
+        } else if (columnName === 'expires_at') {
+          await agencyClient.query('ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE');
+        } else if (columnName === 'is_public') {
+          await agencyClient.query('ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT false');
+        } else if (columnName === 'agency_id') {
+          await agencyClient.query('ALTER TABLE public.reports ADD COLUMN IF NOT EXISTS agency_id UUID');
+          await agencyClient.query('CREATE INDEX IF NOT EXISTS idx_reports_agency_id ON public.reports(agency_id)');
+        } else {
+          // For any other reports column, run full schema repair
+          console.log(`[API] Running full schema repair for ${tableName}.${columnName}...`);
+          await createAgencySchema(agencyClient);
+        }
+        console.log(`[API] ✅ Added ${columnName} column to ${tableName} table`);
+      } catch (addError) {
+        if (addError.message.includes('already exists') || addError.message.includes('duplicate')) {
+          console.log(`[API] ℹ️ Column ${columnName} already exists in ${tableName}`);
+        } else {
+          console.error(`[API] ❌ Failed to add ${columnName}:`, addError.message);
+          throw addError;
+        }
+      }
     } else {
       // For any other missing column, run full schema repair
       console.log(`[API] Running full schema repair for ${tableName}.${columnName}...`);

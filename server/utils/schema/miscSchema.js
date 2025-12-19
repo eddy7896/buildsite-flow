@@ -35,9 +35,37 @@ async function ensureNotificationsTable(client) {
       read_at TIMESTAMP WITH TIME ZONE,
       sent_at TIMESTAMP WITH TIME ZONE,
       expires_at TIMESTAMP WITH TIME ZONE,
+      agency_id UUID NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
+  `);
+
+  // Add agency_id column if it doesn't exist (for existing tables)
+  await client.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'notifications' 
+        AND column_name = 'agency_id'
+      ) THEN
+        ALTER TABLE public.notifications ADD COLUMN agency_id UUID;
+        -- Set default agency_id for existing records (will need to be updated based on user's agency)
+        UPDATE public.notifications SET agency_id = (
+          SELECT agency_id FROM public.profiles WHERE profiles.user_id = notifications.user_id LIMIT 1
+        ) WHERE agency_id IS NULL;
+        -- If still null, set to default (shouldn't happen in production)
+        UPDATE public.notifications SET agency_id = '00000000-0000-0000-0000-000000000000' WHERE agency_id IS NULL;
+        ALTER TABLE public.notifications ALTER COLUMN agency_id SET NOT NULL;
+      END IF;
+    END $$;
+  `);
+
+  // Create index for agency_id
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_notifications_agency_id ON public.notifications(agency_id);
   `);
 }
 
@@ -133,15 +161,130 @@ async function ensureReportsTable(client) {
     CREATE TABLE IF NOT EXISTS public.reports (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       name TEXT NOT NULL,
-      type TEXT NOT NULL,
+      report_type TEXT NOT NULL,
       description TEXT,
       parameters JSONB,
       file_path TEXT,
+      file_name TEXT,
+      file_size BIGINT,
       generated_by UUID REFERENCES public.users(id),
+      expires_at TIMESTAMP WITH TIME ZONE,
+      is_public BOOLEAN DEFAULT false,
+      agency_id UUID,
       generated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
+  `);
+
+  // Add missing columns if they don't exist (for existing tables)
+  // First check if table exists
+  const tableExists = await client.query(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name = 'reports'
+    )
+  `);
+  
+  if (tableExists.rows[0].exists) {
+    // Table exists, check and migrate columns
+    const columnCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+      AND table_name = 'reports' 
+      AND column_name IN ('type', 'report_type')
+    `);
+    
+    const hasType = columnCheck.rows.some(r => r.column_name === 'type');
+    const hasReportType = columnCheck.rows.some(r => r.column_name === 'report_type');
+    
+    // Rename 'type' to 'report_type' if needed
+    if (hasType && !hasReportType) {
+      await client.query('ALTER TABLE public.reports RENAME COLUMN type TO report_type');
+      console.log('[SQL] ✅ Renamed reports.type to reports.report_type');
+    }
+    
+    // Add report_type if it still doesn't exist
+    if (!hasReportType) {
+      // Check if table has rows
+      const rowCount = await client.query('SELECT COUNT(*) as count FROM public.reports');
+      const count = parseInt(rowCount.rows[0].count);
+      
+      if (count > 0) {
+        // Table has data, add as nullable first
+        await client.query('ALTER TABLE public.reports ADD COLUMN report_type TEXT');
+        await client.query('UPDATE public.reports SET report_type = \'custom\' WHERE report_type IS NULL');
+        await client.query('ALTER TABLE public.reports ALTER COLUMN report_type SET NOT NULL');
+        await client.query('ALTER TABLE public.reports ALTER COLUMN report_type SET DEFAULT \'custom\'');
+      } else {
+        // Empty table, can add as NOT NULL directly
+        await client.query('ALTER TABLE public.reports ADD COLUMN report_type TEXT NOT NULL DEFAULT \'custom\'');
+      }
+      console.log('[SQL] ✅ Added report_type column to reports table');
+    }
+  }
+  
+  // Use DO block for other columns (simpler)
+  await client.query(`
+    DO $$
+    BEGIN
+
+      -- Add file_name if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'reports' 
+        AND column_name = 'file_name'
+      ) THEN
+        ALTER TABLE public.reports ADD COLUMN file_name TEXT;
+      END IF;
+
+      -- Add file_size if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'reports' 
+        AND column_name = 'file_size'
+      ) THEN
+        ALTER TABLE public.reports ADD COLUMN file_size BIGINT;
+      END IF;
+
+      -- Add expires_at if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'reports' 
+        AND column_name = 'expires_at'
+      ) THEN
+        ALTER TABLE public.reports ADD COLUMN expires_at TIMESTAMP WITH TIME ZONE;
+      END IF;
+
+      -- Add is_public if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'reports' 
+        AND column_name = 'is_public'
+      ) THEN
+        ALTER TABLE public.reports ADD COLUMN is_public BOOLEAN DEFAULT false;
+      END IF;
+
+      -- Add agency_id if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'reports' 
+        AND column_name = 'agency_id'
+      ) THEN
+        ALTER TABLE public.reports ADD COLUMN agency_id UUID;
+        CREATE INDEX IF NOT EXISTS idx_reports_agency_id ON public.reports(agency_id);
+      END IF;
+    EXCEPTION
+      WHEN OTHERS THEN
+        RAISE NOTICE 'Error adding columns to reports table: %', SQLERRM;
+    END $$;
   `);
 }
 

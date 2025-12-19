@@ -464,6 +464,12 @@ class ProjectService {
 
     const assigneeMap = new Map(assignees.map((a: any) => [a.user_id, a]));
 
+    // Fetch project if task has project_id
+    let project = null;
+    if (task.project_id) {
+      project = await selectOne('projects', { id: task.project_id, agency_id: agencyId });
+    }
+
     return {
       ...task,
       tags: Array.isArray(task.tags) ? task.tags : 
@@ -477,6 +483,10 @@ class ProjectService {
       custom_fields: typeof task.custom_fields === 'object' ? task.custom_fields : 
                      typeof task.custom_fields === 'string' ? JSON.parse(task.custom_fields || '{}') : {},
       assignee: task.assignee_id ? assigneeMap.get(task.assignee_id) : undefined,
+      project: project ? {
+        id: project.id,
+        name: project.name
+      } : undefined,
       assignments: assignments.map((a: any) => ({
         id: a.id,
         user_id: a.user_id,
@@ -604,6 +614,91 @@ class ProjectService {
       assigned_by: assignedBy,
       agency_id: agencyId,
     }, assignedBy, agencyId);
+    
+    // Create notification for the assigned user
+    try {
+      // Get task details directly from database (more reliable than getTask which might fail on project fetch)
+      const task = await selectOne('tasks', {
+        id: taskId,
+        agency_id: agencyId
+      });
+      
+      if (!task) {
+        console.warn('Task not found for notification creation:', taskId);
+        return assignment as TaskAssignment;
+      }
+      
+      // Get assigner's profile for the notification message
+      let assignerName = 'Someone';
+      try {
+        const assignerProfile = await selectOne('profiles', {
+          user_id: assignedBy,
+          agency_id: agencyId
+        });
+        if (assignerProfile) {
+          assignerName = (assignerProfile as any).full_name || 'Someone';
+        }
+      } catch (error) {
+        console.warn('Failed to fetch assigner profile for notification:', error);
+      }
+      
+      const taskTitle = (task as any).title || 'Task';
+      
+      // Get project name if project_id exists
+      let projectName = '';
+      if ((task as any).project_id) {
+        try {
+          const project = await selectOne('projects', {
+            id: (task as any).project_id,
+            agency_id: agencyId
+          });
+          if (project) {
+            projectName = ` in ${(project as any).name}`;
+          }
+        } catch (error) {
+          // Project fetch failed, but continue without project name
+          console.warn('Failed to fetch project for notification:', error);
+        }
+      }
+      
+      // Determine priority based on task priority
+      let notificationPriority: 'low' | 'normal' | 'high' | 'urgent' = 'normal';
+      const taskPriority = (task as any).priority;
+      if (taskPriority === 'critical' || taskPriority === 'urgent') {
+        notificationPriority = 'urgent';
+      } else if (taskPriority === 'high') {
+        notificationPriority = 'high';
+      } else if (taskPriority === 'low') {
+        notificationPriority = 'low';
+      }
+      
+      // Create notification message
+      const notificationMessage = `${assignerName} assigned you a task: "${taskTitle}"${projectName}.`;
+      
+      // Create action URL to navigate to the task
+      const actionUrl = `/project-management?task=${taskId}`;
+      
+      // Create the notification
+      await insertRecord('notifications', {
+        user_id: userId,
+        type: 'in_app',
+        category: 'update',
+        title: 'New Task Assignment',
+        message: notificationMessage,
+        priority: notificationPriority,
+        action_url: actionUrl,
+        metadata: {
+          task_id: taskId,
+          assigned_by: assignedBy,
+          task_title: taskTitle,
+          project_id: (task as any).project_id || null,
+          project_name: projectName ? projectName.replace(' in ', '') : null,
+        },
+      }, assignedBy, agencyId);
+    } catch (error) {
+      // Log error but don't fail the assignment if notification creation fails
+      console.error('Failed to create notification for task assignment:', error);
+    }
     
     return assignment as TaskAssignment;
   }

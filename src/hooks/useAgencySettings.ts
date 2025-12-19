@@ -49,12 +49,52 @@ export const useAgencySettings = () => {
       setLoading(true);
       setError(null);
 
-      // Try to fetch agency settings
+      // Try to fetch agency settings from agency database
       const agencySettings = await selectOne<AgencySettings>('agency_settings', {});
 
-      if (agencySettings) {
+      // Also fetch from main database if agency_name is missing or default
+      let mainDbSettings = null;
+      const agencyId = await getAgencyId(profile, user?.id);
+      // Skip API call if agencyId is the placeholder UUID
+      const isValidAgencyId = agencyId && agencyId !== '00000000-0000-0000-0000-000000000000';
+      if (isValidAgencyId && (!agencySettings?.agency_name || agencySettings.agency_name === 'My Agency' || agencySettings.agency_name === '')) {
+        try {
+          const { getApiBaseUrl } = await import('@/config/api');
+          const apiBaseUrl = getApiBaseUrl();
+          const response = await fetch(`${apiBaseUrl}/api/system/agency-settings/${encodeURIComponent(agencyId)}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            mainDbSettings = data?.data?.settings || data.settings;
+            console.log('[useAgencySettings] Fetched main DB settings for agency_name:', mainDbSettings?.agency_name);
+          }
+        } catch (error) {
+          console.warn('[useAgencySettings] Failed to fetch from main DB:', error);
+        }
+      }
+
+      // Merge settings: prefer agency DB, but use main DB for agency_name if agency DB has default/empty
+      const mergedSettings = agencySettings ? {
+        ...agencySettings,
+        // Use main DB agency_name if agency DB has default/empty value
+        agency_name: (agencySettings.agency_name && agencySettings.agency_name !== 'My Agency' && agencySettings.agency_name !== '')
+          ? agencySettings.agency_name
+          : (mainDbSettings?.agency_name || agencySettings.agency_name),
+      } : (mainDbSettings ? {
+        ...mainDbSettings,
+        // Map main DB fields to agency settings structure
+        default_currency: mainDbSettings.default_currency || mainDbSettings.currency || DEFAULT_SETTINGS.default_currency,
+      } : null);
+
+      if (mergedSettings) {
         // Parse working_days if it's a string or handle JSONB
-        let workingDays = agencySettings.working_days;
+        let workingDays = mergedSettings.working_days;
         if (typeof workingDays === 'string') {
           try {
             // Try to parse as JSON
@@ -75,16 +115,18 @@ export const useAgencySettings = () => {
         }
 
         const parsedSettings: AgencySettings = {
-          ...agencySettings,
+          ...mergedSettings,
           working_days: workingDays as string[],
-          default_currency: agencySettings.default_currency || agencySettings.currency || DEFAULT_SETTINGS.default_currency,
-          primary_color: agencySettings.primary_color || DEFAULT_SETTINGS.primary_color,
-          secondary_color: agencySettings.secondary_color || DEFAULT_SETTINGS.secondary_color,
-          timezone: agencySettings.timezone || DEFAULT_SETTINGS.timezone,
-          date_format: agencySettings.date_format || DEFAULT_SETTINGS.date_format,
-          fiscal_year_start: agencySettings.fiscal_year_start || DEFAULT_SETTINGS.fiscal_year_start,
-          working_hours_start: agencySettings.working_hours_start || DEFAULT_SETTINGS.working_hours_start,
-          working_hours_end: agencySettings.working_hours_end || DEFAULT_SETTINGS.working_hours_end,
+          default_currency: mergedSettings.default_currency || mergedSettings.currency || DEFAULT_SETTINGS.default_currency,
+          primary_color: mergedSettings.primary_color || DEFAULT_SETTINGS.primary_color,
+          secondary_color: mergedSettings.secondary_color || DEFAULT_SETTINGS.secondary_color,
+          timezone: mergedSettings.timezone || DEFAULT_SETTINGS.timezone,
+          date_format: mergedSettings.date_format || DEFAULT_SETTINGS.date_format,
+          fiscal_year_start: mergedSettings.fiscal_year_start || DEFAULT_SETTINGS.fiscal_year_start,
+          working_hours_start: mergedSettings.working_hours_start || DEFAULT_SETTINGS.working_hours_start,
+          working_hours_end: mergedSettings.working_hours_end || DEFAULT_SETTINGS.working_hours_end,
+          // Ensure agency_name is set from merged settings
+          agency_name: mergedSettings.agency_name || DEFAULT_SETTINGS.agency_name,
         };
 
         setSettings(parsedSettings);

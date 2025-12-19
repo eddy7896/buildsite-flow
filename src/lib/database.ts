@@ -383,6 +383,16 @@ async function handleRpcCall(functionName: string, params: Record<string, any>):
         return { data: null, error: null };
       }
       case 'create_notification': {
+        // Get agency_id from params or try to get it from user's profile
+        let agencyId = params.p_agency_id;
+        if (!agencyId && params.p_user_id) {
+          // Try to get agency_id from user's profile
+          const profile = await selectOne('profiles', { user_id: params.p_user_id });
+          if (profile) {
+            agencyId = (profile as any).agency_id;
+          }
+        }
+        
         const notification = await insertRecord('notifications', {
           id: generateUUID(),
           user_id: params.p_user_id,
@@ -394,7 +404,7 @@ async function handleRpcCall(functionName: string, params: Record<string, any>):
           action_url: params.p_action_url || null,
           metadata: params.p_metadata || {},
           created_at: new Date().toISOString(),
-        });
+        }, params.p_user_id, agencyId);
         return { data: notification, error: null };
       }
       case 'has_permission': {
@@ -649,7 +659,8 @@ const storage = {
         try {
           const { uploadFile } = await import('@/services/file-storage');
           const fileBuffer = await file.arrayBuffer();
-          const userId = (window as any).__currentUserId || 'system';
+          // Use null instead of 'system' string - uploaded_by expects UUID or null
+          const userId = (window as any).__currentUserId || null;
           // Pass ArrayBuffer directly - uploadFile now handles it
           const result = await uploadFile(bucket, path, fileBuffer, userId, file.type);
           return { data: { path: result.file_path }, error: null };

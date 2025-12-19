@@ -64,6 +64,49 @@ async function ensureEmployeeDetailsTable(client) {
     }
   }
 
+  // Add unique constraint on user_id if it doesn't exist (for upsert operations)
+  try {
+    // Check if unique constraint already exists
+    const constraintCheck = await client.query(`
+      SELECT constraint_name 
+      FROM information_schema.table_constraints 
+      WHERE table_schema = 'public' 
+      AND table_name = 'employee_details' 
+      AND constraint_type = 'UNIQUE'
+      AND constraint_name LIKE '%user_id%'
+    `);
+    
+    if (constraintCheck.rows.length === 0) {
+      // Check for duplicate user_ids before adding constraint
+      const duplicates = await client.query(`
+        SELECT user_id, COUNT(*) as count
+        FROM public.employee_details
+        WHERE user_id IS NOT NULL
+        GROUP BY user_id
+        HAVING COUNT(*) > 1
+      `);
+      
+      if (duplicates.rows.length > 0) {
+        console.warn('[SQL] ⚠️ Found duplicate user_ids in employee_details. Cannot add unique constraint until duplicates are resolved.');
+        console.warn('[SQL] Duplicates:', duplicates.rows);
+      } else {
+        // Add unique constraint
+        await client.query(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_employee_details_user_id_unique 
+          ON public.employee_details(user_id) 
+          WHERE user_id IS NOT NULL
+        `);
+        console.log('[SQL] ✅ Added unique constraint on employee_details.user_id');
+      }
+    } else {
+      console.log('[SQL] ✅ Unique constraint on employee_details.user_id already exists');
+    }
+  } catch (error) {
+    if (!error.message.includes('already exists') && !error.message.includes('duplicate')) {
+      console.warn('[SQL] Warning adding unique constraint on user_id:', error.message);
+    }
+  }
+
   // Create audit trigger
   await client.query(`
     DROP TRIGGER IF EXISTS audit_employee_details_changes ON public.employee_details;

@@ -42,10 +42,12 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
+import { getApiBaseUrl } from '@/config/api';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getPagesForRole, type PageConfig } from '@/utils/rolePages';
 import { AppRole } from '@/utils/roleUtils';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
+import { canAccessRoute } from '@/utils/routePermissions';
 
 // Icon mapping from string names to icon components
 const iconMap: Record<string, any> = {
@@ -101,8 +103,7 @@ export function AppSidebar() {
           return;
         }
 
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        const apiBaseUrl = API_URL.replace(/\/api\/?$/, '');
+        const apiBaseUrl = getApiBaseUrl();
         
         const response = await fetch(`${apiBaseUrl}/api/agencies/check-setup?database=${encodeURIComponent(agencyDatabase)}`, {
           method: 'GET',
@@ -155,10 +156,26 @@ export function AppSidebar() {
   const role = userRole as AppRole;
   const rolePages = getPagesForRole(role);
   
-  // Filter to only show pages that exist and are not settings (settings goes at bottom)
-  // Sort by category for better organization
+  // Filter to only show pages that:
+  // 1. Actually exist
+  // 2. Are not settings (settings goes at bottom)
+  // 3. User can actually access based on routePermissions (CRITICAL: prevents "Access Denied" errors)
   const mainPages = rolePages
-    .filter(page => page.exists && page.category !== 'settings')
+    .filter(page => {
+      // Must exist
+      if (!page.exists) return false;
+      
+      // Skip settings (shown at bottom)
+      if (page.category === 'settings') return false;
+      
+      // CRITICAL: Check if user can actually access this route
+      // This ensures sidebar only shows pages that won't show "Access Denied"
+      if (userRole && !canAccessRoute(userRole, page.path)) {
+        return false;
+      }
+      
+      return true;
+    })
     .sort((a, b) => {
       // Define category order
       const categoryOrder: Record<string, number> = {
@@ -177,7 +194,13 @@ export function AppSidebar() {
       return a.title.localeCompare(b.title);
     });
   
-  const settingsPage = rolePages.find(page => page.path === '/settings' && page.exists);
+  // Find settings page, but also verify user can access it
+  const settingsPage = rolePages.find(page => {
+    if (page.path !== '/settings' || !page.exists) return false;
+    // Verify user can access settings route
+    if (userRole && !canAccessRoute(userRole, '/settings')) return false;
+    return true;
+  });
   
   const collapsed = state === 'collapsed';
 

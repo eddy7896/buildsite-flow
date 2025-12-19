@@ -97,18 +97,13 @@ export function DepartmentFormDialog({
 
   const fetchDepartments = async () => {
     try {
-      const agencyId = profile?.agency_id;
-      
-      let query = db
+      // In isolated database architecture, all records in this DB belong to the agency
+      // No need to filter by agency_id - just get all active departments
+      const { data, error } = await db
         .from("departments")
         .select("id, name")
-        .eq("is_active", true);
-      
-      if (agencyId) {
-        query = query.eq("agency_id", agencyId);
-      }
-      
-      const { data, error } = await query.order("name");
+        .eq("is_active", true)
+        .order("name");
 
       if (error) throw error;
       if (data) {

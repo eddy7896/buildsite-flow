@@ -125,6 +125,60 @@ async function ensureAgencySettingsTable(client) {
       EXCEPTION WHEN duplicate_column THEN
         NULL;
       END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS address_street TEXT;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS address_city TEXT;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS address_state TEXT;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS address_zip TEXT;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS address_country TEXT;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS employee_count TEXT;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS founded_year TEXT;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS description TEXT;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS enable_gst BOOLEAN DEFAULT false;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
     END $$;
   `);
 

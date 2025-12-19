@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { getApiBaseUrl } from '@/config/api';
 import { 
   Loader2, 
   Building2, 
@@ -43,17 +44,32 @@ import {
   Gift,
   ToggleLeft,
   ToggleRight,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Database
 } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
 import { Info, HelpCircle } from 'lucide-react';
+
+// Available domain suffixes for selection (without buildflow)
+const DOMAIN_SUFFIXES = [
+  { value: '.app', label: '.app' },
+  { value: '.com', label: '.com' },
+  { value: '.io', label: '.io' },
+  { value: '.net', label: '.net' },
+  { value: '.org', label: '.org' },
+  { value: '.co', label: '.co' },
+  { value: '.dev', label: '.dev' },
+  { value: '.tech', label: '.tech' },
+];
 
 interface AgencyFormData {
   // Step 1-3: Agency Information
   agencyName: string;
   domain: string;
+  domainSuffix: string;
   industry: string;
   companySize: string;
   address: string;
@@ -253,35 +269,47 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 // Domain availability check component
-const DomainChecker = memo(({ domain, onAvailable }: { domain: string; onAvailable: (available: boolean) => void }) => {
-  const [checking, setChecking] = useState(false);
+const DomainChecker = memo(({ domain, onAvailable, onChecking }: { domain: string; onAvailable: (available: boolean | null) => void; onChecking: (checking: boolean) => void }) => {
   const debouncedDomain = useDebounce(domain, 500);
 
   useEffect(() => {
     if (!debouncedDomain || debouncedDomain.length < 3) {
-      onAvailable(false);
+      onAvailable(null);
+      onChecking(false);
+      return;
+    }
+
+    // Validate domain format before checking
+    const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
+    if (!domainRegex.test(debouncedDomain.trim())) {
+      onAvailable(null);
+      onChecking(false);
       return;
     }
 
     const checkDomain = async () => {
-      setChecking(true);
+      onChecking(true);
       try {
-        let API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        API_URL = API_URL.replace(/\/api\/?$/, '');
+        const API_URL = getApiBaseUrl();
         
-        const response = await fetch(`${API_URL}/api/agencies/check-domain?domain=${encodeURIComponent(debouncedDomain)}`);
+        const response = await fetch(`${API_URL}/api/agencies/check-domain?domain=${encodeURIComponent(debouncedDomain.trim())}`);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const result = await response.json();
-        onAvailable(result.available !== false);
+        onAvailable(result.available === true);
       } catch (error) {
         console.error('Domain check error:', error);
-        onAvailable(true); // Assume available on error
+        onAvailable(null); // Set to null on error to show neutral state
       } finally {
-        setChecking(false);
+        onChecking(false);
       }
     };
 
     checkDomain();
-  }, [debouncedDomain, onAvailable]);
+  }, [debouncedDomain, onAvailable, onChecking]);
 
   return null;
 });
@@ -293,14 +321,23 @@ export default function AgencyOnboardingWizard() {
   const { toast } = useToast();
   const { signIn } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
+
+  // Scroll to top on mount and step changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [currentStep]);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [domainAvailable, setDomainAvailable] = useState<boolean | null>(null);
+  const [domainChecking, setDomainChecking] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [currentLoadingStep, setCurrentLoadingStep] = useState(0);
   
   const [formData, setFormData] = useState<AgencyFormData>({
     agencyName: '',
     domain: '',
+    domainSuffix: '.app',
     industry: '',
     companySize: '',
     address: '',
@@ -347,6 +384,62 @@ export default function AgencyOnboardingWizard() {
     localStorage.setItem('agency_onboarding_draft', JSON.stringify(draftData));
   }, [formData, currentStep, completedSteps]);
 
+  // Animate loading progress
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingProgress(0);
+      setCurrentLoadingStep(0);
+      return;
+    }
+
+    const loadingSteps = [
+      { label: 'Initializing database connection', icon: Database, progress: 10 },
+      { label: 'Creating shared functions and extensions', icon: Layers, progress: 20 },
+      { label: 'Setting up authentication schema', icon: Shield, progress: 30 },
+      { label: 'Creating agency tables', icon: Building2, progress: 40 },
+      { label: 'Setting up departments structure', icon: Network, progress: 50 },
+      { label: 'Configuring HR modules', icon: Users, progress: 60 },
+      { label: 'Creating clients and financial tables', icon: Briefcase, progress: 70 },
+      { label: 'Setting up projects and tasks', icon: Target, progress: 80 },
+      { label: 'Configuring CRM and GST modules', icon: BarChart3, progress: 90 },
+      { label: 'Applying indexes and finalizing', icon: CheckCircle2, progress: 95 },
+    ];
+
+    let progressInterval: NodeJS.Timeout;
+    let stepInterval: NodeJS.Timeout;
+
+    // Animate progress bar
+    const startProgress = 0;
+    const endProgress = 95;
+    const duration = 15000; // 15 seconds total
+    const steps = 100;
+    const increment = (endProgress - startProgress) / steps;
+    const stepDuration = duration / steps;
+
+    let currentProgress = startProgress;
+    progressInterval = setInterval(() => {
+      currentProgress += increment;
+      if (currentProgress >= endProgress) {
+        currentProgress = endProgress;
+        clearInterval(progressInterval);
+      }
+      setLoadingProgress(currentProgress);
+    }, stepDuration);
+
+    // Cycle through loading steps
+    let stepIndex = 0;
+    setCurrentLoadingStep(0);
+    stepInterval = setInterval(() => {
+      stepIndex = (stepIndex + 1) % loadingSteps.length;
+      setCurrentLoadingStep(stepIndex);
+    }, 1500);
+
+    return () => {
+      clearInterval(progressInterval);
+      clearInterval(stepInterval);
+    };
+  }, [isLoading]);
+
   // Update company preview as user types
   useEffect(() => {
     if (formData.agencyName || formData.industry || formData.companySize) {
@@ -375,8 +468,9 @@ export default function AgencyOnboardingWizard() {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '') || 'owner';
     const cleanDomain = formData.domain.toLowerCase().trim();
-    return `${firstWord}@${cleanDomain}.buildflow.app`;
-  }, [formData.domain, formData.agencyName]);
+    const suffix = formData.domainSuffix || '.app';
+    return `${firstWord}@${cleanDomain}${suffix}`;
+  }, [formData.domain, formData.domainSuffix, formData.agencyName]);
 
   const POPULAR_DIAL_CODES = ['+1', '+44', '+91'];
 
@@ -389,8 +483,12 @@ export default function AgencyOnboardingWizard() {
     setDomainAvailable(null);
   }, [generateDomain]);
 
-  const handleDomainAvailable = useCallback((available: boolean) => {
+  const handleDomainAvailable = useCallback((available: boolean | null) => {
     setDomainAvailable(available);
+  }, []);
+
+  const handleDomainChecking = useCallback((checking: boolean) => {
+    setDomainChecking(checking);
   }, []);
 
   // Optimized validation with debouncing
@@ -412,8 +510,14 @@ export default function AgencyOnboardingWizard() {
           newErrors.domain = 'Domain can only contain letters, numbers, and hyphens';
         } else if (formData.domain.trim().length < 3) {
           newErrors.domain = 'Domain must be at least 3 characters';
+        } else if (domainChecking) {
+          newErrors.domain = 'Checking domain availability...';
         } else if (domainAvailable === false) {
-          newErrors.domain = 'This domain is already taken';
+          newErrors.domain = 'This domain is already taken. Please choose another.';
+        } else if (domainAvailable === null && formData.domain.trim().length >= 3) {
+          newErrors.domain = 'Please wait while we check domain availability...';
+        } else if (domainAvailable === true) {
+          // Domain is available - no error
         }
       }
     } else if (step === 2) {
@@ -478,11 +582,28 @@ export default function AgencyOnboardingWizard() {
           !formData.adminPassword || !formData.subscriptionPlan) {
         newErrors.general = 'Please complete all required fields';
       }
+      
+      // Final check: domain must be available
+      if (domainAvailable === false) {
+        newErrors.domain = 'Domain is not available. Please choose a different domain.';
+      } else if (domainChecking) {
+        newErrors.domain = 'Please wait for domain availability check to complete.';
+      } else if (domainAvailable === null && formData.domain.trim().length >= 3) {
+        newErrors.domain = 'Domain availability check is required.';
+      }
     }
 
     setErrors(newErrors);
+    
+    // Additional check: prevent submission if domain is not available or still checking
+    if (step === 1) {
+      if (domainChecking || domainAvailable === false || (domainAvailable === null && formData.domain.trim().length >= 3)) {
+        return false;
+      }
+    }
+    
     return Object.keys(newErrors).length === 0;
-  }, [formData, domainAvailable]);
+  }, [formData, domainAvailable, domainChecking]);
 
   const handleNext = useCallback(() => {
     if (validateStep(currentStep)) {
@@ -510,8 +631,7 @@ export default function AgencyOnboardingWizard() {
 
     setIsLoading(true);
     try {
-      let API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-      API_URL = API_URL.replace(/\/api\/?$/, '');
+      const API_URL = getApiBaseUrl();
       
       const response = await fetch(`${API_URL}/api/agencies/create`, {
         method: 'POST',
@@ -520,7 +640,7 @@ export default function AgencyOnboardingWizard() {
         },
         body: JSON.stringify({
           agencyName: formData.agencyName,
-          domain: formData.domain,
+          domain: `${formData.domain}${formData.domainSuffix || '.app'}`,
           industry: formData.industry,
           companySize: formData.companySize,
           address: formData.address,
@@ -529,7 +649,7 @@ export default function AgencyOnboardingWizard() {
           adminEmail: formData.adminEmail,
           adminPassword: formData.adminPassword,
           subscriptionPlan: formData.subscriptionPlan,
-          // New preference fields are kept for future use and are not yet wired into backend schema
+          // Wire onboarding preferences into backend so AgencySetup can prefill settings
           primaryFocus: formData.primaryFocus || undefined,
           enableGST: formData.enableGST || undefined,
           modules: formData.modules,
@@ -628,17 +748,25 @@ export default function AgencyOnboardingWizard() {
         <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-50">
           <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-slate-900 dark:bg-white flex items-center justify-center shadow-sm">
-                  <Building2 className="h-5 w-5 text-white dark:text-slate-900" />
+              <button
+                type="button"
+                onClick={() => {
+                  // Scroll to top when clicking header
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="flex items-center gap-3 hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 rounded-lg p-1 -ml-1"
+                aria-label="BuildFlow Workspace Setup"
+              >
+                <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shadow-sm">
+                  <Building2 className="h-5 w-5 text-white" />
                 </div>
-                <div>
+                <div className="text-left">
                   <h1 className="text-lg font-semibold text-slate-900 dark:text-white tracking-tight">
                     BuildFlow
                   </h1>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Workspace Setup</p>
                 </div>
-              </div>
+              </button>
               <div className="hidden sm:flex items-center gap-6">
                 <div className="text-right">
                   <div className="text-sm font-medium text-slate-900 dark:text-white">
@@ -670,27 +798,32 @@ export default function AgencyOnboardingWizard() {
                       <button
                         type="button"
                         onClick={() => {
-                          if (isPast || isCompleted) {
+                          // Allow clicking on past, completed, or current step
+                          if (isPast || isCompleted || isCurrent) {
                             setCurrentStep(step.id);
+                            // Scroll to top when changing steps
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
                           }
                         }}
-                        disabled={!isPast && !isCompleted}
-                        className={`relative flex items-center justify-center w-10 h-10 rounded-lg border-2 transition-all duration-200 ${
+                        disabled={!isPast && !isCompleted && !isCurrent}
+                        className={`relative flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-lg border-2 transition-all duration-200 ${
                           isCompleted
-                            ? 'bg-slate-900 dark:bg-white border-slate-900 dark:border-white text-white dark:text-slate-900 shadow-sm'
+                            ? 'bg-primary border-primary text-white shadow-md hover:bg-primary/90 hover:scale-105'
                             : isCurrent
-                            ? 'bg-white dark:bg-slate-800 border-slate-900 dark:border-slate-200 text-slate-900 dark:text-white shadow-md ring-2 ring-slate-900/10 dark:ring-white/10'
-                            : 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'
-                        } ${(isPast || isCompleted) ? 'cursor-pointer hover:scale-105' : 'cursor-not-allowed'}`}
-                        aria-label={`Step ${stepNumber}: ${step.title}`}
+                            ? 'bg-primary/10 dark:bg-primary/20 border-primary text-primary dark:text-primary-foreground shadow-md ring-2 ring-primary/20 hover:bg-primary/20 dark:hover:bg-primary/30'
+                            : 'bg-white dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:hover:border-slate-600'
+                        } ${(isPast || isCompleted || isCurrent) ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                        aria-label={`Step ${stepNumber}: ${step.title}${isCurrent ? ' (Current)' : isCompleted ? ' (Completed)' : ''}`}
                       >
                         {isCompleted ? (
-                          <CheckCircle2 className="h-5 w-5" />
+                          <CheckCircle2 className="h-5 w-5 md:h-6 md:w-6" />
+                        ) : isCurrent ? (
+                          <StepIcon className="h-5 w-5 md:h-6 md:w-6" />
                         ) : (
-                          <span className="text-sm font-semibold">{stepNumber}</span>
+                          <StepIcon className="h-4 w-4 md:h-5 md:w-5 opacity-60" />
                         )}
                         {isCurrent && (
-                          <div className="absolute -inset-1 rounded-lg bg-slate-900/5 dark:bg-white/5 animate-pulse" />
+                          <div className="absolute -inset-1 rounded-lg bg-primary/10 dark:bg-primary/20 animate-pulse" />
                         )}
                       </button>
                       <div className="mt-2 text-center max-w-[80px] sm:max-w-none">
@@ -708,7 +841,7 @@ export default function AgencyOnboardingWizard() {
                     {index < STEPS.length - 1 && (
                       <div className={`flex-1 h-0.5 mx-2 transition-colors ${
                         isPast || isCompleted
-                          ? 'bg-slate-900 dark:bg-white'
+                          ? 'bg-primary dark:bg-primary'
                           : 'bg-slate-200 dark:bg-slate-700'
                       }`} />
                     )}
@@ -842,11 +975,12 @@ export default function AgencyOnboardingWizard() {
                                 <TooltipContent side="right" className="max-w-xs">
                                   <div className="space-y-2 text-sm">
                                     <p className="font-semibold">What is a domain identifier?</p>
-                                    <p>The domain identifier creates a unique workspace address for your agency (e.g., yourcompany.buildflow.app). It's used for:</p>
+                                    <p>The domain identifier creates a unique workspace address for your agency. You can choose from multiple domain suffixes (.app, .com, .io, etc.). It's used for:</p>
                                     <ul className="list-disc list-inside space-y-1 ml-2">
                                       <li>System routing and database identification</li>
                                       <li>Secure data isolation between agencies</li>
                                       <li>Workspace access URLs</li>
+                                      <li>Email address generation for your team</li>
                                     </ul>
                                     <p className="pt-2 border-t border-slate-200 dark:border-slate-700">
                                       <strong>Important:</strong> This cannot be changed after setup. Choose carefully and ensure it's unique.
@@ -856,9 +990,13 @@ export default function AgencyOnboardingWizard() {
                               </Tooltip>
                             </TooltipProvider>
                           </div>
-                          <DomainChecker domain={formData.domain} onAvailable={handleDomainAvailable} />
-                          <div className="flex items-center gap-2">
-                            <div className="relative flex-1">
+                          <DomainChecker 
+                            domain={formData.domain} 
+                            onAvailable={handleDomainAvailable}
+                            onChecking={handleDomainChecking}
+                          />
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2">
+                            <div className="relative flex-1 min-w-0">
                               <Input
                                 id="domain"
                                 placeholder="company-id"
@@ -866,26 +1004,83 @@ export default function AgencyOnboardingWizard() {
                                 onChange={(e) => {
                                   setFormData(prev => ({ ...prev, domain: e.target.value }));
                                   setDomainAvailable(null);
+                                  setDomainChecking(false);
                                 }}
-                                className={`h-11 text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-mono transition-all duration-200 ${
-                                  errors.domain 
-                                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' 
-                                    : domainAvailable === true
-                                    ? 'border-green-500/50 focus:border-green-500 focus:ring-green-500/20'
+                                className={`h-11 w-full text-sm bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 font-mono transition-all duration-200 ${
+                                  errors.domain && domainAvailable === false
+                                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20 bg-red-50/50 dark:bg-red-950/20' 
+                                    : domainAvailable === true && !errors.domain
+                                    ? 'border-green-500 focus:border-green-500 focus:ring-green-500/20 bg-green-50/50 dark:bg-green-950/20'
+                                    : domainChecking
+                                    ? 'border-blue-500/50 focus:border-blue-500 focus:ring-blue-500/20'
+                                    : errors.domain
+                                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
                                     : 'focus:border-slate-900 dark:focus:border-slate-200 focus:ring-slate-900/10 dark:focus:ring-slate-200/10 hover:border-slate-400 dark:hover:border-slate-600'
                                 }`}
                               />
-                              {formData.domain && domainAvailable === true && !errors.domain && (
-                                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600 dark:text-green-400" />
+                              {domainChecking && formData.domain && (
+                                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-blue-500 animate-spin pointer-events-none" />
                               )}
-                              {formData.domain && domainAvailable === false && (
-                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-red-500">✕</span>
+                              {!domainChecking && formData.domain && domainAvailable === true && !errors.domain && (
+                                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-green-600 dark:text-green-400 pointer-events-none" />
+                              )}
+                              {!domainChecking && formData.domain && domainAvailable === false && (
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-red-500 font-bold pointer-events-none">✕</span>
                               )}
                             </div>
-                            <span className="text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap font-mono px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-lg">.buildflow.app</span>
+                            <Select
+                              value={formData.domainSuffix}
+                              onValueChange={(value) => {
+                                setFormData(prev => ({ ...prev, domainSuffix: value }));
+                              }}
+                            >
+                              <SelectTrigger className="h-11 w-full sm:w-auto sm:min-w-[140px] text-sm font-mono bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white">
+                                <SelectValue placeholder="Select domain" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {DOMAIN_SUFFIXES.map((suffix) => (
+                                  <SelectItem key={suffix.value} value={suffix.value} className="font-mono">
+                                    {suffix.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
+                          {/* Domain preview */}
+                          {formData.domain && (
+                            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200 ${
+                              domainChecking
+                                ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50'
+                                : domainAvailable === true
+                                ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900/50'
+                                : domainAvailable === false
+                                ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900/50'
+                                : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700'
+                            }`}>
+                              <span className="text-xs text-slate-500 dark:text-slate-400">Preview:</span>
+                              <span className="text-sm font-mono text-slate-900 dark:text-white">
+                                {formData.domain}{formData.domainSuffix || '.app'}
+                              </span>
+                              {domainChecking && (
+                                <Loader2 className="h-4 w-4 text-blue-500 animate-spin ml-auto" />
+                              )}
+                              {!domainChecking && domainAvailable === true && (
+                                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 ml-auto" />
+                              )}
+                              {!domainChecking && domainAvailable === false && (
+                                <span className="text-red-500 font-bold ml-auto">✕</span>
+                              )}
+                            </div>
+                          )}
                           {errors.domain && (
-                            <p className="text-sm text-red-600 dark:text-red-400 mt-2">{errors.domain}</p>
+                            <p className={`text-sm mt-2 flex items-center gap-1.5 ${
+                              domainAvailable === false 
+                                ? 'text-red-600 dark:text-red-400' 
+                                : 'text-red-600 dark:text-red-400'
+                            }`}>
+                              <span className="text-red-500">•</span>
+                              <span>{errors.domain}</span>
+                            </p>
                           )}
                           {!errors.domain && suggestedDomain && suggestedDomain !== formData.domain && (
                             <button
@@ -893,6 +1088,7 @@ export default function AgencyOnboardingWizard() {
                               onClick={() => {
                                 setFormData(prev => ({ ...prev, domain: suggestedDomain }));
                                 setDomainAvailable(null);
+                                setDomainChecking(false);
                               }}
                               className="mt-2 inline-flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 underline-offset-2 hover:underline transition-colors"
                             >
@@ -902,10 +1098,16 @@ export default function AgencyOnboardingWizard() {
                               </span>
                             </button>
                           )}
-                          {formData.domain && domainAvailable === true && !errors.domain && (
+                          {!domainChecking && formData.domain && domainAvailable === true && !errors.domain && (
                             <p className="text-sm text-green-600 dark:text-green-400 mt-2 flex items-center gap-1.5">
                               <CheckCircle2 className="h-4 w-4" />
-                              <span>Domain available</span>
+                              <span>Domain is available and ready to use</span>
+                            </p>
+                          )}
+                          {!domainChecking && formData.domain && domainAvailable === false && !errors.domain && (
+                            <p className="text-sm text-red-600 dark:text-red-400 mt-2 flex items-center gap-1.5">
+                              <span className="text-red-500 font-bold">✕</span>
+                              <span>This domain is already taken. Please choose a different domain identifier.</span>
                             </p>
                           )}
                           <div className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-lg p-4 mt-4">
@@ -1392,17 +1594,17 @@ export default function AgencyOnboardingWizard() {
                   {/* Step 5: Workflows & Modules */}
                   {currentStep === 5 && (
                     <div className="animate-fade-in h-full flex flex-col space-y-6">
-                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 rounded-xl p-5 mb-2">
-                        <div className="flex items-start gap-4">
-                          <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center flex-shrink-0 border border-blue-200 dark:border-blue-800">
-                            <Info className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 dark:border-primary/30 rounded-xl p-4 md:p-5 mb-4">
+                        <div className="flex items-start gap-3 md:gap-4">
+                          <div className="h-8 w-8 md:h-10 md:w-10 rounded-lg bg-primary/10 dark:bg-primary/20 flex items-center justify-center flex-shrink-0">
+                            <Info className="h-4 w-4 md:h-5 md:w-5 text-primary dark:text-primary-foreground" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h4 className="text-sm font-semibold text-slate-900 dark:text-white mb-2">Workflows & Modules</h4>
-                            <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-2">
+                            <h4 className="text-sm md:text-base font-semibold text-slate-900 dark:text-white mb-2">Workflows & Modules</h4>
+                            <p className="text-xs md:text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-2">
                               {currentStepData?.businessContext}
                             </p>
-                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                            <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                               Select which modules you want to start with. All modules can be enabled or disabled at any time from your workspace settings. Your primary focus selection helps us prioritize features and shortcuts in your dashboard.
                             </p>
                           </div>
@@ -1412,10 +1614,10 @@ export default function AgencyOnboardingWizard() {
                       <div className="flex-1 space-y-4">
                         {/* Primary focus */}
                         <div className="space-y-3">
-                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                          <Label className="text-base md:text-lg font-semibold text-slate-900 dark:text-slate-100">
                             What do you want to get under control first?
                           </Label>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                             {[
                               { id: 'projects', label: 'Projects & Jobs', description: 'Track jobs, timelines, and delivery.', icon: Briefcase },
                               { id: 'finance', label: 'Finance & Billing', description: 'Invoices, cash flow, and margins.', icon: BarChart3 },
@@ -1429,39 +1631,44 @@ export default function AgencyOnboardingWizard() {
                                   key={item.id}
                                   type="button"
                                   onClick={() => setFormData(prev => ({ ...prev, primaryFocus: item.id }))}
-                                  className={`p-4 rounded-xl border-2 text-left transition-all duration-200 flex flex-col gap-2 group/btn ${
+                                  className={`relative p-4 md:p-5 rounded-xl border-2 text-left transition-all duration-200 flex flex-col gap-3 group/btn ${
                                     isSelected
-                                      ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white shadow-md'
-                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
-                                  }`}
+                                      ? 'border-primary bg-primary/5 dark:bg-primary/10 shadow-lg ring-2 ring-primary/20'
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 hover:shadow-md'
+                                  } focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:focus:ring-offset-slate-900`}
                                 >
-                                  <div className="flex items-center gap-3">
-                                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center border flex-shrink-0 ${
-                                      isSelected
-                                        ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-                                        : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
-                                    }`}>
-                                      <ItemIcon className={`h-5 w-5 ${
-                                        isSelected 
-                                          ? 'text-slate-900 dark:text-white' 
-                                          : 'text-slate-600 dark:text-slate-400'
-                                      }`} />
+                                  {isSelected && (
+                                    <div className="absolute top-2 right-2 z-10">
+                                      <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center shadow-md">
+                                        <Check className="h-3 w-3 text-white" />
+                                      </div>
                                     </div>
-                                    <span className={`text-sm font-semibold ${
-                                      isSelected 
-                                        ? 'text-slate-900 dark:text-white' 
-                                        : 'text-slate-900 dark:text-slate-100'
+                                  )}
+                                  <div className="flex items-start gap-3">
+                                    <div className={`h-10 w-10 md:h-12 md:w-12 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${
+                                      isSelected
+                                        ? 'bg-primary text-white shadow-md'
+                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 group-hover/btn:bg-slate-200 dark:group-hover/btn:bg-slate-600'
                                     }`}>
-                                      {item.label}
-                                    </span>
+                                      <ItemIcon className={`h-5 w-5 md:h-6 md:w-6`} />
+                                    </div>
+                                    <div className="flex-1 min-w-0 pt-0.5">
+                                      <span className={`block text-sm md:text-base font-semibold mb-1 ${
+                                        isSelected
+                                          ? 'text-primary dark:text-primary-foreground'
+                                          : 'text-slate-900 dark:text-slate-100'
+                                      }`}>
+                                        {item.label}
+                                      </span>
+                                      <span className={`block text-xs md:text-sm leading-relaxed ${
+                                        isSelected
+                                          ? 'text-slate-700 dark:text-slate-300'
+                                          : 'text-slate-600 dark:text-slate-400'
+                                      }`}>
+                                        {item.description}
+                                      </span>
+                                    </div>
                                   </div>
-                                  <span className={`text-xs ${
-                                    isSelected 
-                                      ? 'text-slate-700 dark:text-slate-300' 
-                                      : 'text-slate-600 dark:text-slate-400'
-                                  }`}>
-                                    {item.description}
-                                  </span>
                                 </button>
                               );
                             })}
@@ -1472,11 +1679,11 @@ export default function AgencyOnboardingWizard() {
                         </div>
 
                         {/* GST preference */}
-                        <div className="space-y-3">
-                          <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        <div className="space-y-4">
+                          <Label className="text-base md:text-lg font-semibold text-slate-900 dark:text-slate-100">
                             Do you need GST compliance in this workspace?
                           </Label>
-                          <div className="grid sm:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                             {[
                               { value: true, label: 'Yes, enable GST', description: 'Set up GST-led invoicing, reports, and checks.', icon: CheckCircle2 },
                               { value: false, label: 'Not right now', description: 'You can turn GST on later in settings.', icon: ToggleLeft },
@@ -1488,32 +1695,35 @@ export default function AgencyOnboardingWizard() {
                                   key={String(option.value)}
                                   type="button"
                                   onClick={() => setFormData(prev => ({ ...prev, enableGST: option.value }))}
-                                  className={`p-4 rounded-xl border-2 transition-all duration-200 flex items-start gap-3 text-left group/btn ${
+                                  className={`relative p-4 md:p-5 rounded-xl border-2 transition-all duration-200 flex items-start gap-3 text-left group/btn ${
                                     isSelected
-                                      ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white shadow-md'
-                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
-                                  }`}
+                                      ? 'border-primary bg-primary/5 dark:bg-primary/10 shadow-lg ring-2 ring-primary/20'
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 hover:shadow-md'
+                                  } focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:focus:ring-offset-slate-900`}
                                 >
-                                  <div className={`h-9 w-9 rounded-lg flex items-center justify-center border flex-shrink-0 ${
+                                  {isSelected && (
+                                    <div className="absolute top-2 right-2">
+                                      <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                                        <Check className="h-3 w-3 text-white" />
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div className={`h-10 w-10 md:h-12 md:w-12 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${
                                     isSelected
-                                      ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-                                      : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
+                                      ? 'bg-primary text-white shadow-md'
+                                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 group-hover/btn:bg-slate-200 dark:group-hover/btn:bg-slate-600'
                                   }`}>
-                                    <Icon className={`h-5 w-5 ${
-                                      isSelected 
-                                        ? 'text-slate-900 dark:text-white' 
-                                        : 'text-slate-600 dark:text-slate-400'
-                                    }`} />
+                                    <Icon className={`h-5 w-5 md:h-6 md:w-6`} />
                                   </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className={`text-sm font-semibold mb-1 ${
+                                  <div className="flex-1 min-w-0 pt-0.5">
+                                    <div className={`text-sm md:text-base font-semibold mb-1 ${
                                       isSelected 
-                                        ? 'text-slate-900 dark:text-white' 
+                                        ? 'text-primary dark:text-primary-foreground' 
                                         : 'text-slate-900 dark:text-slate-100'
                                     }`}>
                                       {option.label}
                                     </div>
-                                    <div className={`text-xs ${
+                                    <div className={`text-xs md:text-sm leading-relaxed ${
                                       isSelected 
                                         ? 'text-slate-700 dark:text-slate-300' 
                                         : 'text-slate-600 dark:text-slate-400'
@@ -1528,16 +1738,17 @@ export default function AgencyOnboardingWizard() {
                         </div>
 
                         {/* Modules toggles */}
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-2">
-                            <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                              Modules to start with <span className="text-slate-500 dark:text-slate-400 font-normal">(you can change this any time)</span>
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Label className="text-base md:text-lg font-semibold text-slate-900 dark:text-slate-100">
+                              Modules to start with
                             </Label>
+                            <span className="text-xs md:text-sm text-slate-500 dark:text-slate-400 font-normal">(you can change this any time)</span>
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <button type="button" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
-                                    <HelpCircle className="h-4 w-4" />
+                                  <button type="button" className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors ml-auto">
+                                    <HelpCircle className="h-4 w-4 md:h-5 md:w-5" />
                                   </button>
                                 </TooltipTrigger>
                                 <TooltipContent side="right" className="max-w-xs">
@@ -1557,7 +1768,7 @@ export default function AgencyOnboardingWizard() {
                               </Tooltip>
                             </TooltipProvider>
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                             {[
                               { key: 'projects' as const, label: 'Projects', description: 'Jobs, tasks, and delivery.', icon: Briefcase },
                               { key: 'finance' as const, label: 'Finance', description: 'Invoices & payments.', icon: BarChart3 },
@@ -1579,33 +1790,36 @@ export default function AgencyOnboardingWizard() {
                                       },
                                     }))
                                   }
-                                  className={`p-4 rounded-xl border-2 transition-all duration-200 flex items-center justify-between gap-3 group/btn ${
+                                  className={`relative p-4 md:p-5 rounded-xl border-2 transition-all duration-200 flex items-center gap-3 group/btn ${
                                     enabled
-                                      ? 'border-slate-900 dark:border-white bg-slate-900 dark:bg-white shadow-md'
-                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800'
-                                  }`}
+                                      ? 'border-primary bg-primary/5 dark:bg-primary/10 shadow-lg ring-2 ring-primary/20'
+                                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-slate-300 dark:hover:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 hover:shadow-md'
+                                  } focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:focus:ring-offset-slate-900`}
                                 >
+                                  {enabled && (
+                                    <div className="absolute top-2 right-2 z-10">
+                                      <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center shadow-md">
+                                        <Check className="h-3 w-3 text-white" />
+                                      </div>
+                                    </div>
+                                  )}
                                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                                    <div className={`h-9 w-9 rounded-lg flex items-center justify-center border flex-shrink-0 ${
+                                    <div className={`h-10 w-10 md:h-12 md:w-12 rounded-lg flex items-center justify-center flex-shrink-0 transition-all ${
                                       enabled
-                                        ? 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
-                                        : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600'
+                                        ? 'bg-primary text-white shadow-md'
+                                        : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 group-hover/btn:bg-slate-200 dark:group-hover/btn:bg-slate-600'
                                     }`}>
-                                      <Icon className={`h-5 w-5 ${
-                                        enabled 
-                                          ? 'text-slate-900 dark:text-white' 
-                                          : 'text-slate-600 dark:text-slate-400'
-                                      }`} />
+                                      <Icon className={`h-5 w-5 md:h-6 md:w-6`} />
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                      <div className={`text-sm font-semibold mb-0.5 ${
+                                      <div className={`text-sm md:text-base font-semibold mb-1 ${
                                         enabled 
-                                          ? 'text-slate-900 dark:text-white' 
+                                          ? 'text-primary dark:text-primary-foreground' 
                                           : 'text-slate-900 dark:text-slate-100'
                                       }`}>
                                         {mod.label}
                                       </div>
-                                      <div className={`text-xs ${
+                                      <div className={`text-xs md:text-sm ${
                                         enabled 
                                           ? 'text-slate-700 dark:text-slate-300' 
                                           : 'text-slate-600 dark:text-slate-400'
@@ -1613,13 +1827,6 @@ export default function AgencyOnboardingWizard() {
                                         {mod.description}
                                       </div>
                                     </div>
-                                  </div>
-                                  <div className={`px-2.5 py-1 rounded-md text-xs font-medium flex-shrink-0 ${
-                                    enabled
-                                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white'
-                                      : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-                                  }`}>
-                                    {enabled ? 'On' : 'Off'}
                                   </div>
                                 </button>
                               );
@@ -1806,8 +2013,8 @@ export default function AgencyOnboardingWizard() {
                               </div>
                               <div>
                                 <div className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Domain</div>
-                                <p className="text-sm font-medium text-slate-900 dark:text-white font-mono">
-                                  {formData.domain}.buildflow.app
+                                <p className="text-sm font-medium text-slate-900 dark:text-white font-mono break-all">
+                                  {formData.domain}{formData.domainSuffix || '.app'}
                                 </p>
                               </div>
                               <div>
@@ -2106,42 +2313,113 @@ export default function AgencyOnboardingWizard() {
         </div>
       </div>
       {isLoading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/90 dark:bg-slate-950/90">
-          <div className="w-full max-w-md mx-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-xl">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="h-10 w-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center border border-slate-200 dark:border-slate-700">
-                <Loader2 className="h-5 w-5 text-slate-700 dark:text-slate-300 animate-spin" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/95 dark:bg-slate-950/95 backdrop-blur-sm">
+          <div className="w-full max-w-lg mx-4 sm:mx-6 md:mx-8 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-2xl">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5 mb-6">
+              <div className="relative">
+                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700 flex items-center justify-center shadow-lg">
+                  <Loader2 className="h-6 w-6 sm:h-7 sm:w-7 text-white animate-spin" />
+                </div>
+                <div className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white dark:border-slate-900 animate-pulse" />
               </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mb-1">
                   Creating your agency workspace
                 </h2>
-                <p className="text-sm text-slate-600 dark:text-slate-400">
-                  Please wait a few moments while we set up your dedicated database, roles, and defaults.
+                <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400">
+                  Setting up your dedicated database with 53+ tables and all necessary modules
                 </p>
               </div>
             </div>
-            <div className="space-y-3">
-              <div className="h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full w-2/3 bg-slate-900 dark:bg-white transition-all duration-300" />
+
+            {/* Progress Bar */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs sm:text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Progress
+                </span>
+                <span className="text-xs sm:text-sm font-semibold text-blue-600 dark:text-blue-400">
+                  {Math.round(loadingProgress)}%
+                </span>
               </div>
-              <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-                <li className="flex items-start gap-2">
-                  <span className="text-slate-400 dark:text-slate-500 mt-0.5">•</span>
-                  <span>Creating a secure, isolated database for your agency</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-slate-400 dark:text-slate-500 mt-0.5">•</span>
-                  <span>Seeding core tables for users, roles, and settings</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-slate-400 dark:text-slate-500 mt-0.5">•</span>
-                  <span>Applying audit and compliance defaults</span>
-                </li>
-              </ul>
-              <p className="text-sm text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-800">
-                This step usually takes less than 10 seconds. You will be redirected automatically when everything is ready.
-              </p>
+              <div className="h-2.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden shadow-inner">
+                <div 
+                  className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 dark:from-blue-600 dark:via-indigo-600 dark:to-purple-600 transition-all duration-500 ease-out shadow-lg relative"
+                  style={{ width: `${loadingProgress}%` }}
+                >
+                  <div className="absolute inset-0 bg-white/30 animate-pulse" />
+                </div>
+              </div>
+            </div>
+
+            {/* Current Step Display */}
+            <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-800/50 dark:to-slate-700/50 border border-blue-100 dark:border-slate-700">
+              <div className="flex items-center gap-3">
+                {(() => {
+                  const loadingSteps = [
+                    { label: 'Initializing database connection', icon: Database },
+                    { label: 'Creating shared functions and extensions', icon: Layers },
+                    { label: 'Setting up authentication schema', icon: Shield },
+                    { label: 'Creating agency tables', icon: Building2 },
+                    { label: 'Setting up departments structure', icon: Network },
+                    { label: 'Configuring HR modules', icon: Users },
+                    { label: 'Creating clients and financial tables', icon: Briefcase },
+                    { label: 'Setting up projects and tasks', icon: Target },
+                    { label: 'Configuring CRM and GST modules', icon: BarChart3 },
+                    { label: 'Applying indexes and finalizing', icon: CheckCircle2 },
+                  ];
+                  const step = loadingSteps[currentLoadingStep];
+                  const Icon = step?.icon || Database;
+                  return (
+                    <>
+                      <div className="flex-shrink-0 h-10 w-10 rounded-lg bg-white dark:bg-slate-800 flex items-center justify-center border border-blue-200 dark:border-slate-700 shadow-sm">
+                        <Icon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm sm:text-base font-medium text-slate-900 dark:text-white">
+                          {step?.label || 'Processing...'}
+                        </p>
+                        <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+                          Step {currentLoadingStep + 1} of {loadingSteps.length}
+                        </p>
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Status List */}
+            <div className="space-y-2.5 mb-6">
+              <div className="flex items-center gap-2.5 text-sm text-slate-600 dark:text-slate-400">
+                <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <Check className="h-3 w-3 text-green-600 dark:text-green-400" />
+                </div>
+                <span>Creating secure, isolated database schema</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-sm text-slate-600 dark:text-slate-400">
+                <div className="flex-shrink-0 h-5 w-5 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <Check className="h-3 w-3 text-green-600 dark:text-green-400" />
+                </div>
+                <span>Seeding 53+ core tables (users, roles, settings, HR, finance, CRM)</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-sm text-slate-600 dark:text-slate-400">
+                <div className="flex-shrink-0 h-5 w-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                  <Loader2 className="h-3 w-3 text-blue-600 dark:text-blue-400 animate-spin" />
+                </div>
+                <span>Applying indexes, triggers, and audit compliance</span>
+              </div>
+            </div>
+
+            {/* Footer Note */}
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+              <div className="flex items-start gap-2">
+                <Clock className="h-4 w-4 text-slate-400 dark:text-slate-500 mt-0.5 flex-shrink-0" />
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                  This process typically takes 10-15 seconds. Your workspace will be ready shortly, and you'll be redirected automatically.
+                </p>
+              </div>
             </div>
           </div>
         </div>

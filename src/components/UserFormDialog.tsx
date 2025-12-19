@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { generateUUID } from '@/lib/uuid';
 import { Loader2, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import bcrypt from 'bcryptjs';
+import bcrypt from '@/lib/bcrypt';
 import { selectRecords, insertRecord, updateRecord } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 

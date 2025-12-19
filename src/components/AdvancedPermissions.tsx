@@ -1,102 +1,88 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Shield, Lock, CheckCircle, AlertCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Shield, Users, FolderTree, FileText, ClipboardList, BarChart3, Settings, Zap, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { usePermissions } from '@/hooks/usePermissions';
-import { db } from '@/lib/database';
+import { RolePermissionManager } from '@/components/permissions/RolePermissionManager';
+import { UserPermissionManager } from '@/components/permissions/UserPermissionManager';
+import { CategoryManager } from '@/components/permissions/CategoryManager';
+import { PermissionTemplates } from '@/components/permissions/PermissionTemplates';
+import { AuditLogViewer } from '@/components/permissions/AuditLogViewer';
+import { Reports } from '@/components/permissions/Reports';
+import { PermissionSettings } from '@/components/permissions/PermissionSettings';
+import * as permissionsService from '@/services/permissions';
 import { toast } from 'sonner';
 
-interface FeatureFlag {
-  id: string;
-  name: string;
-  description: string;
-  is_enabled: boolean;
-  required_roles: string[];
-  required_permissions: string[];
-  metadata: any;
-}
-
-export function AdvancedPermissions() {
+const AdvancedPermissions = () => {
   const { userRole } = useAuth();
-  const { permissions, rolePermissions, loading } = usePermissions();
-  const [featureFlags, setFeatureFlags] = useState<FeatureFlag[]>([]);
-  const [flagsLoading, setFlagsLoading] = useState(true);
+  const { permissions, loading } = usePermissions();
+  const [stats, setStats] = useState({
+    totalPermissions: 0,
+    totalRoles: 22,
+    totalUsers: 0,
+    recentChanges: 0,
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
 
-  const canManagePermissions = userRole === 'super_admin';
-
-  const fetchFeatureFlags = async () => {
-    try {
-      const { data, error } = await db
-        .from('feature_flags')
-        .select('*')
-        .order('name');
-
-      // Handle missing table gracefully
-      if (error) {
-        const errorMessage = error.message || String(error);
-        // Check for missing table error (42P01 is PostgreSQL error code for "undefined_table")
-        if (errorMessage.includes('does not exist') || errorMessage.includes('42P01') || 
-            (errorMessage.includes('Database API error') && errorMessage.includes('relation'))) {
-          console.warn('feature_flags table does not exist yet - feature not implemented');
-          setFeatureFlags([]);
-          setFlagsLoading(false);
-          return;
-        }
-        throw error;
-      }
-      setFeatureFlags(data || []);
-    } catch (error) {
-      console.error('Error fetching feature flags:', error);
-      toast.error('Failed to load feature flags');
-    } finally {
-      setFlagsLoading(false);
-    }
-  };
+  const canManagePermissions = ['super_admin', 'ceo', 'admin'].includes(userRole || '');
 
   useEffect(() => {
-    fetchFeatureFlags();
-  }, []);
+    if (!loading && permissions.length >= 0) {
+      fetchStats();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, permissions.length]);
 
-  const toggleFeatureFlag = async (flagId: string, enabled: boolean) => {
-    if (!canManagePermissions) return;
-
+  const fetchStats = async () => {
     try {
-      const { error } = await db
-        .from('feature_flags')
-        .update({ is_enabled: enabled })
-        .eq('id', flagId);
+      setLoadingStats(true);
+      
+      // Get permissions count - use local permissions if API fails
+      let totalPerms = permissions.length;
+      try {
+        const permResult = await permissionsService.getPermissions({ limit: 1 });
+        totalPerms = permResult.pagination?.total || permissions.length;
+      } catch (error) {
+        // API might not be available yet, use local permissions
+        console.warn('Could not fetch permissions count from API, using local data');
+      }
 
-      if (error) throw error;
+      // Get users count (simplified - would need proper API)
+      // For now, we'll use a placeholder
+      const totalUsers = 0; // TODO: Fetch from API
 
-      setFeatureFlags(prev => prev.map(flag => 
-        flag.id === flagId ? { ...flag, is_enabled: enabled } : flag
-      ));
-
-      toast.success(`Feature flag ${enabled ? 'enabled' : 'disabled'} successfully`);
-    } catch (error) {
-      console.error('Error updating feature flag:', error);
-      toast.error('Failed to update feature flag');
+      setStats({
+        totalPermissions: totalPerms,
+        totalRoles: 22,
+        totalUsers,
+        recentChanges: 0, // TODO: Fetch from audit log
+      });
+    } catch (error: any) {
+      console.error('Failed to load stats:', error);
+      // Set default stats on error
+      setStats({
+        totalPermissions: permissions.length,
+        totalRoles: 22,
+        totalUsers: 0,
+        recentChanges: 0,
+      });
+    } finally {
+      setLoadingStats(false);
     }
   };
 
-  const groupedPermissions = permissions.reduce((acc, permission) => {
-    if (!acc[permission.category]) {
-      acc[permission.category] = [];
-    }
-    acc[permission.category].push(permission);
-    return acc;
-  }, {} as Record<string, typeof permissions>);
-
-  const hasRolePermission = (permissionId: string) => {
-    return rolePermissions.some(rp => rp.permission_id === permissionId && rp.granted);
-  };
-
-  if (loading || flagsLoading) {
-    return <div className="flex items-center justify-center p-8">Loading...</div>;
+  // Show loading state
+  if (loading || loadingStats) {
+    return (
+      <div className="flex items-center justify-center p-8 min-h-[400px]">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Loading permissions...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -104,7 +90,9 @@ export function AdvancedPermissions() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Advanced Permissions</h1>
-          <p className="text-muted-foreground">Manage granular permissions and feature flags</p>
+          <p className="text-muted-foreground">
+            Comprehensive permission management system for enterprise access control
+          </p>
         </div>
         <div className="flex items-center space-x-2">
           <Shield className="h-5 w-5 text-primary" />
@@ -112,160 +100,205 @@ export function AdvancedPermissions() {
         </div>
       </div>
 
-      <Tabs defaultValue="permissions" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="permissions">Current Permissions</TabsTrigger>
-          <TabsTrigger value="feature-flags">Feature Flags</TabsTrigger>
-          {canManagePermissions && <TabsTrigger value="manage">Manage System</TabsTrigger>}
+      {/* Stats Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Permissions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalPermissions}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Roles</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalRoles}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Users</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalUsers}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Recent Changes</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.recentChanges}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Main Tabs */}
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList className="flex flex-wrap gap-2 w-full">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="roles">Roles</TabsTrigger>
+          <TabsTrigger value="users">Users</TabsTrigger>
+          <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="templates">Templates</TabsTrigger>
+          <TabsTrigger value="audit">Audit</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
+          {canManagePermissions && <TabsTrigger value="settings">Settings</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="permissions">
+        <TabsContent value="overview">
           <div className="grid gap-6">
-            {Object.entries(groupedPermissions).map(([category, categoryPermissions]) => (
-              <Card key={category}>
-                <CardHeader>
-                  <CardTitle className="capitalize">{category} Permissions</CardTitle>
-                  <CardDescription>
-                    Permissions related to {category} functionality
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-3">
-                    {categoryPermissions.map((permission) => (
-                      <div key={permission.id} className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="space-y-1">
-                          <div className="flex items-center space-x-2">
-                            <h4 className="font-medium">{permission.name.replace(/_/g, ' ').toUpperCase()}</h4>
-                            {hasRolePermission(permission.id) ? (
-                              <CheckCircle className="h-4 w-4 text-green-600" />
-                            ) : (
-                              <Lock className="h-4 w-4 text-red-600" />
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground">{permission.description}</p>
-                        </div>
-                        <Badge variant={hasRolePermission(permission.id) ? 'default' : 'secondary'}>
-                          {hasRolePermission(permission.id) ? 'Granted' : 'Denied'}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="feature-flags">
-          <div className="grid gap-4">
-            {featureFlags.map((flag) => (
-              <Card key={flag.id}>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="flex items-center space-x-2">
-                        <span>{flag.name.replace(/_/g, ' ').toUpperCase()}</span>
-                        {flag.is_enabled ? (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <AlertCircle className="h-4 w-4 text-gray-600" />
-                        )}
-                      </CardTitle>
-                      <CardDescription>{flag.description}</CardDescription>
-                    </div>
-                    {canManagePermissions && (
-                      <Switch
-                        checked={flag.is_enabled}
-                        onCheckedChange={(checked) => toggleFeatureFlag(flag.id, checked)}
-                      />
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <div>
-                      <h4 className="font-medium mb-2">Required Roles</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {flag.required_roles.map((role) => (
-                          <Badge key={role} variant="outline">
-                            {role.replace(/_/g, ' ').toUpperCase()}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {flag.required_permissions.length > 0 && (
-                      <div>
-                        <h4 className="font-medium mb-2">Required Permissions</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {flag.required_permissions.map((permission) => (
-                            <Badge key={permission} variant="secondary">
-                              {permission.replace(/_/g, ' ').toUpperCase()}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="pt-2">
-                      <Badge variant={flag.is_enabled ? 'default' : 'secondary'}>
-                        {flag.is_enabled ? 'ENABLED' : 'DISABLED'}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
-        {canManagePermissions && (
-          <TabsContent value="manage">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Shield className="h-5 w-5" />
-                  <span>System Administration</span>
-                </CardTitle>
+                <CardTitle>Permission System Overview</CardTitle>
                 <CardDescription>
-                  Advanced system management capabilities for super administrators
+                  Quick overview of the permission system status
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <h4 className="font-medium mb-2">Permission Management</h4>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Control which roles have access to specific system features
-                  </p>
-                  <Button variant="outline" disabled>
-                    Coming Soon - Advanced Permission Editor
-                  </Button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 border rounded-lg">
+                    <h3 className="font-semibold mb-2">System Status</h3>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="default">Active</Badge>
+                      <span className="text-sm text-muted-foreground">
+                        All systems operational
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-4 border rounded-lg">
+                    <h3 className="font-semibold mb-2">Quick Actions</h3>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline">Bulk Operations</Badge>
+                      <Badge variant="outline">Export Permissions</Badge>
+                      <Badge variant="outline">Generate Report</Badge>
+                    </div>
+                  </div>
                 </div>
-
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <h4 className="font-medium mb-2">Audit & Compliance</h4>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    View detailed audit logs and compliance reports
-                  </p>
-                  <Button variant="outline" disabled>
-                    Coming Soon - Audit Dashboard
-                  </Button>
-                </div>
-
-                <div className="p-4 bg-muted/50 rounded-lg">
-                  <h4 className="font-medium mb-2">Security Monitoring</h4>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Monitor system security and access patterns
-                  </p>
-                  <Button variant="outline" disabled>
-                    Coming Soon - Security Dashboard
-                  </Button>
-                </div>
+                {canManagePermissions && (
+                  <div className="pt-4 border-t">
+                    <h3 className="font-semibold mb-3">Management Tools</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">Bulk Operations</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Apply permission changes to multiple roles or users at once
+                          </p>
+                          <Badge variant="secondary">Available in Templates tab</Badge>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">Templates</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Create and apply permission templates
+                          </p>
+                          <Badge variant="secondary">Available</Badge>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">Audit Trail</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-sm text-muted-foreground mb-3">
+                            View complete audit history
+                          </p>
+                          <Badge variant="secondary">Available</Badge>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="roles">
+          <RolePermissionManager />
+        </TabsContent>
+
+        <TabsContent value="users">
+          {canManagePermissions ? (
+            <UserPermissionManager />
+          ) : (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-muted-foreground">
+                  You don't have permission to manage user permissions
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="categories">
+          <CategoryManager />
+        </TabsContent>
+
+        <TabsContent value="templates">
+          {canManagePermissions ? (
+            <PermissionTemplates />
+          ) : (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-muted-foreground">
+                  You don't have permission to manage templates
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="audit">
+          {canManagePermissions ? (
+            <AuditLogViewer />
+          ) : (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-muted-foreground">
+                  You don't have permission to view audit logs
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="reports">
+          {canManagePermissions ? (
+            <Reports />
+          ) : (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-muted-foreground">
+                  You don't have permission to generate reports
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {canManagePermissions && (
+          <TabsContent value="settings">
+            <PermissionSettings />
           </TabsContent>
         )}
       </Tabs>
     </div>
   );
-}
+};
+
+export default AdvancedPermissions;

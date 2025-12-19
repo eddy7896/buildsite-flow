@@ -1,7 +1,8 @@
 // PostgreSQL Authentication Service (Browser-compatible)
 import { queryOne, queryMany, execute } from '@/integrations/postgresql/client';
+import { getApiBaseUrl } from '@/config/api';
 import type { User, Profile, UserRole } from '@/integrations/postgresql/types';
-import bcrypt from 'bcryptjs';
+import bcrypt from '@/lib/bcrypt';
 
 const JWT_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -139,8 +140,7 @@ export async function loginUser(data: SignInData): Promise<AuthResponse> {
   const { email, password } = data;
 
   // Use the new server endpoint that searches all agency databases
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-  const apiBaseUrl = API_URL.replace(/\/api\/?$/, '');
+  const apiBaseUrl = getApiBaseUrl();
   
   const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
     method: 'POST',

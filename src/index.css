@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Prevent zoom on double tap and pinch gestures - PWA requirement */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
 All colors MUST be HSL.
 */
@@ -112,7 +117,7 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
     /* Improve mobile performance and prevent bounce scrolling */
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    font-smoothing: antialiased;
   }
 
   /* Touch-friendly interactions */
@@ -182,10 +187,6 @@ All colors MUST be HSL.
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    display: none;
-  }
-
-  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     display: none;
   }
 
@@ -385,5 +386,75 @@ All colors MUST be HSL.
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
     display: none;
+  }
+
+  /* Hide scrollbar completely */
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* Safe area insets for mobile devices (notches, home indicators) */
+  .safe-area-inset-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-area-inset-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-area-inset-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-area-inset-right {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Prevent zoom gestures in PWA - disable pinch zoom */
+  html {
+    touch-action: pan-x pan-y;
+    -ms-touch-action: pan-x pan-y;
+  }
+
+  body {
+    touch-action: pan-x pan-y;
+    -ms-touch-action: pan-x pan-y;
+    /* Prevent text selection on double tap (iOS) */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Allow text selection in input fields and text areas */
+  input,
+  textarea,
+  [contenteditable="true"],
+  [contenteditable="true"] * {
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+    touch-action: auto;
+  }
+
+  /* Prevent double-tap zoom on buttons and interactive elements */
+  button,
+  a,
+  [role="button"],
+  .clickable {
+    touch-action: manipulation;
+    -ms-touch-action: manipulation;
+  }
+
+  /* Prevent iOS Safari bounce effect */
+  html,
+  body {
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
   }
 }

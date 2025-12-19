@@ -654,6 +654,7 @@ export class ReportService extends BaseApiService {
       generated_by?: string;
       expires_at?: string;
       is_public?: boolean;
+      agency_id?: string;
     },
     options: ApiOptions = {}
   ): Promise<ApiResponse<Report>> {
@@ -663,9 +664,9 @@ export class ReportService extends BaseApiService {
       const query = `
         INSERT INTO public.reports (
           name, description, report_type, parameters, file_path, file_name, 
-          file_size, generated_by, expires_at, is_public
+          file_size, generated_by, expires_at, is_public, agency_id
         )
-        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)
+        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
       `;
       
@@ -680,6 +681,7 @@ export class ReportService extends BaseApiService {
         data.generated_by || null,
         data.expires_at || null,
         data.is_public ?? false,
+        data.agency_id || null,
       ];
       
       const result = await pgClient.query(query, values);

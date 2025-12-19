@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { getApiBaseUrl } from '@/config/api';
 
 export function AuthRedirect() {
   const { user, userRole, loading } = useAuth();
@@ -30,8 +31,7 @@ export function AuthRedirect() {
             return;
           }
 
-          const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-          const apiBaseUrl = API_URL.replace(/\/api\/?$/, '');
+          const apiBaseUrl = getApiBaseUrl();
           
           const response = await fetch(`${apiBaseUrl}/api/agencies/check-setup`, {
             method: 'GET',

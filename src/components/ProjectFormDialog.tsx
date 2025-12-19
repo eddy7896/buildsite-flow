@@ -323,12 +323,12 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
   const fetchDepartments = async () => {
     try {
       setLoadingDepartments(true);
-      const agencyId = await getAgencyId(profile, user?.id);
-      
-      if (!agencyId) return;
-      
+      // In isolated database architecture, all records in this DB belong to the agency
+      // No need to filter by agency_id - just get all active departments
       const data = await selectRecords('departments', {
-        where: { agency_id: agencyId, is_active: true },
+        filters: [
+          { column: 'is_active', operator: 'eq', value: true }
+        ],
         orderBy: 'name ASC'
       });
       

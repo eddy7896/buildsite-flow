@@ -44,7 +44,7 @@ const PlanManagement = () => {
     setSelectedPlan(plan);
     
     // Merge plan features with all available features
-    const allFeatures = availableFeatures.map(af => {
+    const allFeatures = (availableFeatures || []).map(af => {
       const planFeature = plan.features.find(pf => pf.id === af.id);
       return planFeature || { ...af, enabled: false };
     });
@@ -127,7 +127,7 @@ const PlanManagement = () => {
       max_users: 5,
       max_agencies: 1,
       max_storage_gb: 10,
-      features: availableFeatures.map(feature => ({
+      features: (availableFeatures || []).map(feature => ({
         ...feature,
         enabled: false
       })) || []
@@ -219,7 +219,7 @@ const PlanManagement = () => {
 
         <TabsContent value="plans" className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {plans.map((plan) => (
+            {plans && plans.length > 0 ? plans.map((plan) => (
               <Card 
                 key={plan.id} 
                 className={`cursor-pointer transition-all hover:shadow-md ${
@@ -269,7 +269,7 @@ const PlanManagement = () => {
                       <DollarSign className="w-4 h-4 text-blue-500" />
                       <span>{plan.max_storage_gb}GB storage</span>
                     </div>
-                    {plan.features.slice(0, 3).map((feature) => (
+                    {(plan.features || []).slice(0, 3).map((feature) => (
                       <div key={feature.id} className="flex items-center gap-2 text-sm">
                         <div className={`w-2 h-2 rounded-full ${
                           feature.enabled ? 'bg-green-500' : 'bg-gray-300'
@@ -279,15 +279,20 @@ const PlanManagement = () => {
                         </span>
                       </div>
                     ))}
-                    {plan.features.length > 3 && (
+                    {(plan.features || []).length > 3 && (
                       <div className="text-sm text-muted-foreground">
-                        +{plan.features.length - 3} more features
+                        +{(plan.features || []).length - 3} more features
                       </div>
                     )}
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            )) : (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                <p className="text-lg font-medium mb-2">No subscription plans found</p>
+                <p className="text-sm">Create your first plan to get started</p>
+              </div>
+            )}
           </div>
 
           {isEditing && (
@@ -519,7 +524,7 @@ const PlanManagement = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {availableFeatures.map((feature) => (
+                {availableFeatures && availableFeatures.length > 0 ? availableFeatures.map((feature) => (
                   <Card key={feature.id} className="relative">
                     <CardContent className="pt-4">
                       <div className="space-y-2">
@@ -561,8 +566,7 @@ const PlanManagement = () => {
                       </div>
                     </CardContent>
                   </Card>
-                ))}
-                {availableFeatures.length === 0 && (
+                )) : (
                   <div className="col-span-full text-center py-8 text-muted-foreground">
                     No features found. Create your first feature to get started.
                   </div>

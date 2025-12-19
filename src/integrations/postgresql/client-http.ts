@@ -1,14 +1,14 @@
 // HTTP-based PostgreSQL Client for Browser
 // Makes API calls to backend server that connects to PostgreSQL
 
-import { config } from '@/config';
+import { getApiRoot } from '@/config/api';
 
 type QueryResult<T> = {
   rows: T[];
   rowCount: number;
 };
 
-const API_URL = config.api.url || 'http://localhost:3000/api';
+const API_URL = getApiRoot();
 
 /**
  * HTTP-based PostgreSQL client that makes API calls to backend
@@ -84,7 +84,20 @@ class HttpDatabaseClient {
         };
       }
     } catch (error: any) {
-      console.error('[HTTP DB Client] Request failed:', error);
+      // Network, DNS, or CORS style failures often surface as TypeError in fetch
+      console.error('[HTTP DB Client] Request failed:', {
+        error,
+        baseUrl: this.baseUrl,
+        endpoint,
+      });
+
+      if (error instanceof TypeError) {
+        throw new Error(
+          `Unable to reach the API server at ${this.baseUrl}. ` +
+          'Check that the backend is running, accessible from this device (including over LAN), and that CORS is configured correctly.'
+        );
+      }
+
       throw error;
     }
   }

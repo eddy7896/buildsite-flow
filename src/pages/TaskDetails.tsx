@@ -3,7 +3,7 @@
  * Complete task view with comments, time tracking, dependencies, and all features
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,15 +70,7 @@ export default function TaskDetails() {
   const [timeDescription, setTimeDescription] = useState('');
   const [submittingTime, setSubmittingTime] = useState(false);
 
-  useEffect(() => {
-    if (id) {
-      loadTask();
-      loadComments();
-      loadTimeTracking();
-    }
-  }, [id]);
-
-  const loadTask = async () => {
+  const loadTask = useCallback(async () => {
     if (!id) return;
     
     setLoading(true);
@@ -95,9 +87,9 @@ export default function TaskDetails() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, profile, user?.id, toast]);
 
-  const loadComments = async () => {
+  const loadComments = useCallback(async () => {
     if (!id) return;
     
     try {
@@ -106,9 +98,9 @@ export default function TaskDetails() {
     } catch (error: any) {
       console.error('Error loading comments:', error);
     }
-  };
+  }, [id, profile, user?.id]);
 
-  const loadTimeTracking = async () => {
+  const loadTimeTracking = useCallback(async () => {
     if (!id) return;
     
     try {
@@ -117,7 +109,15 @@ export default function TaskDetails() {
     } catch (error: any) {
       console.error('Error loading time tracking:', error);
     }
-  };
+  }, [id, profile, user?.id]);
+
+  useEffect(() => {
+    if (id) {
+      loadTask();
+      loadComments();
+      loadTimeTracking();
+    }
+  }, [id, loadTask, loadComments, loadTimeTracking]);
 
   const handleTaskSaved = () => {
     loadTask();

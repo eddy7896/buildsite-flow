@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { db } from '@/lib/database';
-import { Activity, Users, Clock, TrendingUp } from 'lucide-react';
+import { Activity, Users, Clock, TrendingUp, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { getApiEndpoint } from '@/config/services';
 
 interface UsageMetrics {
   activeUsers: number;
@@ -22,6 +22,18 @@ interface RecentActivity {
   user_count: number;
 }
 
+function authHeaders() {
+  if (typeof window === 'undefined') return {};
+  const token = window.localStorage.getItem('auth_token') || '';
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export const RealTimeUsageWidget = () => {
   const [metrics, setMetrics] = useState<UsageMetrics | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
@@ -32,52 +44,43 @@ export const RealTimeUsageWidget = () => {
     try {
       setLoading(true);
 
-      // Simulated metrics until database tables are available
-      const simulatedMetrics: UsageMetrics = {
-        activeUsers: Math.floor(Math.random() * 25) + 5,
-        activeSessions: Math.floor(Math.random() * 100) + 50,
-        recentActions: Math.floor(Math.random() * 50) + 10,
-        peakHour: `${Math.floor(Math.random() * 24)}:00`,
-        totalActionsToday: Math.floor(Math.random() * 1000) + 500,
-        avgResponseTime: Math.random() * 100 + 50,
-      };
+      const endpoint = getApiEndpoint('/system/usage/realtime');
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: authHeaders(),
+      });
 
-      setMetrics(simulatedMetrics);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch usage metrics: ${response.status}`);
+      }
 
-      // Simulated recent activity
-      const simulatedActivity: RecentActivity[] = [
-        {
-          id: '1',
-          action_type: 'create',
-          resource_type: 'project',
-          timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-          user_count: 3,
-        },
-        {
-          id: '2',
-          action_type: 'update',
-          resource_type: 'invoice',
-          timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-          user_count: 1,
-        },
-        {
-          id: '3',
-          action_type: 'view',
-          resource_type: 'dashboard',
-          timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-          user_count: 8,
-        },
-      ];
-
-      setRecentActivity(simulatedActivity);
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        setMetrics(data.data.metrics);
+        setRecentActivity(data.data.recentActivity || []);
+      } else {
+        throw new Error('Invalid response format');
+      }
 
     } catch (error: any) {
       console.error('Error fetching usage metrics:', error);
       toast({
         title: "Error loading usage data",
-        description: error.message,
+        description: error.message || 'Failed to load real-time usage statistics',
         variant: "destructive"
       });
+      
+      // Fallback to zero values on error
+      setMetrics({
+        activeUsers: 0,
+        activeSessions: 0,
+        recentActions: 0,
+        peakHour: '00:00',
+        totalActionsToday: 0,
+        avgResponseTime: 0,
+      });
+      setRecentActivity([]);
     } finally {
       setLoading(false);
     }
@@ -114,7 +117,7 @@ export const RealTimeUsageWidget = () => {
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-center h-48">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <Loader2 className="h-8 w-8 animate-spin" />
           </div>
         </CardContent>
       </Card>

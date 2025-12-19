@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { getApiBaseUrl } from '@/config/api';
 import { PageContainer, PageHeader } from '@/components/layout';
 import { Loader2, Shield, Settings, Building2, Users, CheckCircle2, AlertTriangle } from 'lucide-react';
 
@@ -51,8 +52,7 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     const fetchSetupStatus = async () => {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        const apiBaseUrl = API_URL.replace(/\/api\/?$/, '');
+        const apiBaseUrl = getApiBaseUrl();
         const agencyDatabase = localStorage.getItem('agency_database') || '';
 
         const response = await fetch(
