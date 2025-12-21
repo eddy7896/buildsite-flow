@@ -154,68 +154,108 @@ export default function Analytics() {
       const previousFromDateStr = previousFromDate.toISOString();
       const previousToDateStr = previousToDate.toISOString();
 
+      // Helper function to safely execute queries with error handling
+      const safeQuery = async (queryPromise: Promise<any>, fallback: any = null) => {
+        try {
+          const result = await queryPromise;
+          if (result.error) {
+            console.warn('[Analytics] Query error:', result.error);
+            return fallback;
+          }
+          return result.data || fallback;
+        } catch (error: any) {
+          console.warn('[Analytics] Query exception:', error);
+          return fallback;
+        }
+      };
+
       // Fetch key metrics with agency_id filtering and date range
+      // All queries are wrapped in safeQuery to handle missing tables/columns gracefully
       const [
-        { data: invoices },
-        { data: previousInvoices },
-        { data: employees },
-        { data: previousEmployees },
-        { data: projects },
-        { data: previousProjects },
-        { data: reimbursements },
-        { data: previousReimbursements }
+        invoices,
+        previousInvoices,
+        employees,
+        previousEmployees,
+        projects,
+        previousProjects,
+        reimbursements,
+        previousReimbursements
       ] = await Promise.all([
+        safeQuery(
         db.from('invoices')
           .select('total_amount, created_at')
           .eq('agency_id', agencyId)
           .gte('created_at', fromDateStr)
           .lte('created_at', toDateStr),
+          []
+        ),
+        safeQuery(
         db.from('invoices')
           .select('total_amount, created_at')
           .eq('agency_id', agencyId)
           .gte('created_at', previousFromDateStr)
           .lte('created_at', previousToDateStr),
+          []
+        ),
+        safeQuery(
         db.from('profiles')
           .select('id, created_at, is_active')
           .eq('agency_id', agencyId),
+          []
+        ),
+        safeQuery(
         db.from('profiles')
           .select('id, created_at')
           .eq('agency_id', agencyId)
           .lte('created_at', previousToDateStr),
+          []
+        ),
+        safeQuery(
         db.from('projects')
           .select('id, status, created_at')
           .eq('agency_id', agencyId),
+          []
+        ),
+        safeQuery(
         db.from('projects')
           .select('id, status, created_at')
           .eq('agency_id', agencyId)
           .lte('created_at', previousToDateStr),
-        db.from('reimbursement_requests')
+          []
+        ),
+        safeQuery(
+          db.from('reimbursement_requests')
           .select('amount, status, created_at')
-          .eq('agency_id', agencyId)
+            .eq('agency_id', agencyId)
           .gte('created_at', fromDateStr)
-          .lte('created_at', toDateStr),
-        db.from('reimbursement_requests')
+            .lte('created_at', toDateStr),
+          []
+        ),
+        safeQuery(
+          db.from('reimbursement_requests')
           .select('amount, status, created_at')
-          .eq('agency_id', agencyId)
+            .eq('agency_id', agencyId)
           .gte('created_at', previousFromDateStr)
-          .lte('created_at', previousToDateStr)
+            .lte('created_at', previousToDateStr),
+          []
+        )
       ]);
 
-      // Calculate metrics
-      const totalRevenue = invoices?.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0) || 0;
-      const previousRevenue = previousInvoices?.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0) || 0;
+      // Calculate metrics with safe array handling
+      const totalRevenue = Array.isArray(invoices) ? invoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0) : 0;
+      const previousRevenue = Array.isArray(previousInvoices) ? previousInvoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0) : 0;
       const revenueGrowth = previousRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue) * 100 : 0;
 
-      const totalEmployees = employees?.length || 0;
-      const previousTotalEmployees = previousEmployees?.length || 0;
+      const totalEmployees = Array.isArray(employees) ? employees.length : 0;
+      const previousTotalEmployees = Array.isArray(previousEmployees) ? previousEmployees.length : 0;
       const employeeGrowth = previousTotalEmployees > 0 ? ((totalEmployees - previousTotalEmployees) / previousTotalEmployees) * 100 : 0;
 
-      const activeProjects = projects?.filter(p => p.status === 'in_progress' || p.status === 'active').length || 0;
-      const previousActiveProjects = previousProjects?.filter(p => p.status === 'in_progress' || p.status === 'active').length || 0;
+      const activeProjects = Array.isArray(projects) ? projects.filter(p => p.status === 'in_progress' || p.status === 'active').length : 0;
+      const previousActiveProjects = Array.isArray(previousProjects) ? previousProjects.filter(p => p.status === 'in_progress' || p.status === 'active').length : 0;
       const projectsGrowth = previousActiveProjects > 0 ? ((activeProjects - previousActiveProjects) / previousActiveProjects) * 100 : 0;
 
-      const pendingReimbursements = reimbursements?.filter(r => r.status === 'submitted' || r.status === 'pending').length || 0;
-      const previousPendingReimbursements = previousReimbursements?.filter(r => r.status === 'submitted' || r.status === 'pending').length || 0;
+      const pendingReimbursements = Array.isArray(reimbursements) ? reimbursements.filter(r => r.status === 'submitted' || r.status === 'pending').length : 0;
+      const previousPendingReimbursements = Array.isArray(previousReimbursements) ? previousReimbursements.filter(r => r.status === 'submitted' || r.status === 'pending').length : 0;
       const reimbursementGrowth = previousPendingReimbursements > 0 ? ((pendingReimbursements - previousPendingReimbursements) / previousPendingReimbursements) * 100 : 0;
 
       setMetrics({
@@ -246,19 +286,38 @@ export default function Analytics() {
   };
 
   const generateChartData = async (invoices: any[], reimbursements: any[], projects: any[], agencyId: string) => {
+    // Helper function to safely execute queries
+    const safeQuery = async (queryPromise: Promise<any>, fallback: any = []) => {
+      try {
+        const result = await queryPromise;
+        if (result.error) {
+          console.warn('[Analytics] Chart data query error:', result.error);
+          return fallback;
+        }
+        return result.data || fallback;
+      } catch (error: any) {
+        console.warn('[Analytics] Chart data query exception:', error);
+        return fallback;
+      }
+    };
+
     // Fetch ALL historical invoices for revenue trend (not just date range)
-    const { data: allInvoices } = await db
-      .from('invoices')
+    const allInvoices = await safeQuery(
+      db.from('invoices')
       .select('total_amount, created_at')
       .eq('agency_id', agencyId)
-      .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true }),
+      []
+    );
 
     // Fetch ALL historical reimbursements for expense trend
-    const { data: allReimbursements } = await db
-      .from('reimbursement_requests')
+    const allReimbursements = await safeQuery(
+      db.from('reimbursement_requests')
       .select('amount, created_at')
       .eq('agency_id', agencyId)
-      .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true }),
+      []
+    );
 
     // Revenue trend (last 12 months for better historical view)
     const monthlyRevenue = [];
@@ -267,11 +326,11 @@ export default function Analytics() {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthName = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
       
-      const monthlyInvoices = allInvoices?.filter(inv => {
+      const monthlyInvoices = Array.isArray(allInvoices) ? allInvoices.filter(inv => {
         if (!inv.created_at) return false;
         const invDate = new Date(inv.created_at);
         return invDate.getMonth() === date.getMonth() && invDate.getFullYear() === date.getFullYear();
-      }) || [];
+      }) : [];
       
       const revenue = monthlyInvoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
       
@@ -289,11 +348,11 @@ export default function Analytics() {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthName = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
       
-      const monthlyReimbursements = allReimbursements?.filter(reimb => {
+      const monthlyReimbursements = Array.isArray(allReimbursements) ? allReimbursements.filter(reimb => {
         if (!reimb.created_at) return false;
         const reimbDate = new Date(reimb.created_at);
         return reimbDate.getMonth() === date.getMonth() && reimbDate.getFullYear() === date.getFullYear();
-      }) || [];
+      }) : [];
       
       const expenses = monthlyReimbursements.reduce((sum, reimb) => sum + (Number(reimb.amount) || 0), 0);
       
@@ -306,11 +365,11 @@ export default function Analytics() {
     setExpenseData(monthlyExpenses);
 
     // Project status distribution
-    const statusCounts = projects?.reduce((acc, project) => {
+    const statusCounts = Array.isArray(projects) ? projects.reduce((acc, project) => {
       const status = project.status || 'unknown';
       acc[status] = (acc[status] || 0) + 1;
       return acc;
-    }, {} as Record<string, number>) || {};
+    }, {} as Record<string, number>) : {};
 
     const projectData = Object.entries(statusCounts).map(([status, count]) => ({
       name: status.replace('_', ' ').toUpperCase(),
@@ -320,16 +379,23 @@ export default function Analytics() {
 
     // Leave requests data (real data from database - ALL leave requests)
     try {
-      const { data: leaveRequests } = await db
+      const leaveResult = await db
         .from('leave_requests')
         .select('status')
         .eq('agency_id', agencyId);
 
-      const leaveCounts = leaveRequests?.reduce((acc, req) => {
+      if (leaveResult.error) {
+        console.warn('[Analytics] Leave requests query error:', leaveResult.error);
+        setLeaveData([]);
+        return;
+      }
+
+      const leaveRequests = leaveResult.data || [];
+      const leaveCounts = Array.isArray(leaveRequests) ? leaveRequests.reduce((acc, req) => {
         const status = req.status || 'pending';
         acc[status] = (acc[status] || 0) + 1;
         return acc;
-      }, {} as Record<string, number>) || {};
+      }, {} as Record<string, number>) : {};
 
       const leaveDataArray = Object.entries(leaveCounts)
         .map(([status, count]) => ({
@@ -341,7 +407,7 @@ export default function Analytics() {
       // Always set real data, even if empty array
       setLeaveData(leaveDataArray.length > 0 ? leaveDataArray : []);
     } catch (error) {
-      console.error('Error fetching leave data:', error);
+      console.error('[Analytics] Error fetching leave data:', error);
       // On error, set empty array instead of mock zeros
       setLeaveData([]);
     }
@@ -353,46 +419,68 @@ export default function Analytics() {
       today.setHours(0, 0, 0, 0);
       const todayStr = today.toISOString().split('T')[0];
 
+      // Helper function to safely execute queries
+      const safeQuery = async (queryPromise: Promise<any>, fallback: any = []) => {
+        try {
+          const result = await queryPromise;
+          if (result.error) {
+            console.warn('[Analytics] Workforce query error:', result.error);
+            return fallback;
+          }
+          return result.data || fallback;
+        } catch (error: any) {
+          console.warn('[Analytics] Workforce query exception:', error);
+          return fallback;
+        }
+      };
+
       // Fetch employees
-      const { data: employees } = await db
-        .from('profiles')
+      const employees = await safeQuery(
+        db.from('profiles')
         .select('id, is_active, department')
-        .eq('agency_id', agencyId);
+          .eq('agency_id', agencyId),
+        []
+      );
 
       // Fetch attendance for today
-      const { data: attendanceToday } = await db
-        .from('attendance')
+      const attendanceToday = await safeQuery(
+        db.from('attendance')
         .select('employee_id, status, check_in_time')
         .eq('agency_id', agencyId)
         .gte('date', todayStr)
-        .lte('date', todayStr);
+          .lte('date', todayStr),
+        []
+      );
 
       // Fetch leave requests for today (where today is between start_date and end_date)
-      const { data: leaveRequests } = await db
-        .from('leave_requests')
+      const leaveRequests = await safeQuery(
+        db.from('leave_requests')
         .select('employee_id, status, start_date, end_date')
         .eq('agency_id', agencyId)
         .eq('status', 'approved')
         .lte('start_date', todayStr)
-        .gte('end_date', todayStr);
+          .gte('end_date', todayStr),
+        []
+      );
 
-      const totalEmployees = employees?.length || 0;
-      const activeEmployees = employees?.filter(e => e.is_active).length || 0;
-      const onLeave = leaveRequests?.length || 0;
+      const totalEmployees = Array.isArray(employees) ? employees.length : 0;
+      const activeEmployees = Array.isArray(employees) ? employees.filter(e => e.is_active).length : 0;
+      const onLeave = Array.isArray(leaveRequests) ? leaveRequests.length : 0;
 
       // Calculate attendance stats
-      const presentToday = attendanceToday?.filter(a => a.status === 'present' || a.status === 'checked_in').length || 0;
+      const presentToday = Array.isArray(attendanceToday) ? attendanceToday.filter(a => a.status === 'present' || a.status === 'checked_in').length : 0;
       const absentToday = totalEmployees - presentToday - onLeave;
-      const lateToday = attendanceToday?.filter(a => {
+      const lateToday = Array.isArray(attendanceToday) ? attendanceToday.filter(a => {
         if (!a.check_in_time) return false;
         const checkIn = new Date(a.check_in_time);
         return checkIn.getHours() > 9 || (checkIn.getHours() === 9 && checkIn.getMinutes() > 0);
-      }).length || 0;
+      }).length : 0;
 
       // Department stats
       const departmentMap = new Map<string, { employees: number; present: number }>();
       
-      employees?.forEach(emp => {
+      if (Array.isArray(employees)) {
+        employees.forEach(emp => {
         const dept = emp.department || 'Unassigned';
         if (!departmentMap.has(dept)) {
           departmentMap.set(dept, { employees: 0, present: 0 });
@@ -400,11 +488,12 @@ export default function Analytics() {
         const deptData = departmentMap.get(dept)!;
         deptData.employees++;
         
-        const isPresent = attendanceToday?.some(a => a.employee_id === emp.id && (a.status === 'present' || a.status === 'checked_in'));
+          const isPresent = Array.isArray(attendanceToday) && attendanceToday.some(a => a.employee_id === emp.id && (a.status === 'present' || a.status === 'checked_in'));
         if (isPresent) {
           deptData.present++;
         }
       });
+      }
 
       const departmentStats = Array.from(departmentMap.entries()).map(([department, data]) => ({
         department,

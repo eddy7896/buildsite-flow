@@ -78,6 +78,7 @@ export function DocumentManager() {
   const [showFolderDialog, setShowFolderDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showPermissionsDialog, setShowPermissionsDialog] = useState(false);
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [folderForm, setFolderForm] = useState({
     name: '',
@@ -95,10 +96,10 @@ export function DocumentManager() {
         .order('name');
 
       if (error) throw error;
-      setFolders(data || []);
-    } catch (error) {
+      setFolders((data as DocumentFolder[]) || []);
+    } catch (error: any) {
       console.error('Error fetching folders:', error);
-      toast.error('Failed to load folders');
+      toast.error(error?.message || 'Failed to load folders');
     }
   };
 
@@ -120,10 +121,17 @@ export function DocumentManager() {
       const { data, error } = await query.order('name');
 
       if (error) throw error;
-      setDocuments(data || []);
-    } catch (error) {
+      // Ensure tags is always an array
+      const docs = (data as Document[]) || [];
+      const normalizedDocs = docs.map(doc => ({
+        ...doc,
+        tags: Array.isArray(doc.tags) ? doc.tags : (doc.tags ? [doc.tags] : []),
+        download_count: doc.download_count || 0
+      }));
+      setDocuments(normalizedDocs);
+    } catch (error: any) {
       console.error('Error fetching documents:', error);
-      toast.error('Failed to load documents');
+      toast.error(error?.message || 'Failed to load documents');
     }
   };
 
@@ -151,8 +159,9 @@ export function DocumentManager() {
       const { error } = await db
         .from('document_folders')
         .insert({
-          ...folderForm,
-          parent_folder_id: currentFolder,
+          name: folderForm.name,
+          description: folderForm.description || null,
+          parent_folder_id: currentFolder || null,
           created_by: user.id,
           agency_id: agencyId
         });
@@ -162,10 +171,10 @@ export function DocumentManager() {
       toast.success('Folder created successfully');
       setShowFolderDialog(false);
       setFolderForm({ name: '', description: '' });
-      fetchFolders();
-    } catch (error) {
+      await fetchFolders();
+    } catch (error: any) {
       console.error('Error creating folder:', error);
-      toast.error('Failed to create folder');
+      toast.error(error?.message || 'Failed to create folder');
     }
   };
 
@@ -180,50 +189,88 @@ export function DocumentManager() {
       
       // Upload file to file storage
       const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}.${fileExt}`;
-      const filePath = `documents/${fileName}`;
+      const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+      // Store path without bucket prefix - bucket is passed separately
+      const filePath = fileName;
 
-      const { error: uploadError } = await db.storage
+      // Set current user ID for file upload
+      (window as any).__currentUserId = user.id;
+
+      const { error: uploadError, data: uploadData } = await db.storage
         .from('documents')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
+
+      // Use the file path from upload result
+      // uploadData.path should be in format "documents/filename.ext" from the API
+      let finalFilePath = uploadData?.path;
+      
+      // If path doesn't include bucket, add it
+      if (finalFilePath && !finalFilePath.startsWith('documents/')) {
+        finalFilePath = `documents/${finalFilePath}`;
+      } else if (!finalFilePath) {
+        // Fallback: construct path
+        finalFilePath = `documents/${filePath}`;
+      }
 
       // Save document metadata
       const { error: dbError } = await db
         .from('documents')
         .insert({
           name: file.name,
-          file_path: filePath,
+          file_path: finalFilePath,
           file_size: file.size,
-          file_type: file.type,
+          file_type: file.type || 'application/octet-stream',
           uploaded_by: user.id,
-          folder_id: currentFolder,
+          folder_id: currentFolder || null,
           agency_id: agencyId,
           tags: [],
-          is_public: false
+          is_public: false,
+          download_count: 0
         });
 
       if (dbError) throw dbError;
 
       toast.success('File uploaded successfully');
       fetchDocuments();
-    } catch (error) {
+      
+      // Reset file input
+      if (event.target) {
+        event.target.value = '';
+      }
+    } catch (error: any) {
       console.error('Error uploading file:', error);
-      toast.error('Failed to upload file');
+      toast.error(error?.message || 'Failed to upload file');
     }
   };
 
   const handleDownload = async (document: Document) => {
     try {
-      const { data, error } = await db.storage
-        .from('documents')
-        .download(document.file_path);
+      // Extract bucket and path from file_path
+      // file_path format: "documents/filename.ext"
+      const pathParts = document.file_path.split('/');
+      const bucket = pathParts[0] || 'documents';
+      const filePath = pathParts.slice(1).join('/') || document.file_path;
 
-      if (error) throw error;
+      // Use API endpoint to download file
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const token = localStorage.getItem('auth_token') || '';
+      
+      const response = await fetch(`${baseUrl}/files/${bucket}/${encodeURIComponent(filePath)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
 
-      // Create download link
-      const url = URL.createObjectURL(data);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Download failed' }));
+        throw new Error(errorData.error?.message || errorData.message || `Failed to download file: ${response.statusText}`);
+      }
+
+      // Download from API
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
       const a = globalThis.document.createElement('a');
       a.href = url;
       a.download = document.name;
@@ -235,13 +282,104 @@ export function DocumentManager() {
       // Update download count
       await db
         .from('documents')
-        .update({ download_count: document.download_count + 1 })
+        .update({ download_count: (document.download_count || 0) + 1 })
         .eq('id', document.id);
 
       toast.success('File downloaded successfully');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error downloading file:', error);
-      toast.error('Failed to download file');
+      toast.error(error?.message || 'Failed to download file');
+    }
+  };
+
+  const handleOpen = async (document: Document) => {
+    try {
+      // Extract bucket and path from file_path
+      // file_path format: "documents/filename.ext"
+      const pathParts = document.file_path.split('/');
+      const bucket = pathParts[0] || 'documents';
+      const filePath = pathParts.slice(1).join('/') || document.file_path;
+
+      // Use API endpoint to get file URL
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const token = localStorage.getItem('auth_token') || '';
+      const fileUrl = `${baseUrl}/files/${bucket}/${encodeURIComponent(filePath)}`;
+
+      // For files that can be viewed in browser (images, PDFs, etc.)
+      // Create a temporary link with auth token in query param
+      // Note: In production, use proper auth headers or signed URLs
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error: any) {
+      console.error('Error opening file:', error);
+      toast.error(error?.message || 'Failed to open file');
+    }
+  };
+
+  const handleSettings = (document: Document) => {
+    setSelectedDocument(document);
+    setShowSettingsDialog(true);
+  };
+
+  const handleDeleteDocument = async (document: Document) => {
+    if (!confirm(`Are you sure you want to delete "${document.name}"?`)) {
+      return;
+    }
+
+    try {
+      // Delete file from storage
+      const pathParts = document.file_path.split('/');
+      const bucket = pathParts[0] || 'documents';
+      const filePath = pathParts.slice(1).join('/') || document.file_path;
+
+      await db.storage
+        .from(bucket)
+        .remove([filePath]);
+
+      // Delete document record
+      const { error } = await db
+        .from('documents')
+        .delete()
+        .eq('id', document.id);
+
+      if (error) throw error;
+
+      toast.success('Document deleted successfully');
+      fetchDocuments();
+    } catch (error: any) {
+      console.error('Error deleting document:', error);
+      toast.error(error?.message || 'Failed to delete document');
+    }
+  };
+
+  const handleDeleteFolder = async (folder: DocumentFolder) => {
+    if (!confirm(`Are you sure you want to delete folder "${folder.name}"? This will also delete all documents inside.`)) {
+      return;
+    }
+
+    try {
+      // Delete folder (cascade will handle subfolders and documents)
+      const { error } = await db
+        .from('document_folders')
+        .delete()
+        .eq('id', folder.id);
+
+      if (error) throw error;
+
+      toast.success('Folder deleted successfully');
+      if (currentFolder === folder.id) {
+        setCurrentFolder(null);
+      }
+      await fetchFolders();
+      await fetchDocuments();
+    } catch (error: any) {
+      console.error('Error deleting folder:', error);
+      toast.error(error?.message || 'Failed to delete folder');
     }
   };
 
@@ -410,9 +548,26 @@ export function DocumentManager() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => handleOpen(document)}
+                            title="Open/View"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleDownload(document)}
+                            title="Download"
                           >
                             <Download className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSettings(document)}
+                            title="Settings"
+                          >
+                            <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
@@ -421,8 +576,17 @@ export function DocumentManager() {
                               setSelectedDocument(document);
                               setShowPermissionsDialog(true);
                             }}
+                            title="Share"
                           >
                             <Share2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteDocument(document)}
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
                       </div>
@@ -460,6 +624,103 @@ export function DocumentManager() {
           </div>
         )}
       </div>
+
+      {/* Settings Dialog */}
+      <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Document Settings</DialogTitle>
+            <DialogDescription>
+              Manage settings for {selectedDocument?.name}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedDocument && (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="doc-name">Document Name</Label>
+                <Input
+                  id="doc-name"
+                  value={selectedDocument.name}
+                  onChange={async (e) => {
+                    try {
+                      await db
+                        .from('documents')
+                        .update({ name: e.target.value })
+                        .eq('id', selectedDocument.id);
+                      setSelectedDocument({ ...selectedDocument, name: e.target.value });
+                      fetchDocuments();
+                      toast.success('Document name updated');
+                    } catch (error: any) {
+                      toast.error(error?.message || 'Failed to update name');
+                    }
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="doc-description">Description</Label>
+                <Textarea
+                  id="doc-description"
+                  value={selectedDocument.description || ''}
+                  onChange={async (e) => {
+                    try {
+                      await db
+                        .from('documents')
+                        .update({ description: e.target.value || null })
+                        .eq('id', selectedDocument.id);
+                      setSelectedDocument({ ...selectedDocument, description: e.target.value || null });
+                      fetchDocuments();
+                    } catch (error: any) {
+                      toast.error(error?.message || 'Failed to update description');
+                    }
+                  }}
+                  placeholder="Add a description..."
+                />
+              </div>
+              <div>
+                <Label htmlFor="doc-public">Visibility</Label>
+                <Select
+                  value={selectedDocument.is_public ? 'public' : 'private'}
+                  onValueChange={async (value) => {
+                    try {
+                      await db
+                        .from('documents')
+                        .update({ is_public: value === 'public' })
+                        .eq('id', selectedDocument.id);
+                      setSelectedDocument({ ...selectedDocument, is_public: value === 'public' });
+                      fetchDocuments();
+                      toast.success(`Document is now ${value}`);
+                    } catch (error: any) {
+                      toast.error(error?.message || 'Failed to update visibility');
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="public">Public</SelectItem>
+                    <SelectItem value="private">Private</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>File Information</Label>
+                <div className="text-sm text-muted-foreground space-y-1 mt-2">
+                  <p>Type: {selectedDocument.file_type}</p>
+                  <p>Size: {formatFileSize(selectedDocument.file_size)}</p>
+                  <p>Path: {selectedDocument.file_path}</p>
+                  <p>Downloads: {selectedDocument.download_count}</p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSettingsDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Folder Creation Dialog */}
       <Dialog open={showFolderDialog} onOpenChange={setShowFolderDialog}>

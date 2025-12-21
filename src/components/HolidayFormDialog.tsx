@@ -43,7 +43,7 @@ export function HolidayFormDialog({
   onHolidayCreated,
   editHoliday 
 }: HolidayFormDialogProps) {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   // Initialize form data based on editHoliday or defaults

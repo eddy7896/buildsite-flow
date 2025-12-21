@@ -4,6 +4,7 @@ import {
   rawQuery,
   rawQueryOne
 } from './postgresql-service';
+import { format } from 'date-fns';
 
 export interface DateRange {
   startDate: string;
@@ -288,6 +289,7 @@ export async function getDailyActivity(
   // Map hours_worked to total_hours for the daily activity view
   const attendanceQuery = `
     SELECT 
+      date,
       check_in_time,
       check_out_time,
       COALESCE(hours_worked, 0) as total_hours,
@@ -331,6 +333,91 @@ export async function getDailyActivity(
     total_hours: Number(attendance?.total_hours || 0),
     notes: attendance?.notes || null,
   };
+}
+
+/**
+ * Get daily activities for multiple dates in a single query (batch)
+ * More efficient than calling getDailyActivity multiple times
+ */
+export async function getDailyActivitiesBatch(
+  employeeId: string,
+  dates: string[],
+  agencyId?: string
+): Promise<DailyActivity[]> {
+  if (dates.length === 0) return [];
+  
+  // Get attendance records for all dates
+  const attendanceQuery = `
+    SELECT 
+      date,
+      check_in_time,
+      check_out_time,
+      COALESCE(hours_worked, 0) as total_hours,
+      notes
+    FROM attendance
+    WHERE employee_id = $1
+      AND date = ANY($2::date[])
+    ORDER BY date DESC
+  `;
+  
+  const attendanceRecords = await rawQuery(attendanceQuery, [employeeId, dates]);
+  
+  // Get tasks for all dates
+  const tasksQuery = `
+    SELECT 
+      DATE(tt.start_time) as date,
+      t.id as task_id,
+      t.title as task_title,
+      COALESCE(SUM(tt.duration_minutes), 0) / 60.0 as hours_logged,
+      p.name as project_name
+    FROM task_time_tracking tt
+    INNER JOIN tasks t ON tt.task_id = t.id
+    LEFT JOIN projects p ON t.project_id = p.id
+    WHERE tt.user_id = $1
+      AND DATE(tt.start_time) = ANY($2::date[])
+    GROUP BY DATE(tt.start_time), t.id, t.title, p.name
+    ORDER BY date DESC, hours_logged DESC
+  `;
+  
+  const taskRecords = await rawQuery(tasksQuery, [employeeId, dates]);
+  
+  // Group tasks by date
+  const tasksByDate: Record<string, any[]> = {};
+  taskRecords.forEach((row: any) => {
+    const dateStr = format(new Date(row.date), 'yyyy-MM-dd');
+    if (!tasksByDate[dateStr]) {
+      tasksByDate[dateStr] = [];
+    }
+    tasksByDate[dateStr].push({
+      task_id: row.task_id,
+      task_title: row.task_title,
+      hours_logged: Number(row.hours_logged || 0),
+      project_name: row.project_name,
+    });
+  });
+  
+  // Build activities array
+  const activities: DailyActivity[] = dates.map(date => {
+    // Find attendance record - handle both string and Date formats
+    const attendance = attendanceRecords.find((r: any) => {
+      const recordDate = r.date instanceof Date 
+        ? format(r.date, 'yyyy-MM-dd')
+        : r.date?.toString().split('T')[0] || r.date;
+      return recordDate === date;
+    });
+    const tasks = tasksByDate[date] || [];
+    
+    return {
+      date,
+      tasks,
+      check_in_time: attendance?.check_in_time || null,
+      check_out_time: attendance?.check_out_time || null,
+      total_hours: Number(attendance?.total_hours || 0),
+      notes: attendance?.notes || null,
+    };
+  });
+  
+  return activities;
 }
 
 /**

@@ -139,10 +139,29 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
   const formatDateForInput = (dateString: string | null | undefined): string | null => {
     if (!dateString) return null;
     try {
+      // Handle date strings that might already be in YYYY-MM-DD format
+      if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        // Validate it's a reasonable date (after 2000)
+        if (dateString < '2000-01-01') {
+          console.warn('Invalid date detected (too old):', dateString);
+          return null;
+        }
+        return dateString;
+      }
+      
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return null;
+      
+      // Check if date is reasonable (after year 2000)
+      const year = date.getFullYear();
+      if (year < 2000 || year > 2100) {
+        console.warn('Invalid date detected (out of range):', dateString, 'Year:', year);
+        return null;
+      }
+      
       return date.toISOString().split('T')[0];
-    } catch {
+    } catch (error) {
+      console.warn('Error formatting date:', dateString, error);
       return null;
     }
   };
@@ -426,10 +445,59 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
       return;
     }
 
+    // Date validation
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    const minDate = '2000-01-01'; // Reasonable minimum date
+    
+    if (formData.start_date) {
+      // Check if start date is too old (before 2000)
+      if (formData.start_date < minDate) {
+        toast({
+          title: 'Validation Error',
+          description: 'Start date cannot be before year 2000. Please enter a valid date.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    if (formData.end_date) {
+      // Check if end date is too old
+      if (formData.end_date < minDate) {
+        toast({
+          title: 'Validation Error',
+          description: 'End date cannot be before year 2000. Please enter a valid date.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    if (formData.deadline) {
+      // Check if deadline is too old
+      if (formData.deadline < minDate) {
+        toast({
+          title: 'Validation Error',
+          description: 'Deadline cannot be before year 2000. Please enter a valid date.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     if (formData.start_date && formData.end_date && formData.start_date > formData.end_date) {
       toast({
         title: 'Validation Error',
         description: 'End date must be after start date',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (formData.start_date && formData.deadline && formData.start_date > formData.deadline) {
+      toast({
+        title: 'Validation Error',
+        description: 'Deadline must be after start date',
         variant: 'destructive',
       });
       return;
@@ -851,8 +919,22 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
                 <Input
                   id="start_date"
                   type="date"
+                  min="2000-01-01"
+                  max="2100-12-31"
                   value={formData.start_date || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value || null }))}
+                  onChange={(e) => {
+                    const value = e.target.value || null;
+                    // Validate date is reasonable
+                    if (value && value < '2000-01-01') {
+                      toast({
+                        title: 'Invalid Date',
+                        description: 'Start date cannot be before year 2000',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+                    setFormData(prev => ({ ...prev, start_date: value }));
+                  }}
                 />
               </div>
               <div className="space-y-2">
@@ -860,8 +942,32 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
                 <Input
                   id="end_date"
                   type="date"
+                  min={formData.start_date || '2000-01-01'}
+                  max="2100-12-31"
                   value={formData.end_date || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value || null }))}
+                  onChange={(e) => {
+                    const value = e.target.value || null;
+                    // Validate date is reasonable and after start date
+                    if (value) {
+                      if (value < '2000-01-01') {
+                        toast({
+                          title: 'Invalid Date',
+                          description: 'End date cannot be before year 2000',
+                          variant: 'destructive',
+                        });
+                        return;
+                      }
+                      if (formData.start_date && value < formData.start_date) {
+                        toast({
+                          title: 'Invalid Date',
+                          description: 'End date must be after start date',
+                          variant: 'destructive',
+                        });
+                        return;
+                      }
+                    }
+                    setFormData(prev => ({ ...prev, end_date: value }));
+                  }}
                 />
               </div>
               <div className="space-y-2">
@@ -869,8 +975,32 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
                 <Input
                   id="deadline"
                   type="date"
+                  min={formData.start_date || '2000-01-01'}
+                  max="2100-12-31"
                   value={formData.deadline || ''}
-                  onChange={(e) => setFormData(prev => ({ ...prev, deadline: e.target.value || null }))}
+                  onChange={(e) => {
+                    const value = e.target.value || null;
+                    // Validate date is reasonable and after start date
+                    if (value) {
+                      if (value < '2000-01-01') {
+                        toast({
+                          title: 'Invalid Date',
+                          description: 'Deadline cannot be before year 2000',
+                          variant: 'destructive',
+                        });
+                        return;
+                      }
+                      if (formData.start_date && value < formData.start_date) {
+                        toast({
+                          title: 'Invalid Date',
+                          description: 'Deadline must be after start date',
+                          variant: 'destructive',
+                        });
+                        return;
+                      }
+                    }
+                    setFormData(prev => ({ ...prev, deadline: value }));
+                  }}
                 />
               </div>
             </div>

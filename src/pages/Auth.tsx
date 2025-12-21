@@ -7,6 +7,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/hooks/useAuth';
+import { TwoFactorVerification } from '@/components/TwoFactorVerification';
+import { verifyTwoFactor } from '@/services/api/twoFactor-service';
+import { loginUser } from '@/services/api/auth-postgresql';
 import { 
   Loader2, Building, CheckCircle2, ArrowRight, KeyRound, Mail,
   Shield, BarChart3, Users, Briefcase, Eye, EyeOff
@@ -23,6 +26,11 @@ const Auth = () => {
   
   // Form states
   const [signInData, setSignInData] = useState({ email: '', password: '' });
+  
+  // 2FA states
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
+  const [twoFactorUserId, setTwoFactorUserId] = useState<string>('');
+  const [twoFactorAgencyDatabase, setTwoFactorAgencyDatabase] = useState<string>('');
 
   // Check for registration success
   useEffect(() => {
@@ -75,13 +83,67 @@ const Auth = () => {
       localStorage.removeItem('remembered_email');
     }
     
-    const { error: signInError } = await signIn(signInData.email, signInData.password);
-    
-    if (signInError) {
-      setError('Invalid email or password. Please try again.');
+    try {
+      // Try login via API to check for 2FA
+      const loginResult = await loginUser({
+        email: signInData.email,
+        password: signInData.password,
+      });
+
+      // If 2FA is required, show verification component
+      if ((loginResult as any).requiresTwoFactor) {
+        setTwoFactorUserId((loginResult as any).userId);
+        setTwoFactorAgencyDatabase((loginResult as any).agencyDatabase);
+        setRequiresTwoFactor(true);
+        setIsLoading(false);
+        return;
+      }
+
+      // If no 2FA, proceed with normal sign in
+      const { error: signInError } = await signIn(signInData.email, signInData.password);
+      
+      if (signInError) {
+        setError('Invalid email or password. Please try again.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Invalid email or password. Please try again.');
     }
     
     setIsLoading(false);
+  };
+
+  const handleTwoFactorVerified = async (token?: string, recoveryCode?: string) => {
+    // After 2FA verification, complete login with token
+    try {
+      setIsLoading(true);
+      const loginResult = await loginUser({
+        email: signInData.email,
+        password: signInData.password,
+        twoFactorToken: token,
+        recoveryCode: recoveryCode,
+      } as any);
+
+      // If login successful (has token), store it and reload page to update auth context
+      if (!(loginResult as any).requiresTwoFactor && loginResult.token) {
+        // Store token and agency info
+        localStorage.setItem('auth_token', loginResult.token);
+        if ((loginResult.user as any).agency?.databaseName) {
+          localStorage.setItem('agency_database', (loginResult.user as any).agency.databaseName);
+          localStorage.setItem('agency_id', (loginResult.user as any).agency.id);
+        }
+        
+        // Reload to update auth context
+        window.location.href = '/dashboard';
+      } else {
+        setError('Login failed after 2FA verification');
+        setRequiresTwoFactor(false);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Login failed after 2FA verification');
+      setRequiresTwoFactor(false);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const features = [
@@ -203,7 +265,20 @@ const Auth = () => {
             </Alert>
           )}
 
-          {/* Sign In Card */}
+          {/* 2FA Verification */}
+          {requiresTwoFactor ? (
+            <TwoFactorVerification
+              userId={twoFactorUserId}
+              agencyDatabase={twoFactorAgencyDatabase}
+              onVerified={handleTwoFactorVerified}
+              onCancel={() => {
+                setRequiresTwoFactor(false);
+                setTwoFactorUserId('');
+                setTwoFactorAgencyDatabase('');
+              }}
+            />
+          ) : (
+          /* Sign In Card */
           <Card className="border-slate-800/50 bg-slate-900/50 backdrop-blur-xl shadow-2xl">
             <CardContent className="p-8">
               <div className="text-center mb-8">
@@ -335,6 +410,7 @@ const Auth = () => {
               </Link>
             </CardContent>
           </Card>
+          )}
 
           {/* Footer */}
           <div className="mt-8 text-center">

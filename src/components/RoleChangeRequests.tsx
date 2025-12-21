@@ -5,28 +5,35 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { UserPlus, Clock, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { UserPlus, Clock, CheckCircle, XCircle, AlertTriangle, Search, RefreshCw, Trash2, Eye, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { db } from '@/lib/database';
 import { toast } from 'sonner';
 import { AppRole, ROLE_DISPLAY_NAMES, getAssignableRoles } from '@/utils/roleUtils';
+import { selectRecords, insertRecord, updateRecord, deleteRecord } from '@/services/api/postgresql-service';
+import { generateUUID } from '@/lib/uuid';
 
 interface RoleChangeRequest {
   id: string;
   user_id: string;
-  existing_role: AppRole;
+  previous_role: AppRole | null;
   requested_role: AppRole;
-  reason: string;
-  requested_by: string;
+  reason: string | null;
+  requested_by: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'expired';
   created_at: string;
-  expires_at: string;
-  profiles?: {
+  updated_at: string;
+  profile?: {
     full_name: string;
     email: string;
   };
   requested_by_profile?: {
     full_name: string;
+    email: string;
   };
 }
 
@@ -41,75 +48,83 @@ export function RoleChangeRequests() {
     reason: ''
   });
   const [employees, setEmployees] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'expired'>('all');
+  const [selectedRequest, setSelectedRequest] = useState<RoleChangeRequest | null>(null);
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false);
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [actionRequestId, setActionRequestId] = useState<string | null>(null);
+  const [actionType, setActionType] = useState<'approve' | 'reject' | 'delete' | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const canManageRoleChanges = userRole && ['super_admin', 'ceo'].includes(userRole);
   const canCreateRequests = userRole && ['admin', 'hr', 'department_head'].includes(userRole);
 
   const fetchRequests = async () => {
     try {
-      const { data: requests, error } = await db
-        .from('role_change_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      // Handle missing table gracefully
-      if (error) {
-        const errorMessage = error.message || String(error);
-        // Check for missing table error (42P01 is PostgreSQL error code for "undefined_table")
-        if (errorMessage.includes('does not exist') || errorMessage.includes('42P01') || 
-            (errorMessage.includes('Database API error') && errorMessage.includes('relation'))) {
-          console.warn('role_change_requests table does not exist yet - feature not implemented');
-          setRequests([]);
-          setLoading(false);
-          return;
-        }
-        throw error;
-      }
-
-      // Fetch profiles for user_id and requested_by
-      const userIds = new Set<string>();
-      (requests || []).forEach(req => {
-        if (req.user_id) userIds.add(req.user_id);
-        if (req.requested_by) userIds.add(req.requested_by);
+      // Fetch role change requests
+      const requests = await selectRecords<RoleChangeRequest>('role_change_requests', {
+        orderBy: 'created_at DESC'
       });
 
-      let profileMap = new Map<string, { full_name: string; email?: string }>();
-      if (userIds.size > 0) {
-        const { data: profiles } = await db
-          .from('profiles')
-          .select('user_id, full_name')
-          .in('user_id', Array.from(userIds));
-
-        if (profiles) {
-          profiles.forEach(profile => {
-            profileMap.set(profile.user_id, { full_name: profile.full_name });
-          });
-        }
-
-        // Fetch emails from users table
-        const { data: users } = await db
-          .from('users')
-          .select('id, email')
-          .in('id', Array.from(userIds));
-
-        if (users) {
-          users.forEach(user => {
-            const profile = profileMap.get(user.id);
-            if (profile) {
-              profile.email = user.email;
-            }
-          });
-        }
+      if (!requests || requests.length === 0) {
+        setRequests([]);
+        setLoading(false);
+        return;
       }
 
-      setRequests((requests || []).map(item => ({
-        ...item,
-        profiles: profileMap.get(item.user_id) || null,
-        requested_by_profile: item.requested_by ? (profileMap.get(item.requested_by) || null) : null
-      })));
-    } catch (error) {
+      // Collect all user IDs
+      const userIds = new Set<string>();
+      requests.forEach(req => {
+        if (req.user_id) userIds.add(req.user_id);
+        if (req.requested_by) userIds.add(req.requested_by);
+        if (req.reviewed_by) userIds.add(req.reviewed_by);
+      });
+
+      // Fetch profiles
+      const profileMap = new Map<string, { full_name: string; email: string }>();
+      if (userIds.size > 0) {
+        const userIdArray = Array.from(userIds);
+        const profiles = await selectRecords<{ user_id: string; full_name: string }>('profiles', {
+          filters: [{ column: 'user_id', operator: 'in', value: userIdArray }]
+        });
+
+        // Fetch emails from users table
+        const users = await selectRecords<{ id: string; email: string }>('users', {
+          filters: [{ column: 'id', operator: 'in', value: userIdArray }]
+        });
+
+        // Build profile map
+        profiles.forEach(profile => {
+          const user = users.find(u => u.id === profile.user_id);
+          profileMap.set(profile.user_id, {
+            full_name: profile.full_name || 'Unknown',
+            email: user?.email || ''
+          });
+        });
+      }
+
+      // Enrich requests with profile data
+      const enrichedRequests = requests.map(req => ({
+        ...req,
+        profile: profileMap.get(req.user_id),
+        requested_by_profile: req.requested_by ? profileMap.get(req.requested_by) : undefined
+      }));
+
+      setRequests(enrichedRequests);
+    } catch (error: any) {
       console.error('Error fetching role change requests:', error);
-      toast.error('Failed to load role change requests');
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes('does not exist') || errorMessage.includes('42P01') || 
+          errorMessage.includes('relation')) {
+        console.warn('role_change_requests table does not exist yet');
+        setRequests([]);
+      } else {
+        toast.error('Failed to load role change requests');
+      }
     } finally {
       setLoading(false);
     }
@@ -117,36 +132,36 @@ export function RoleChangeRequests() {
 
   const fetchEmployees = async () => {
     try {
-      const { data, error } = await db
-        .from('profiles')
-        .select('user_id, full_name')
-        .eq('is_active', true)
-        .order('full_name');
-
-      if (error) throw error;
+      const profiles = await selectRecords<{ user_id: string; full_name: string }>('profiles', {
+        where: { is_active: true },
+        orderBy: 'full_name ASC'
+      });
       
+      if (!profiles || profiles.length === 0) {
+        setEmployees([]);
+        return;
+      }
+
       // Fetch emails from users table
-      const userIds = (data || []).map(p => p.user_id).filter(Boolean);
+      const userIds = profiles.map(p => p.user_id).filter(Boolean);
       let emailMap = new Map<string, string>();
       if (userIds.length > 0) {
-        const { data: users } = await db
-          .from('users')
-          .select('id, email')
-          .in('id', userIds);
+        const users = await selectRecords<{ id: string; email: string }>('users', {
+          filters: [{ column: 'id', operator: 'in', value: userIds }]
+        });
         
-        if (users) {
-          users.forEach(user => {
-            emailMap.set(user.id, user.email);
-          });
-        }
+        users.forEach(user => {
+          emailMap.set(user.id, user.email);
+        });
       }
       
-      setEmployees((data || []).map(profile => ({
+      setEmployees(profiles.map(profile => ({
         ...profile,
         email: emailMap.get(profile.user_id) || ''
       })));
     } catch (error) {
       console.error('Error fetching employees:', error);
+      toast.error('Failed to load employees');
     }
   };
 
@@ -163,57 +178,173 @@ export function RoleChangeRequests() {
       return;
     }
 
+    setCreating(true);
     try {
-      const { insertRecord } = await import('@/services/api/postgresql-service');
+      // Fetch existing role from user_roles table
+      const existingRoles = await selectRecords<{ role: AppRole }>('user_roles', {
+        where: { user_id: newRequest.user_id }
+      });
+
+      const previousRole = existingRoles && existingRoles.length > 0 
+        ? existingRoles[0].role 
+        : null;
+
+      // Check if user already has the requested role
+      if (previousRole === newRequest.requested_role) {
+        toast.error('User already has this role');
+        setCreating(false);
+        return;
+      }
+
       await insertRecord('role_change_requests', {
-        id: (await import('@/lib/uuid')).generateUUID(),
+        id: generateUUID(),
         user_id: newRequest.user_id,
         requested_role: newRequest.requested_role,
-        reason: newRequest.reason,
+        previous_role: previousRole,
+        reason: newRequest.reason || null,
         requested_by: user.id,
         status: 'pending'
-      });
+      }, user.id);
 
       toast.success('Role change request created successfully');
       setShowCreateDialog(false);
       setNewRequest({ user_id: '', requested_role: '' as AppRole, reason: '' });
-      fetchRequests();
-    } catch (error) {
+      await fetchRequests();
+    } catch (error: any) {
       console.error('Error creating role change request:', error);
-      toast.error('Failed to create role change request');
+      toast.error(error?.message || 'Failed to create role change request');
+    } finally {
+      setCreating(false);
     }
   };
 
   const handleApproveRequest = async (requestId: string, action: 'approved' | 'rejected') => {
     if (!user) return;
 
+    setProcessing(true);
     try {
-      const { updateRecord } = await import('@/services/api/postgresql-service');
+      const request = requests.find(r => r.id === requestId);
+      if (!request) {
+        toast.error('Request not found');
+        setProcessing(false);
+        return;
+      }
+
+      // Update request status
       await updateRecord('role_change_requests', {
         status: action,
-        approved_by: action === 'approved' ? user.id : null,
-        rejected_by: action === 'rejected' ? user.id : null
-      }, { id: requestId });
+        reviewed_by: user.id,
+        reviewed_at: new Date().toISOString()
+      }, { id: requestId }, user.id);
 
-      // If approved, update the user's role
+      // If approved, update the user's role in user_roles table
       if (action === 'approved') {
-        const request = requests.find(r => r.id === requestId);
-        if (request) {
-          // Find and update the user role
-          const { selectOne } = await import('@/services/api/postgresql-service');
-          const existingRole = await selectOne('user_roles', { user_id: request.user_id });
-          if (existingRole) {
-            await updateRecord('user_roles', { role: request.requested_role }, { id: existingRole.id });
-          }
+        // Check if user already has a role
+        const existingRoles = await selectRecords<{ id: string; role: AppRole }>('user_roles', {
+          where: { user_id: request.user_id }
+        });
+
+        if (existingRoles && existingRoles.length > 0) {
+          // Update existing role
+          await updateRecord('user_roles', 
+            { role: request.requested_role },
+            { id: existingRoles[0].id },
+            user.id
+          );
+        } else {
+          // Create new role assignment
+          await insertRecord('user_roles', {
+            id: generateUUID(),
+            user_id: request.user_id,
+            role: request.requested_role,
+            assigned_by: user.id
+          }, user.id);
         }
       }
 
       toast.success(`Request ${action} successfully`);
-      fetchRequests();
-    } catch (error) {
+      setShowApproveConfirm(false);
+      setShowRejectConfirm(false);
+      setActionRequestId(null);
+      setActionType(null);
+      await fetchRequests();
+    } catch (error: any) {
       console.error(`Error ${action} request:`, error);
-      toast.error(`Failed to ${action} request`);
+      toast.error(error?.message || `Failed to ${action} request`);
+    } finally {
+      setProcessing(false);
     }
+  };
+
+  const handleDeleteRequest = async (requestId: string) => {
+    if (!user) return;
+
+    setProcessing(true);
+    try {
+      await deleteRecord('role_change_requests', { id: requestId });
+      toast.success('Request deleted successfully');
+      setShowDeleteConfirm(false);
+      setActionRequestId(null);
+      setActionType(null);
+      await fetchRequests();
+    } catch (error: any) {
+      console.error('Error deleting request:', error);
+      toast.error(error?.message || 'Failed to delete request');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleRequestAction = (requestId: string, type: 'approve' | 'reject' | 'delete') => {
+    setActionRequestId(requestId);
+    setActionType(type);
+    if (type === 'approve') {
+      setShowApproveConfirm(true);
+    } else if (type === 'reject') {
+      setShowRejectConfirm(true);
+    } else {
+      setShowDeleteConfirm(true);
+    }
+  };
+
+  const canCancelRequest = (request: RoleChangeRequest) => {
+    return request.status === 'pending' && 
+           request.requested_by === user?.id && 
+           !canManageRoleChanges;
+  };
+
+  const getFilteredRequests = () => {
+    let filtered = requests;
+
+    // Status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(req => req.status === statusFilter);
+    }
+
+    // Search filter
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(req =>
+        req.profile?.full_name.toLowerCase().includes(searchLower) ||
+        req.profile?.email.toLowerCase().includes(searchLower) ||
+        req.requested_by_profile?.full_name.toLowerCase().includes(searchLower) ||
+        ROLE_DISPLAY_NAMES[req.requested_role]?.toLowerCase().includes(searchLower) ||
+        (req.previous_role && ROLE_DISPLAY_NAMES[req.previous_role]?.toLowerCase().includes(searchLower)) ||
+        req.reason?.toLowerCase().includes(searchLower)
+      );
+    }
+
+    return filtered;
+  };
+
+  const filteredRequests = getFilteredRequests();
+
+  const stats = {
+    all: requests.length,
+    pending: requests.filter(r => r.status === 'pending').length,
+    approved: requests.filter(r => r.status === 'approved').length,
+    rejected: requests.filter(r => r.status === 'rejected').length,
+    expired: requests.filter(r => r.status === 'expired').length,
   };
 
   const getStatusIcon = (status: string) => {
@@ -237,7 +368,11 @@ export function RoleChangeRequests() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center p-8">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
   return (
@@ -247,32 +382,96 @@ export function RoleChangeRequests() {
           <h1 className="text-3xl font-bold">Role Change Requests</h1>
           <p className="text-muted-foreground">Manage user role change requests and approvals</p>
         </div>
-        {canCreateRequests && (
-          <Button onClick={() => setShowCreateDialog(true)}>
-            <UserPlus className="h-4 w-4 mr-2" />
-            Create Request
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchRequests}
+            disabled={loading}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
           </Button>
-        )}
+          {canCreateRequests && (
+            <Button onClick={() => setShowCreateDialog(true)}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Create Request
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="grid gap-4">
-        {requests.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <UserPlus className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-lg font-medium">No role change requests</p>
-              <p className="text-muted-foreground">All requests will appear here when created</p>
-            </CardContent>
-          </Card>
-        ) : (
-          requests.map((request) => (
+      {/* Search and Filters */}
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, email, role, or reason..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+      </div>
+
+      {/* Status Tabs */}
+      <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
+        <TabsList>
+          <TabsTrigger value="all">
+            All ({stats.all})
+          </TabsTrigger>
+          <TabsTrigger value="pending">
+            Pending ({stats.pending})
+          </TabsTrigger>
+          <TabsTrigger value="approved">
+            Approved ({stats.approved})
+          </TabsTrigger>
+          <TabsTrigger value="rejected">
+            Rejected ({stats.rejected})
+          </TabsTrigger>
+          {stats.expired > 0 && (
+            <TabsTrigger value="expired">
+              Expired ({stats.expired})
+            </TabsTrigger>
+          )}
+        </TabsList>
+
+        <TabsContent value={statusFilter} className="mt-4">
+          <div className="grid gap-4">
+            {filteredRequests.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <UserPlus className="h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-lg font-medium">
+                    {searchTerm ? 'No requests match your search' : 'No role change requests'}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {searchTerm 
+                      ? 'Try adjusting your search terms'
+                      : statusFilter !== 'all' 
+                        ? `No ${statusFilter} requests found`
+                        : 'All requests will appear here when created'}
+                  </p>
+                  {searchTerm && (
+                    <Button
+                      variant="outline"
+                      className="mt-4"
+                      onClick={() => setSearchTerm('')}
+                    >
+                      Clear Search
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              filteredRequests.map((request) => (
             <Card key={request.id}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     {getStatusIcon(request.status)}
                     <CardTitle className="text-lg">
-                      {request.profiles?.full_name || 'Unknown User'}
+                      {request.profile?.full_name || 'Unknown User'}
                     </CardTitle>
                     {getStatusBadge(request.status)}
                   </div>
@@ -282,6 +481,9 @@ export function RoleChangeRequests() {
                 </div>
                 <CardDescription>
                   Requested by: {request.requested_by_profile?.full_name || 'Unknown'}
+                  {request.reviewed_by && request.reviewed_at && (
+                    <> • Reviewed on {new Date(request.reviewed_at).toLocaleDateString()}</>
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -289,7 +491,9 @@ export function RoleChangeRequests() {
                   <div>
                     <h4 className="font-medium">Current Role</h4>
                     <Badge variant="outline">
-                      {ROLE_DISPLAY_NAMES[request.existing_role] || request.existing_role}
+                      {request.previous_role 
+                        ? (ROLE_DISPLAY_NAMES[request.previous_role] || request.previous_role)
+                        : 'No role assigned'}
                     </Badge>
                   </div>
                   <div>
@@ -307,30 +511,68 @@ export function RoleChangeRequests() {
                   </div>
                 )}
 
-                {canManageRoleChanges && request.status === 'pending' && (
-                  <div className="flex space-x-2 pt-4">
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <div className="flex space-x-2">
                     <Button
                       size="sm"
-                      onClick={() => handleApproveRequest(request.id, 'approved')}
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedRequest(request);
+                        setShowDetailsDialog(true);
+                      }}
                     >
-                      <CheckCircle className="h-4 w-4 mr-1" />
-                      Approve
+                      <Eye className="h-4 w-4 mr-1" />
+                      View Details
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => handleApproveRequest(request.id, 'rejected')}
-                    >
-                      <XCircle className="h-4 w-4 mr-1" />
-                      Reject
-                    </Button>
+                    {canCancelRequest(request) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleRequestAction(request.id, 'delete')}
+                        disabled={processing}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Cancel Request
+                      </Button>
+                    )}
                   </div>
-                )}
+                  {canManageRoleChanges && request.status === 'pending' && (
+                    <div className="flex space-x-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleRequestAction(request.id, 'approve')}
+                        disabled={processing}
+                      >
+                        {processing && actionRequestId === request.id && actionType === 'approve' ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                        )}
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleRequestAction(request.id, 'reject')}
+                        disabled={processing}
+                      >
+                        {processing && actionRequestId === request.id && actionType === 'reject' ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <XCircle className="h-4 w-4 mr-1" />
+                        )}
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
-          ))
-        )}
-      </div>
+              ))
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
         <DialogContent>
@@ -392,15 +634,188 @@ export function RoleChangeRequests() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowCreateDialog(false)}
+              disabled={creating}
+            >
               Cancel
             </Button>
-            <Button onClick={handleCreateRequest}>
-              Create Request
+            <Button onClick={handleCreateRequest} disabled={creating}>
+              {creating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                'Create Request'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* View Details Dialog */}
+      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Request Details</DialogTitle>
+            <DialogDescription>
+              Complete information about this role change request
+            </DialogDescription>
+          </DialogHeader>
+          {selectedRequest && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">User</label>
+                  <p className="text-sm font-medium">{selectedRequest.profile?.full_name || 'Unknown'}</p>
+                  <p className="text-xs text-muted-foreground">{selectedRequest.profile?.email}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Status</label>
+                  <div className="flex items-center gap-2 mt-1">
+                    {getStatusIcon(selectedRequest.status)}
+                    {getStatusBadge(selectedRequest.status)}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Current Role</label>
+                  <Badge variant="outline" className="mt-1">
+                    {selectedRequest.previous_role 
+                      ? (ROLE_DISPLAY_NAMES[selectedRequest.previous_role] || selectedRequest.previous_role)
+                      : 'No role assigned'}
+                  </Badge>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Requested Role</label>
+                  <Badge variant="default" className="mt-1">
+                    {ROLE_DISPLAY_NAMES[selectedRequest.requested_role] || selectedRequest.requested_role}
+                  </Badge>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Requested By</label>
+                  <p className="text-sm">{selectedRequest.requested_by_profile?.full_name || 'Unknown'}</p>
+                  <p className="text-xs text-muted-foreground">{selectedRequest.requested_by_profile?.email}</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Created At</label>
+                  <p className="text-sm">{new Date(selectedRequest.created_at).toLocaleString()}</p>
+                </div>
+                {selectedRequest.reviewed_by && selectedRequest.reviewed_at && (
+                  <>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Reviewed By</label>
+                      <p className="text-sm">{selectedRequest.reviewed_by_profile?.full_name || 'Unknown'}</p>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground">Reviewed At</label>
+                      <p className="text-sm">{new Date(selectedRequest.reviewed_at).toLocaleString()}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+              {selectedRequest.reason && (
+                <div>
+                  <label className="text-sm font-medium text-muted-foreground">Reason</label>
+                  <p className="text-sm mt-1 p-3 bg-muted rounded-md">{selectedRequest.reason}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Approve Confirmation Dialog */}
+      <AlertDialog open={showApproveConfirm} onOpenChange={setShowApproveConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Approve Role Change Request</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to approve this role change request? The user's role will be updated immediately.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={processing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => actionRequestId && handleApproveRequest(actionRequestId, 'approved')}
+              disabled={processing}
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Approving...
+                </>
+              ) : (
+                'Approve'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Reject Confirmation Dialog */}
+      <AlertDialog open={showRejectConfirm} onOpenChange={setShowRejectConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reject Role Change Request</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to reject this role change request? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={processing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => actionRequestId && handleApproveRequest(actionRequestId, 'rejected')}
+              disabled={processing}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Rejecting...
+                </>
+              ) : (
+                'Reject'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Role Change Request</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this role change request? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={processing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => actionRequestId && handleDeleteRequest(actionRequestId)}
+              disabled={processing}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {processing ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete Request'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

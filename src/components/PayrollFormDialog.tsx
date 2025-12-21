@@ -108,29 +108,34 @@ const PayrollFormDialog: React.FC<PayrollFormDialogProps> = ({
       // Use standardized employee fetching service
       const employeesData = await getEmployeesForAssignmentAuto(profile, user?.id);
       
-      // Payroll uses employee_id (from employee_details), so we need to fetch employee_details
-      // to get the employee_id for each user_id
+      // Payroll uses employee_id (from employee_details.id), so we need to fetch employee_details
+      // to get the employee_id (which is employee_details.id) for each user_id
       const userIds = employeesData.map(emp => emp.user_id);
       if (userIds.length > 0) {
         const employeeDetails = await selectRecords('employee_details', {
           filters: [
-            { column: 'user_id', operator: 'in', value: userIds }
+            { column: 'user_id', operator: 'in', value: userIds },
+            { column: 'is_active', operator: 'eq', value: true }
           ]
         });
         
         const employeeDetailsMap = new Map(employeeDetails.map((ed: any) => [ed.user_id, ed]));
         
         // Combine employee data with employee_details
-        const employeesWithDetails = employeesData.map(emp => {
-          const ed = employeeDetailsMap.get(emp.user_id);
-          return {
-            ...(ed || {}),
-            user_id: emp.user_id,
-            id: ed?.id || emp.user_id,
-            employee_id: ed?.id || emp.user_id,
-            display_name: emp.full_name
-          };
-        });
+        // IMPORTANT: employee_id in payroll table is employee_details.id, not user_id
+        const employeesWithDetails = employeesData
+          .filter(emp => employeeDetailsMap.has(emp.user_id))
+          .map(emp => {
+            const ed = employeeDetailsMap.get(emp.user_id);
+            return {
+              ...(ed || {}),
+              user_id: emp.user_id,
+              id: ed?.id, // This is the employee_details.id used in payroll table
+              employee_id: ed?.id, // This is what goes into payroll.employee_id
+              display_name: emp.full_name,
+              employee_code: ed?.employee_id || ed?.id?.substring(0, 8)
+            };
+          });
         
         setEmployees(employeesWithDetails);
       } else {
@@ -156,14 +161,117 @@ const PayrollFormDialog: React.FC<PayrollFormDialogProps> = ({
   const calculateTotals = () => {
     const baseSalary = parseFloat(String(formData.base_salary || 0));
     const overtimePay = parseFloat(String(formData.overtime_pay || 0));
-    const bonuses = parseFloat(String(formData.bonuses || 0));
+    const bonuses = parseFloat(String(formData.bonuses || 0)); // This maps to allowances in DB
     const deductions = parseFloat(String(formData.deductions || 0));
-    const taxDeductions = parseFloat(String(formData.tax_deductions || 0));
+    const taxDeductions = parseFloat(String(formData.tax_deductions || 0)); // This maps to tax_amount in DB
     
     const grossPay = baseSalary + overtimePay + bonuses;
     const netPay = grossPay - deductions - taxDeductions;
     
     return { grossPay, netPay };
+  };
+
+  // Auto-fill employee salary details when employee is selected
+  const handleEmployeeChange = async (employeeId: string) => {
+    handleFieldChange('employee_id', employeeId);
+    
+    if (!employeeId) return;
+    
+    try {
+      // Find the employee_details record
+      const employeeDetail = employees.find(emp => emp.id === employeeId);
+      if (!employeeDetail) return;
+      
+      // Fetch employee_salary_details to auto-fill base salary
+      const salaryDetails = await selectRecords('employee_salary_details', {
+        where: { employee_id: employeeId },
+        orderBy: 'effective_date DESC',
+        limit: 1
+      });
+      
+      if (salaryDetails && salaryDetails.length > 0) {
+        const latestSalary = salaryDetails[0];
+        const baseSalary = parseFloat(String(latestSalary.base_salary || latestSalary.salary || 0));
+        handleFieldChange('base_salary', baseSalary);
+      }
+      
+      // Auto-calculate hours from attendance if payroll period is selected
+      if (formData.payroll_period_id) {
+        await calculateHoursFromAttendance(employeeId, formData.payroll_period_id);
+      }
+    } catch (error) {
+      console.error('Error fetching employee salary details:', error);
+    }
+  };
+
+  // Auto-calculate hours from attendance when period is selected
+  const handlePeriodChange = async (periodId: string) => {
+    handleFieldChange('payroll_period_id', periodId);
+    
+    if (!periodId || !formData.employee_id) return;
+    
+    await calculateHoursFromAttendance(formData.employee_id, periodId);
+  };
+
+  // Calculate hours worked and overtime from attendance records
+  const calculateHoursFromAttendance = async (employeeId: string, periodId: string) => {
+    try {
+      // Get payroll period dates
+      const period = payrollPeriods.find(p => p.id === periodId);
+      if (!period) return;
+      
+      // Get employee_details to find user_id (attendance uses user_id as employee_id)
+      const employeeDetail = employees.find(emp => emp.id === employeeId);
+      if (!employeeDetail || !employeeDetail.user_id) return;
+      
+      // Fetch attendance records for the period
+      // Note: attendance.employee_id is actually user_id
+      // Format dates properly (YYYY-MM-DD)
+      const startDate = period.start_date.split('T')[0];
+      const endDate = period.end_date.split('T')[0];
+      
+      const attendanceRecords = await selectRecords('attendance', {
+        filters: [
+          { column: 'employee_id', operator: 'eq', value: employeeDetail.user_id },
+          { column: 'date', operator: 'gte', value: startDate },
+          { column: 'date', operator: 'lte', value: endDate }
+        ]
+      });
+      
+      // Calculate total hours and overtime
+      let totalHours = 0;
+      let totalOvertime = 0;
+      
+      attendanceRecords.forEach((record: any) => {
+        const hours = parseFloat(String(record.hours_worked || record.total_hours || 0));
+        totalHours += hours;
+        
+        // Calculate overtime (anything over 8 hours per day)
+        const overtime = hours > 8 ? hours - 8 : 0;
+        totalOvertime += overtime;
+      });
+      
+      handleFieldChange('hours_worked', Math.round(totalHours * 10) / 10);
+      handleFieldChange('overtime_hours', Math.round(totalOvertime * 10) / 10);
+      
+      // Auto-calculate overtime pay if hourly rate is available
+      // Use current formData state
+      setFormData(prev => {
+        const currentBaseSalary = prev.base_salary || 0;
+        if (totalOvertime > 0 && currentBaseSalary > 0) {
+          // Assume monthly salary, calculate hourly rate (monthly / 160 hours)
+          const hourlyRate = currentBaseSalary / 160;
+          const overtimePay = totalOvertime * hourlyRate * 1.5; // 1.5x for overtime
+          return {
+            ...prev,
+            overtime_pay: Math.round(overtimePay * 100) / 100
+          };
+        }
+        return prev;
+      });
+    } catch (error) {
+      console.error('Error calculating hours from attendance:', error);
+    }
   };
 
   const handleFieldChange = (field: keyof Payroll, value: any) => {
@@ -185,21 +293,27 @@ const PayrollFormDialog: React.FC<PayrollFormDialogProps> = ({
     try {
       const { grossPay, netPay } = calculateTotals();
       
+      // Map frontend field names to database field names
       const cleanedData: any = {
-        employee_id: formData.employee_id,
+        employee_id: formData.employee_id, // This is employee_details.id
         payroll_period_id: formData.payroll_period_id,
         base_salary: parseFloat(String(formData.base_salary || 0)),
         overtime_pay: parseFloat(String(formData.overtime_pay || 0)) || 0,
-        bonuses: parseFloat(String(formData.bonuses || 0)) || 0,
+        allowances: parseFloat(String(formData.bonuses || 0)) || 0, // bonuses maps to allowances
         deductions: parseFloat(String(formData.deductions || 0)) || 0,
-        gross_pay: grossPay,
-        tax_deductions: parseFloat(String(formData.tax_deductions || 0)) || 0,
-        net_pay: netPay,
-        hours_worked: parseFloat(String(formData.hours_worked || 0)) || 0,
+        gross_salary: grossPay, // gross_pay maps to gross_salary
+        tax_amount: parseFloat(String(formData.tax_deductions || 0)) || 0, // tax_deductions maps to tax_amount
+        net_salary: netPay, // net_pay maps to net_salary
         overtime_hours: parseFloat(String(formData.overtime_hours || 0)) || 0,
         status: formData.status,
         notes: formData.notes?.trim() || null,
       };
+      
+      // Add hours_worked if the column exists (it might not be in all databases)
+      // We'll try to add it, but if it fails, we'll continue without it
+      if (formData.hours_worked && formData.hours_worked > 0) {
+        cleanedData.hours_worked = parseFloat(String(formData.hours_worked || 0));
+      }
 
       if (payroll?.id) {
         await updateRecord('payroll', cleanedData, { id: payroll.id }, user?.id);
@@ -247,7 +361,7 @@ const PayrollFormDialog: React.FC<PayrollFormDialogProps> = ({
               <Label htmlFor="employee_id">Employee *</Label>
               <Select 
                 value={formData.employee_id} 
-                onValueChange={(value) => handleFieldChange('employee_id', value)}
+                onValueChange={handleEmployeeChange}
                 required
               >
                 <SelectTrigger>
@@ -255,8 +369,8 @@ const PayrollFormDialog: React.FC<PayrollFormDialogProps> = ({
                 </SelectTrigger>
                 <SelectContent>
                   {employees.map((emp) => (
-                    <SelectItem key={emp.user_id} value={emp.user_id}>
-                      {emp.display_name} ({emp.employee_id || emp.user_id.substring(0, 8)})
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.display_name} {emp.employee_code ? `(${emp.employee_code})` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -266,7 +380,7 @@ const PayrollFormDialog: React.FC<PayrollFormDialogProps> = ({
               <Label htmlFor="payroll_period_id">Payroll Period *</Label>
               <Select 
                 value={formData.payroll_period_id} 
-                onValueChange={(value) => handleFieldChange('payroll_period_id', value)}
+                onValueChange={handlePeriodChange}
                 required
               >
                 <SelectTrigger>

@@ -59,10 +59,35 @@ export const useAgencyAnalytics = () => {
         return;
       }
 
+      // Helper function to safely execute queries
+      const safeQuery = async (queryPromise: Promise<any>, fallback: any = null) => {
+        try {
+          const result = await queryPromise;
+          if (result.error) {
+            console.warn('[Agency Analytics] Query error:', result.error);
+            return fallback;
+          }
+          return result.data || fallback;
+        } catch (error: any) {
+          console.warn('[Agency Analytics] Query exception:', error);
+          return fallback;
+        }
+      };
+
+      // Helper function to safely count records
+      const safeCount = async (table: string, filters: any, fallback: number = 0) => {
+        try {
+          return await countRecords(table, filters);
+        } catch (error: any) {
+          console.warn(`[Agency Analytics] Count error for ${table}:`, error);
+          return fallback;
+        }
+      };
+
       // Fetch agency-specific metrics
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       
-      // Fetch counts
+      // Fetch counts with error handling
       const [
         totalUsers,
         activeUsers,
@@ -71,15 +96,15 @@ export const useAgencyAnalytics = () => {
         totalClients,
         attendanceRecords
       ] = await Promise.all([
-        countRecords('profiles', { agency_id: agencyId }),
-        countRecords('profiles', { agency_id: agencyId, is_active: true }),
-        countRecords('projects', { agency_id: agencyId }),
-        countRecords('projects', { agency_id: agencyId, status: 'active' }),
-        countRecords('clients', { agency_id: agencyId }),
-        countRecords('attendance', { agency_id: agencyId })
+        safeCount('profiles', { agency_id: agencyId }),
+        safeCount('profiles', { agency_id: agencyId, is_active: true }),
+        safeCount('projects', { agency_id: agencyId }),
+        safeCount('projects', { agency_id: agencyId, status: 'active' }),
+        safeCount('clients', { agency_id: agencyId }),
+        safeCount('attendance', { agency_id: agencyId })
       ]);
 
-      // Fetch data that needs processing
+      // Fetch data that needs processing with error handling
       const [
         invoicesResult,
         leaveRequestsResult,
@@ -87,19 +112,22 @@ export const useAgencyAnalytics = () => {
         recentProjectsResult,
         recentInvoicesResult
       ] = await Promise.all([
-        db.from('invoices').select('total_amount').eq('agency_id', agencyId),
-        db.from('leave_requests').select('status').eq('agency_id', agencyId),
-        db.from('profiles').select('id').eq('agency_id', agencyId).gte('created_at', thirtyDaysAgo),
-        db.from('projects').select('id').eq('agency_id', agencyId).gte('created_at', thirtyDaysAgo),
-        db.from('invoices').select('total_amount').eq('agency_id', agencyId).gte('created_at', thirtyDaysAgo)
+        safeQuery(db.from('invoices').select('total_amount').eq('agency_id', agencyId), { data: [] }),
+        safeQuery(db.from('leave_requests').select('status').eq('agency_id', agencyId), { data: [] }),
+        safeQuery(db.from('profiles').select('id').eq('agency_id', agencyId).gte('created_at', thirtyDaysAgo), { data: [] }),
+        safeQuery(db.from('projects').select('id').eq('agency_id', agencyId).gte('created_at', thirtyDaysAgo), { data: [] }),
+        safeQuery(db.from('invoices').select('total_amount').eq('agency_id', agencyId).gte('created_at', thirtyDaysAgo), { data: [] })
       ]);
 
-      // Calculate revenue metrics
-      const totalRevenue = invoicesResult.data?.reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0) || 0;
-      const monthlyRevenue = recentInvoicesResult.data?.reduce((sum, invoice) => sum + (invoice.total_amount || 0), 0) || 0;
+      // Calculate revenue metrics with safe array handling
+      const invoicesData = Array.isArray(invoicesResult.data) ? invoicesResult.data : [];
+      const recentInvoicesData = Array.isArray(recentInvoicesResult.data) ? recentInvoicesResult.data : [];
+      
+      const totalRevenue = invoicesData.reduce((sum, invoice) => sum + (Number(invoice.total_amount) || 0), 0);
+      const monthlyRevenue = recentInvoicesData.reduce((sum, invoice) => sum + (Number(invoice.total_amount) || 0), 0);
 
-      // Process leave requests
-      const leaveRequestsData = leaveRequestsResult.data || [];
+      // Process leave requests with safe array handling
+      const leaveRequestsData = Array.isArray(leaveRequestsResult.data) ? leaveRequestsResult.data : [];
       const leaveRequests = {
         pending: leaveRequestsData.filter(lr => lr.status === 'pending').length,
         approved: leaveRequestsData.filter(lr => lr.status === 'approved').length,
@@ -112,15 +140,15 @@ export const useAgencyAnalytics = () => {
         totalProjects,
         activeProjects,
         totalClients,
-        totalInvoices: invoicesResult.data?.length || 0,
+        totalInvoices: invoicesData.length,
         totalRevenue,
         monthlyRevenue,
         attendanceRecords,
         leaveRequests,
         recentActivity: {
-          newUsers: recentUsersResult.data?.length || 0,
-          newProjects: recentProjectsResult.data?.length || 0,
-          newInvoices: recentInvoicesResult.data?.length || 0,
+          newUsers: Array.isArray(recentUsersResult.data) ? recentUsersResult.data.length : 0,
+          newProjects: Array.isArray(recentProjectsResult.data) ? recentProjectsResult.data.length : 0,
+          newInvoices: recentInvoicesData.length,
         }
       };
 

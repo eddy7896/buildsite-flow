@@ -66,16 +66,37 @@ export const Reimbursements: React.FC = () => {
         .select("*");
       
       // Filter by employee if not finance manager
+      // Use employee_id if available, otherwise fall back to user_id
       if (!isFinanceManager && user) {
-        query = query.eq("employee_id", user.id);
+        // Try employee_id first, fall back to user_id
+        query = query.or(`employee_id.eq.${user.id},user_id.eq.${user.id}`);
       }
       
       const { data: requestsData, error: requestsError } = await query
         .order("created_at", { ascending: false });
 
-      if (requestsError) throw requestsError;
-
-      const requests = (requestsData as any) || [];
+      if (requestsError) {
+        // If employee_id column doesn't exist, try with user_id only
+        if (requestsError.message?.includes('employee_id') || requestsError.code === '42703') {
+          let fallbackQuery = db
+            .from("reimbursement_requests")
+            .select("*");
+          
+          if (!isFinanceManager && user) {
+            fallbackQuery = fallbackQuery.eq("user_id", user.id);
+          }
+          
+          const { data: fallbackData, error: fallbackError } = await fallbackQuery
+            .order("created_at", { ascending: false });
+          
+          if (fallbackError) throw fallbackError;
+          var requests = (fallbackData as any) || [];
+        } else {
+          throw requestsError;
+        }
+      } else {
+        var requests = (requestsData as any) || [];
+      }
       
       // Fetch expense categories
       const categoryIds = [...new Set(requests.map((r: any) => r.category_id).filter(Boolean))];
@@ -92,7 +113,12 @@ export const Reimbursements: React.FC = () => {
       }
 
       // Fetch profiles for employee names
-      const employeeIds = [...new Set(requests.map((r: any) => r.employee_id).filter(Boolean))];
+      // Use employee_id if available, otherwise use user_id
+      const employeeIds = [...new Set(
+        requests
+          .map((r: any) => r.employee_id || r.user_id)
+          .filter(Boolean)
+      )];
       let profiles: any[] = [];
       if (employeeIds.length > 0) {
         const { data: profilesData, error: profilesError } = await db

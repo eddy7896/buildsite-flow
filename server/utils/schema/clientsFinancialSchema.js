@@ -110,10 +110,31 @@ async function ensureInvoicesTable(client) {
       discount NUMERIC(15, 2) DEFAULT 0,
       total_amount NUMERIC(15, 2) DEFAULT 0,
       notes TEXT,
+      agency_id UUID,
       created_by UUID REFERENCES public.users(id),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
+  `);
+
+  // Add missing columns if they don't exist (for backward compatibility)
+  await client.query(`
+    DO $$ 
+    BEGIN
+      -- Add agency_id column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'invoices' 
+        AND column_name = 'agency_id'
+      ) THEN
+        ALTER TABLE public.invoices ADD COLUMN agency_id UUID;
+        CREATE INDEX IF NOT EXISTS idx_invoices_agency_id ON public.invoices(agency_id);
+      END IF;
+
+      -- Add created_at index if it doesn't exist
+      CREATE INDEX IF NOT EXISTS idx_invoices_created_at ON public.invoices(created_at);
+    END $$;
   `);
 }
 
@@ -586,8 +607,8 @@ async function ensureClientsFinancialSchema(client) {
   // Create tables in dependency order
   await ensureClientsTable(client);
   await ensureInvoicesTable(client);
+  await ensureQuotationTemplatesTable(client); // Must be before quotations (FK dependency)
   await ensureQuotationsTable(client);
-  await ensureQuotationTemplatesTable(client);
   await ensureQuotationLineItemsTable(client);
   await ensureChartOfAccountsTable(client);
   await ensureJournalEntriesTable(client);

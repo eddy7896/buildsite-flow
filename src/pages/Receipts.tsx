@@ -98,13 +98,39 @@ const Receipts = () => {
         return;
       }
 
-      const categoriesData = await selectRecords('expense_categories', {
-        where: { 
-          agency_id: effectiveAgencyId,
-          is_active: true 
-        },
-        orderBy: 'name ASC',
-      });
+      let categoriesData: any[] = [];
+      try {
+        categoriesData = await selectRecords('expense_categories', {
+          where: { 
+            agency_id: effectiveAgencyId,
+            is_active: true 
+          },
+          orderBy: 'name ASC',
+        }) || [];
+      } catch (error: any) {
+        // If agency_id column doesn't exist, fetch all active categories
+        if (error?.message?.includes('agency_id') || error?.code === '42703') {
+          console.warn('agency_id column not found in expense_categories, fetching all active categories');
+          try {
+            categoriesData = await selectRecords('expense_categories', {
+              where: { is_active: true },
+              orderBy: 'name ASC',
+            }) || [];
+          } catch (fallbackError: any) {
+            // If is_active also doesn't exist, fetch all categories
+            if (fallbackError?.code === '42703' || fallbackError?.message?.includes('is_active')) {
+              console.warn('is_active column not found, fetching all categories');
+              categoriesData = await selectRecords('expense_categories', {
+                orderBy: 'name ASC',
+              }) || [];
+            } else {
+              throw fallbackError;
+            }
+          }
+        } else {
+          throw error;
+        }
+      }
       
       setCategories((categoriesData || []).map((cat: any) => ({
         id: cat.id,
@@ -112,11 +138,18 @@ const Receipts = () => {
       })));
     } catch (error: any) {
       console.error('Error fetching categories:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load expense categories",
-        variant: "destructive",
-      });
+      // Don't show error for missing column errors - these are expected
+      const isMissingColumnError = error?.code === '42703' || 
+                                   error?.message?.includes('does not exist');
+      if (!isMissingColumnError) {
+        toast({
+          title: "Error",
+          description: "Failed to load expense categories",
+          variant: "destructive",
+        });
+      }
+      // Set empty categories on any error
+      setCategories([]);
     }
   };
 
@@ -137,10 +170,24 @@ const Receipts = () => {
       }
 
       // Fetch reimbursement requests with agency_id filter
-      const requests = await selectRecords('reimbursement_requests', {
-        where: { agency_id: effectiveAgencyId },
-        orderBy: 'created_at DESC',
-      });
+      // Handle case where agency_id column might not exist yet
+      let requests: any[] = [];
+      try {
+        requests = await selectRecords('reimbursement_requests', {
+          where: { agency_id: effectiveAgencyId },
+          orderBy: 'created_at DESC',
+        }) || [];
+      } catch (error: any) {
+        // If agency_id column doesn't exist, fetch all requests
+        if (error?.message?.includes('agency_id') || error?.code === '42703') {
+          console.warn('agency_id column not found, fetching all reimbursement requests');
+          requests = await selectRecords('reimbursement_requests', {
+            orderBy: 'created_at DESC',
+          }) || [];
+        } else {
+          throw error;
+        }
+      }
 
       if (!requests || requests.length === 0) {
         setReceipts([]);
@@ -154,9 +201,20 @@ const Receipts = () => {
       }
 
       // Fetch expense categories
-      const categoriesData = await selectRecords('expense_categories', {
-        where: { agency_id: effectiveAgencyId },
-      });
+      let categoriesData: any[] = [];
+      try {
+        categoriesData = await selectRecords('expense_categories', {
+          where: { agency_id: effectiveAgencyId },
+        }) || [];
+      } catch (error: any) {
+        // If agency_id column doesn't exist, fetch all categories
+        if (error?.message?.includes('agency_id') || error?.code === '42703') {
+          console.warn('agency_id column not found in expense_categories, fetching all categories');
+          categoriesData = await selectRecords('expense_categories', {}) || [];
+        } else {
+          throw error;
+        }
+      }
 
       const categoryMap = new Map((categoriesData || []).map((c: any) => [c.id, c.name]));
 
@@ -167,23 +225,26 @@ const Receipts = () => {
       if (requestIds.length > 0) {
         attachments = await selectRecords('reimbursement_attachments', {
           where: { 
-            reimbursement_id: { operator: 'IN', value: requestIds }
+            reimbursement_id: { operator: 'in', value: requestIds }
           },
-        });
+        }) || [];
       }
 
       const attachmentsMap = new Map(attachments.map((a: any) => [a.reimbursement_id, a]));
 
       // Fetch employee profiles for vendor names
-      const employeeIds = requests.map((r: any) => r.employee_id).filter(Boolean);
+      // Use employee_id if available, otherwise use user_id
+      const employeeIds = requests
+        .map((r: any) => r.employee_id || r.user_id)
+        .filter(Boolean);
       let profiles: any[] = [];
 
       if (employeeIds.length > 0) {
         profiles = await selectRecords('profiles', {
           where: { 
-            user_id: { operator: 'IN', value: employeeIds }
+            user_id: { operator: 'in', value: employeeIds }
           },
-        });
+        }) || [];
       }
 
       const profileMap = new Map(profiles.map((p: any) => [p.user_id, p.full_name]));
@@ -192,7 +253,8 @@ const Receipts = () => {
       const transformedReceipts: Receipt[] = requests.map((request: any) => {
         const attachment = attachmentsMap.get(request.id);
         const categoryName = categoryMap.get(request.category_id) || 'Uncategorized';
-        const vendorName = profileMap.get(request.employee_id) || 'Unknown Employee';
+        const employeeId = request.employee_id || request.user_id;
+        const vendorName = profileMap.get(employeeId) || 'Unknown Employee';
 
         return {
           id: request.id.substring(0, 8).toUpperCase(),
@@ -237,12 +299,28 @@ const Receipts = () => {
 
     } catch (error: any) {
       console.error('Error fetching receipts:', error);
-      toast({
-        title: "Error",
-        description: error?.message || "Failed to load receipts. Please try again.",
-        variant: "destructive",
-      });
+      
+      // Don't show error toast for missing column errors - these are expected during migration
+      const isMissingColumnError = error?.code === '42703' || 
+                                   error?.message?.includes('does not exist') ||
+                                   error?.message?.includes('agency_id');
+      
+      if (!isMissingColumnError) {
+        toast({
+          title: "Error",
+          description: error?.message || "Failed to load receipts. Please try again.",
+          variant: "destructive",
+        });
+      }
+      
+      // Always set empty state to prevent UI errors
       setReceipts([]);
+      setReceiptStats({
+        totalReceipts: 0,
+        totalAmount: 0,
+        thisMonth: 0,
+        pendingReview: 0
+      });
     } finally {
       setLoading(false);
     }

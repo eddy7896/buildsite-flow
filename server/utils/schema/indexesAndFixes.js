@@ -176,8 +176,39 @@ async function ensureCrmIndexes(client) {
  * Ensure all indexes for GST tables
  */
 async function ensureGstIndexes(client) {
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_gst_returns_return_period ON public.gst_returns(return_period)`);
-  await client.query(`CREATE INDEX IF NOT EXISTS idx_gst_transactions_transaction_date ON public.gst_transactions(transaction_date)`);
+  // Check if filing_period column exists (new schema) or return_period (old schema)
+  const columnCheck = await client.query(`
+    SELECT column_name 
+    FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'gst_returns'
+    AND column_name IN ('filing_period', 'return_period')
+  `);
+  
+  const existingColumns = columnCheck.rows.map(r => r.column_name);
+  
+  if (existingColumns.includes('filing_period')) {
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_gst_returns_filing_period ON public.gst_returns(filing_period)`);
+  } else if (existingColumns.includes('return_period')) {
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_gst_returns_return_period ON public.gst_returns(return_period)`);
+  }
+  
+  // Check if invoice_date exists (new schema) or transaction_date (old schema)
+  const transactionColumnCheck = await client.query(`
+    SELECT column_name 
+    FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'gst_transactions'
+    AND column_name IN ('invoice_date', 'transaction_date')
+  `);
+  
+  const transactionColumns = transactionColumnCheck.rows.map(r => r.column_name);
+  
+  if (transactionColumns.includes('invoice_date')) {
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_gst_transactions_invoice_date ON public.gst_transactions(invoice_date)`);
+  } else if (transactionColumns.includes('transaction_date')) {
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_gst_transactions_transaction_date ON public.gst_transactions(transaction_date)`);
+  }
 }
 
 /**

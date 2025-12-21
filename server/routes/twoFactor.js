@@ -11,6 +11,50 @@ const { parseDatabaseUrl } = require('../utils/poolManager');
 const { Pool } = require('pg');
 
 /**
+ * Ensure 2FA columns exist in the users table
+ * This function adds the columns if they don't exist
+ */
+async function ensureTwoFactorColumns(client) {
+  try {
+    // Check if columns exist
+    const columnCheck = await client.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+      AND table_name = 'users' 
+      AND column_name IN ('two_factor_secret', 'two_factor_enabled', 'recovery_codes', 'two_factor_verified_at')
+    `);
+
+    const existingColumns = columnCheck.rows.map(row => row.column_name);
+    const requiredColumns = ['two_factor_secret', 'two_factor_enabled', 'recovery_codes', 'two_factor_verified_at'];
+    const missingColumns = requiredColumns.filter(col => !existingColumns.includes(col));
+
+    if (missingColumns.length > 0) {
+      console.log('[2FA] Adding missing 2FA columns:', missingColumns);
+      
+      // Add missing columns
+      if (missingColumns.includes('two_factor_secret')) {
+        await client.query('ALTER TABLE public.users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT');
+      }
+      if (missingColumns.includes('two_factor_enabled')) {
+        await client.query('ALTER TABLE public.users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT FALSE');
+      }
+      if (missingColumns.includes('recovery_codes')) {
+        await client.query('ALTER TABLE public.users ADD COLUMN IF NOT EXISTS recovery_codes TEXT[]');
+      }
+      if (missingColumns.includes('two_factor_verified_at')) {
+        await client.query('ALTER TABLE public.users ADD COLUMN IF NOT EXISTS two_factor_verified_at TIMESTAMP WITH TIME ZONE');
+      }
+
+      console.log('[2FA] ✅ 2FA columns added successfully');
+    }
+  } catch (error) {
+    console.error('[2FA] Error ensuring 2FA columns:', error);
+    throw error;
+  }
+}
+
+/**
  * POST /api/two-factor/setup
  * Generate 2FA secret and QR code for user
  * Requires authentication
@@ -35,6 +79,9 @@ router.post('/setup', authenticate, requireAgencyContext, asyncHandler(async (re
     const agencyClient = await agencyPool.connect();
 
     try {
+      // Ensure 2FA columns exist
+      await ensureTwoFactorColumns(agencyClient);
+
       // Get user email
       const userResult = await agencyClient.query(
         'SELECT email FROM public.users WHERE id = $1',
@@ -118,6 +165,9 @@ router.post('/verify-and-enable', authenticate, requireAgencyContext, asyncHandl
     const agencyClient = await agencyPool.connect();
 
     try {
+      // Ensure 2FA columns exist
+      await ensureTwoFactorColumns(agencyClient);
+
       // Get user's 2FA secret
       const userResult = await agencyClient.query(
         'SELECT two_factor_secret FROM public.users WHERE id = $1',
@@ -145,6 +195,13 @@ router.post('/verify-and-enable', authenticate, requireAgencyContext, asyncHandl
         });
       }
 
+      // Get recovery codes (they were generated during setup)
+      const recoveryCodesResult = await agencyClient.query(
+        'SELECT recovery_codes FROM public.users WHERE id = $1',
+        [userId]
+      );
+      const recoveryCodes = recoveryCodesResult.rows[0]?.recovery_codes || [];
+
       // Enable 2FA
       await agencyClient.query(
         `UPDATE public.users 
@@ -156,6 +213,9 @@ router.post('/verify-and-enable', authenticate, requireAgencyContext, asyncHandl
 
       res.json({
         success: true,
+        data: {
+          recoveryCodes: recoveryCodes,
+        },
         message: '2FA enabled successfully',
       });
     } finally {
@@ -196,14 +256,17 @@ router.post('/verify', asyncHandler(async (req, res) => {
     });
   }
 
-  try {
-    // Connect to agency database
-    const { host, port, user, password } = parseDatabaseUrl();
-    const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-    const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
-    const agencyClient = await agencyPool.connect();
+    try {
+      // Connect to agency database
+      const { host, port, user, password } = parseDatabaseUrl();
+      const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
+      const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+      const agencyClient = await agencyPool.connect();
 
     try {
+      // Ensure 2FA columns exist
+      await ensureTwoFactorColumns(agencyClient);
+
       // Get user's 2FA data
       const userResult = await agencyClient.query(
         `SELECT two_factor_enabled, two_factor_secret, recovery_codes 
@@ -230,6 +293,8 @@ router.post('/verify', asyncHandler(async (req, res) => {
         });
       }
 
+      // Only verify token/code if 2FA is enabled
+      // (We already checked above that 2FA is enabled, so this code should run)
       let isValid = false;
 
       // Verify TOTP token
@@ -300,14 +365,17 @@ router.post('/disable', authenticate, requireAgencyContext, asyncHandler(async (
     });
   }
 
-  try {
-    // Connect to agency database
-    const { host, port, user, password: dbPassword } = parseDatabaseUrl();
-    const agencyDbUrl = `postgresql://${user}:${dbPassword}@${host}:${port}/${agencyDatabase}`;
-    const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
-    const agencyClient = await agencyPool.connect();
+    try {
+      // Connect to agency database
+      const { host, port, user, password: dbPassword } = parseDatabaseUrl();
+      const agencyDbUrl = `postgresql://${user}:${dbPassword}@${host}:${port}/${agencyDatabase}`;
+      const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+      const agencyClient = await agencyPool.connect();
 
     try {
+      // Ensure 2FA columns exist
+      await ensureTwoFactorColumns(agencyClient);
+
       // Verify password first
       const bcrypt = require('bcrypt');
       const userResult = await agencyClient.query(
@@ -370,14 +438,17 @@ router.get('/status', authenticate, requireAgencyContext, asyncHandler(async (re
   const userId = req.user.id;
   const agencyDatabase = req.user.agencyDatabase;
 
-  try {
-    // Connect to agency database
-    const { host, port, user, password } = parseDatabaseUrl();
-    const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-    const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
-    const agencyClient = await agencyPool.connect();
+    try {
+      // Connect to agency database
+      const { host, port, user, password } = parseDatabaseUrl();
+      const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
+      const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+      const agencyClient = await agencyPool.connect();
 
     try {
+      // Ensure 2FA columns exist
+      await ensureTwoFactorColumns(agencyClient);
+
       const userResult = await agencyClient.query(
         `SELECT two_factor_enabled, two_factor_verified_at 
          FROM public.users 

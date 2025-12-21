@@ -18,6 +18,10 @@ import {
   FileText,
   Calendar
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { getAgencyId } from "@/utils/agencyUtils";
+import { selectRecords, rawQuery } from "@/services/api/postgresql-service";
+import { db } from "@/integrations/postgresql/client";
 
 interface Automation {
   id: string;
@@ -44,131 +48,174 @@ interface Recommendation {
 }
 
 export function SmartRecommendations() {
+  const { user, profile } = useAuth();
   const [automations, setAutomations] = useState<Automation[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Mock automation data
-    const mockAutomations: Automation[] = [
-      {
-        id: '1',
-        name: 'Invoice Generation',
-        description: 'Automatically generate and send invoices when projects are marked as completed',
-        category: 'workflow',
-        enabled: true,
-        frequency: 'real_time',
-        last_run: new Date().toISOString(),
-        success_rate: 98.5,
-        time_saved: 15,
-        actions_count: 47
-      },
-      {
-        id: '2',
-        name: 'Client Follow-up Reminders',
-        description: 'Send automated follow-up reminders for pending client responses',
-        category: 'notification',
-        enabled: true,
-        frequency: 'daily',
-        last_run: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-        success_rate: 94.2,
-        time_saved: 8,
-        actions_count: 23
-      },
-      {
-        id: '3',
-        name: 'Expense Categorization',
-        description: 'Automatically categorize expenses based on vendor and description patterns',
-        category: 'data_entry',
-        enabled: false,
-        frequency: 'real_time',
-        last_run: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        success_rate: 89.1,
-        time_saved: 5,
-        actions_count: 156
-      },
-      {
-        id: '4',
-        name: 'Weekly Performance Reports',
-        description: 'Generate and distribute weekly performance reports to stakeholders',
-        category: 'reporting',
-        enabled: true,
-        frequency: 'weekly',
-        last_run: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-        success_rate: 100,
-        time_saved: 45,
-        actions_count: 12
-      },
-      {
-        id: '5',
-        name: 'Project Status Updates',
-        description: 'Send automated project status updates to clients based on milestone completion',
-        category: 'notification',
-        enabled: true,
-        frequency: 'real_time',
-        last_run: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-        success_rate: 96.7,
-        time_saved: 12,
-        actions_count: 89
-      }
-    ];
+    fetchData();
+  }, [user?.id, profile?.agency_id]);
 
-    const mockRecommendations: Recommendation[] = [
-      {
-        id: '1',
-        title: 'Automate Timesheet Reminders',
-        description: 'Set up automated reminders for employees who haven\'t submitted timesheets by Friday 3 PM',
-        potential_impact: 'Reduce timesheet submission delays by 85%',
-        implementation_effort: 'low',
-        estimated_savings: 4,
-        category: 'Workflow Automation',
-        priority: 1
-      },
-      {
-        id: '2',
-        title: 'Smart Project Budget Alerts',
-        description: 'Create automated alerts when projects reach 80% of budget allocation',
-        potential_impact: 'Prevent budget overruns and improve profitability',
-        implementation_effort: 'medium',
-        estimated_savings: 8,
-        category: 'Financial Management',
-        priority: 2
-      },
-      {
-        id: '3',
-        title: 'Client Satisfaction Surveys',
-        description: 'Automatically send satisfaction surveys after project completion',
-        potential_impact: 'Increase client retention by 15-20%',
-        implementation_effort: 'low',
-        estimated_savings: 6,
-        category: 'Client Relations',
-        priority: 3
-      },
-      {
-        id: '4',
-        title: 'Resource Allocation Optimizer',
-        description: 'AI-powered system to optimize team member assignments based on skills and availability',
-        potential_impact: 'Improve project efficiency by 25%',
-        implementation_effort: 'high',
-        estimated_savings: 20,
-        category: 'Resource Management',
-        priority: 4
-      },
-      {
-        id: '5',
-        title: 'Automated Backup Workflows',
-        description: 'Set up automated backups for project files and client data',
-        potential_impact: 'Ensure data security and compliance',
-        implementation_effort: 'medium',
-        estimated_savings: 2,
-        category: 'Data Management',
-        priority: 5
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        setAutomations([]);
+        setRecommendations([]);
+        return;
       }
-    ];
 
-    setAutomations(mockAutomations);
-    setRecommendations(mockRecommendations);
-  }, []);
+      // Fetch real data to generate automations and recommendations
+      const [projects, invoices, tasks, attendance] = await Promise.all([
+        selectRecords('projects', {
+          where: { agency_id: agencyId },
+          orderBy: 'created_at DESC',
+          limit: 100
+        }).catch(() => []),
+        selectRecords('invoices', {
+          where: { agency_id: agencyId },
+          orderBy: 'created_at DESC',
+          limit: 100
+        }).catch(() => []),
+        selectRecords('tasks', {
+          where: { agency_id: agencyId },
+          orderBy: 'created_at DESC',
+          limit: 100
+        }).catch(() => []),
+        selectRecords('attendance', {
+          orderBy: 'date DESC',
+          limit: 100
+        }).catch(() => [])
+      ]);
+
+      // Generate automations based on real data
+      const generatedAutomations: Automation[] = [];
+      
+      // Invoice automation - if there are completed projects without invoices
+      const completedProjectsWithoutInvoices = (projects || []).filter((p: any) => 
+        p.status === 'completed' && !invoices?.some((inv: any) => inv.project_id === p.id)
+      );
+      if (completedProjectsWithoutInvoices.length > 0) {
+        generatedAutomations.push({
+          id: 'auto-invoice',
+          name: 'Invoice Generation',
+          description: 'Automatically generate and send invoices when projects are marked as completed',
+          category: 'workflow',
+          enabled: false,
+          frequency: 'real_time',
+          last_run: new Date().toISOString(),
+          success_rate: 95,
+          time_saved: 15,
+          actions_count: completedProjectsWithoutInvoices.length
+        });
+      }
+
+      // Task reminder automation
+      const overdueTasks = (tasks || []).filter((t: any) => {
+        if (!t.due_date) return false;
+        return new Date(t.due_date) < new Date() && t.status !== 'completed';
+      });
+      if (overdueTasks.length > 0) {
+        generatedAutomations.push({
+          id: 'auto-task-reminders',
+          name: 'Task Reminder Notifications',
+          description: 'Send automated reminders for overdue tasks',
+          category: 'notification',
+          enabled: false,
+          frequency: 'daily',
+          last_run: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+          success_rate: 90,
+          time_saved: 8,
+          actions_count: overdueTasks.length
+        });
+      }
+
+      // Attendance tracking automation
+      const recentAttendance = (attendance || []).filter((a: any) => {
+        const date = new Date(a.date);
+        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        return date > weekAgo;
+      });
+      if (recentAttendance.length > 0) {
+        generatedAutomations.push({
+          id: 'auto-attendance',
+          name: 'Attendance Tracking',
+          description: 'Automatically track and report attendance patterns',
+          category: 'data_entry',
+          enabled: false,
+          frequency: 'daily',
+          last_run: new Date().toISOString(),
+          success_rate: 92,
+          time_saved: 10,
+          actions_count: recentAttendance.length
+        });
+      }
+
+      // Generate recommendations based on real data
+      const generatedRecommendations: Recommendation[] = [];
+      
+      // Budget alert recommendation
+      const projectsNearBudget = (projects || []).filter((p: any) => {
+        if (!p.budget || !p.actual_cost) return false;
+        const budgetPercent = (p.actual_cost / p.budget) * 100;
+        return budgetPercent >= 75 && budgetPercent < 100;
+      });
+      if (projectsNearBudget.length > 0) {
+        generatedRecommendations.push({
+          id: 'rec-budget-alerts',
+          title: 'Smart Project Budget Alerts',
+          description: `Create automated alerts when projects reach 80% of budget. ${projectsNearBudget.length} projects currently near budget limit.`,
+          potential_impact: 'Prevent budget overruns and improve profitability',
+          implementation_effort: 'medium',
+          estimated_savings: 8,
+          category: 'Financial Management',
+          priority: 1
+        });
+      }
+
+      // Timesheet reminder recommendation
+      if (attendance && attendance.length > 0) {
+        generatedRecommendations.push({
+          id: 'rec-timesheet-reminders',
+          title: 'Automate Timesheet Reminders',
+          description: 'Set up automated reminders for employees who haven\'t submitted timesheets',
+          potential_impact: 'Reduce timesheet submission delays by 85%',
+          implementation_effort: 'low',
+          estimated_savings: 4,
+          category: 'Workflow Automation',
+          priority: 2
+        });
+      }
+
+      // Client follow-up recommendation
+      const pendingInvoices = (invoices || []).filter((inv: any) => 
+        inv.status === 'sent' || inv.status === 'pending'
+      );
+      if (pendingInvoices.length > 0) {
+        generatedRecommendations.push({
+          id: 'rec-client-followup',
+          title: 'Client Follow-up Automation',
+          description: `Automate follow-up reminders for ${pendingInvoices.length} pending invoices`,
+          potential_impact: 'Improve payment collection rates by 20-30%',
+          implementation_effort: 'low',
+          estimated_savings: 6,
+          category: 'Client Relations',
+          priority: 3
+        });
+      }
+
+      setAutomations(generatedAutomations);
+      setRecommendations(generatedRecommendations);
+    } catch (error) {
+      console.error('Error fetching recommendations data:', error);
+      setAutomations([]);
+      setRecommendations([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const toggleAutomation = async (automationId: string) => {
     setAutomations(prev => 

@@ -21,6 +21,8 @@ export interface SignUpData {
 export interface SignInData {
   email: string;
   password: string;
+  twoFactorToken?: string;
+  recoveryCode?: string;
 }
 
 /**
@@ -147,7 +149,12 @@ export async function loginUser(data: SignInData): Promise<AuthResponse> {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ 
+      email, 
+      password,
+      twoFactorToken: data.twoFactorToken,
+      recoveryCode: data.recoveryCode,
+    }),
   });
 
   if (!response.ok) {
@@ -159,6 +166,22 @@ export async function loginUser(data: SignInData): Promise<AuthResponse> {
 
   if (!result.success) {
     throw new Error(result.error || 'Login failed');
+  }
+
+  // If 2FA is required, return special response
+  if (result.requiresTwoFactor) {
+    return {
+      token: '', // No token yet, need 2FA verification
+      user: {
+        id: result.userId,
+        email: '',
+        email_confirmed: false,
+        is_active: true,
+      } as User,
+      requiresTwoFactor: true,
+      userId: result.userId,
+      agencyDatabase: result.agencyDatabase,
+    } as any;
   }
 
   // Store the agency database and id for future queries

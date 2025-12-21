@@ -5,19 +5,36 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "npx --yes nodemon index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "archiver": "^7.0.1",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "csv-stringify": "^6.6.0",
+    "dotenv": "^17.2.3",
     "express": "^4.22.1",
+    "graphql": "^16.12.0",
+    "graphql-http": "^1.22.4",
+    "mailtrap": "^4.4.0",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^7.0.11",
     "pg": "^8.16.3",
     "qrcode": "^1.5.4",
+    "redis": "^5.10.0",
+    "samlify": "^2.10.2",
+    "socket.io": "^4.8.1",
     "speakeasy": "^2.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "@types/jest": "^30.0.0",
+    "@types/supertest": "^6.0.3",
+    "jest": "^30.2.0",
+    "nodemon": "^3.0.1",
+    "supertest": "^7.1.4"
   }
 }

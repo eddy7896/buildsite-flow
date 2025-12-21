@@ -137,7 +137,7 @@ export default function EmployeePerformance() {
 
   // Fetch performance data
   const { data: summary, isLoading: summaryLoading, error: summaryError } = useQuery<PerformanceSummary>({
-    queryKey: ['employee-performance-summary', selectedEmployeeId, dateRange],
+    queryKey: ['employee-performance-summary', selectedEmployeeId, dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
       if (!selectedEmployeeId) throw new Error('No employee selected');
       const agencyId = await getAgencyId(profile, user?.id || null);
@@ -146,40 +146,47 @@ export default function EmployeePerformance() {
     enabled: !!selectedEmployeeId,
     retry: 2,
     staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false, // Don't refetch on window focus
   });
 
   const { data: tasks, isLoading: tasksLoading } = useQuery<TaskPerformance[]>({
-    queryKey: ['employee-performance-tasks', selectedEmployeeId, dateRange],
+    queryKey: ['employee-performance-tasks', selectedEmployeeId, dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
       if (!selectedEmployeeId) throw new Error('No employee selected');
       const agencyId = await getAgencyId(profile, user?.id || null);
       return getTaskPerformance(selectedEmployeeId, dateRange, agencyId || undefined);
     },
     enabled: !!selectedEmployeeId,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    refetchOnWindowFocus: false,
   });
 
   const { data: workHours, isLoading: workHoursLoading } = useQuery<WorkHoursData[]>({
-    queryKey: ['employee-performance-workhours', selectedEmployeeId, dateRange],
+    queryKey: ['employee-performance-workhours', selectedEmployeeId, dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
       if (!selectedEmployeeId) throw new Error('No employee selected');
       const agencyId = await getAgencyId(profile, user?.id || null);
       return getWorkHours(selectedEmployeeId, dateRange, agencyId || undefined);
     },
     enabled: !!selectedEmployeeId,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    refetchOnWindowFocus: false,
   });
 
   const { data: hoursByProject, isLoading: hoursByProjectLoading } = useQuery({
-    queryKey: ['employee-performance-hours-by-project', selectedEmployeeId, dateRange],
+    queryKey: ['employee-performance-hours-by-project', selectedEmployeeId, dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
       if (!selectedEmployeeId) throw new Error('No employee selected');
       const agencyId = await getAgencyId(profile, user?.id || null);
       return getWorkHoursByProject(selectedEmployeeId, dateRange, agencyId || undefined);
     },
     enabled: !!selectedEmployeeId,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    refetchOnWindowFocus: false,
   });
 
   const { data: trends, isLoading: trendsLoading } = useQuery<PerformanceTrend[]>({
-    queryKey: ['employee-performance-trends', selectedEmployeeId, dateRange, period],
+    queryKey: ['employee-performance-trends', selectedEmployeeId, dateRange.startDate, dateRange.endDate, period],
     queryFn: async () => {
       if (!selectedEmployeeId) throw new Error('No employee selected');
       const agencyId = await getAgencyId(profile, user?.id || null);
@@ -187,6 +194,8 @@ export default function EmployeePerformance() {
       return getPerformanceTrends(selectedEmployeeId, trendPeriod, dateRange, agencyId || undefined);
     },
     enabled: !!selectedEmployeeId,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    refetchOnWindowFocus: false,
   });
 
   // Daily activity state
@@ -204,43 +213,41 @@ export default function EmployeePerformance() {
       return getDailyActivity(selectedEmployeeId, selectedActivityDate, agencyId || undefined);
     },
     enabled: !!selectedEmployeeId && !!selectedActivityDate,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    gcTime: 15 * 60 * 1000, // Keep in cache for 15 minutes
+    refetchOnWindowFocus: false, // Don't refetch on window focus
   });
 
   // Fetch activities for the current month for calendar indicators
+  // Use batch endpoint for efficiency
   const { data: monthlyActivities } = useQuery<DailyActivity[]>({
-    queryKey: ['employee-performance-monthly-activities', selectedEmployeeId, dateRange],
+    queryKey: ['employee-performance-monthly-activities', selectedEmployeeId],
     queryFn: async () => {
       if (!selectedEmployeeId) return [];
       const agencyId = await getAgencyId(profile, user?.id || null);
-      // Fetch activities for all dates in the range
-      const activities: DailyActivity[] = [];
-      const start = new Date(dateRange.startDate);
-      const end = new Date(dateRange.endDate);
       
-      // Limit to last 60 days to avoid too many requests
-      const daysToFetch = Math.min(60, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+      // Only fetch last 30 days for calendar indicators to reduce load
+      const today = new Date();
       const datesToFetch: string[] = [];
-      for (let i = 0; i < daysToFetch; i++) {
-        const date = new Date(start);
-        date.setDate(date.getDate() + i);
+      
+      // Generate dates for last 30 days only
+      for (let i = 0; i < 30; i++) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
         datesToFetch.push(format(date, 'yyyy-MM-dd'));
       }
 
-      // Fetch in batches
-      for (const date of datesToFetch.slice(-30)) { // Only fetch last 30 days for calendar
-        try {
-          const activity = await getDailyActivity(selectedEmployeeId, date, agencyId || undefined);
-          if (activity) {
-            activities.push(activity);
-          }
-        } catch (error) {
-          // Silently fail for individual dates
-        }
-      }
+      // Use batch endpoint for efficient fetching
+      const { getDailyActivitiesBatch } = await import('@/services/api/performance-service');
+      const activities = await getDailyActivitiesBatch(selectedEmployeeId, datesToFetch, agencyId || undefined);
       
       return activities;
     },
     enabled: !!selectedEmployeeId,
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+    gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
+    refetchOnWindowFocus: false, // Don't refetch on window focus
+    refetchOnMount: false, // Don't refetch on mount if data exists
   });
 
   // Update activities when daily activity is fetched

@@ -18,12 +18,48 @@ async function ensureExpenseCategoriesTable(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS public.expense_categories (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      name TEXT UNIQUE NOT NULL,
+      agency_id UUID,
+      name TEXT NOT NULL,
       description TEXT,
       is_active BOOLEAN DEFAULT true,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(agency_id, name)
     );
+  `);
+  
+  // Add agency_id column if it doesn't exist (for existing tables)
+  await client.query(`
+    DO $$ 
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'expense_categories' 
+        AND column_name = 'agency_id'
+      ) THEN
+        ALTER TABLE public.expense_categories ADD COLUMN agency_id UUID;
+      END IF;
+    END $$;
+  `);
+  
+  // Drop old unique constraint on name if it exists and create new one
+  await client.query(`
+    DO $$ 
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'expense_categories_name_key'
+      ) THEN
+        ALTER TABLE public.expense_categories DROP CONSTRAINT expense_categories_name_key;
+      END IF;
+    END $$;
+  `);
+  
+  // Create index on agency_id
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_expense_categories_agency_id 
+    ON public.expense_categories(agency_id);
   `);
 }
 
@@ -35,7 +71,9 @@ async function ensureReimbursementRequestsTable(client) {
     CREATE TABLE IF NOT EXISTS public.reimbursement_requests (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       request_number TEXT UNIQUE,
+      agency_id UUID,
       user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+      employee_id UUID REFERENCES public.users(id),
       category_id UUID REFERENCES public.expense_categories(id),
       amount NUMERIC(15, 2) NOT NULL,
       currency TEXT DEFAULT 'USD',
@@ -51,6 +89,51 @@ async function ensureReimbursementRequestsTable(client) {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
+  `);
+  
+  // Add agency_id column if it doesn't exist (for existing tables)
+  await client.query(`
+    DO $$ 
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'reimbursement_requests' 
+        AND column_name = 'agency_id'
+      ) THEN
+        ALTER TABLE public.reimbursement_requests ADD COLUMN agency_id UUID;
+      END IF;
+    END $$;
+  `);
+  
+  // Add employee_id column if it doesn't exist (for existing tables)
+  await client.query(`
+    DO $$ 
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'reimbursement_requests' 
+        AND column_name = 'employee_id'
+      ) THEN
+        ALTER TABLE public.reimbursement_requests ADD COLUMN employee_id UUID REFERENCES public.users(id);
+        -- Populate employee_id from user_id for existing records
+        UPDATE public.reimbursement_requests 
+        SET employee_id = user_id 
+        WHERE employee_id IS NULL;
+      END IF;
+    END $$;
+  `);
+  
+  // Create indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_reimbursement_requests_agency_id 
+    ON public.reimbursement_requests(agency_id);
+  `);
+  
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_reimbursement_requests_employee_id 
+    ON public.reimbursement_requests(employee_id);
   `);
 }
 

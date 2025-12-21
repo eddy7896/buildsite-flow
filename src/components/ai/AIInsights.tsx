@@ -15,6 +15,9 @@ import {
   Brain,
   BarChart3
 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { getAgencyId } from "@/utils/agencyUtils";
+import { selectRecords, rawQuery } from "@/services/api/postgresql-service";
 
 interface Insight {
   id: string;
@@ -29,82 +32,179 @@ interface Insight {
 }
 
 export function AIInsights() {
+  const { user, profile } = useAuth();
   const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Mock AI insights data
-    const mockInsights: Insight[] = [
-      {
-        id: '1',
-        title: 'Peak Performance Period Identified',
-        description: 'Your team shows 34% higher productivity between 9-11 AM. Consider scheduling important meetings during this window.',
-        type: 'opportunity',
-        impact: 'medium',
-        confidence: 89,
-        actionable: true,
-        data: { peak_hours: '9-11 AM', productivity_increase: 34 },
-        created_at: new Date().toISOString()
-      },
-      {
-        id: '2',
-        title: 'Client Churn Risk Detected',
-        description: 'Acme Corp shows reduced engagement patterns similar to previous churned clients. Immediate attention recommended.',
-        type: 'warning',
-        impact: 'high',
-        confidence: 76,
-        actionable: true,
-        data: { client: 'Acme Corp', risk_score: 76, similar_patterns: 3 },
-        created_at: new Date().toISOString()
-      },
-      {
-        id: '3',
-        title: 'Revenue Optimization Opportunity',
-        description: 'Upselling UI/UX services to existing web development clients could increase revenue by an estimated $45,000 this quarter.',
-        type: 'opportunity',
-        impact: 'high',
-        confidence: 82,
-        actionable: true,
-        data: { service: 'UI/UX', potential_revenue: 45000, target_clients: 8 },
-        created_at: new Date().toISOString()
-      },
-      {
-        id: '4',
-        title: 'Resource Allocation Trend',
-        description: 'Frontend development tasks are taking 23% longer than estimated. Consider additional training or resources.',
-        type: 'trend',
-        impact: 'medium',
-        confidence: 91,
-        actionable: true,
-        data: { department: 'Frontend', time_overrun: 23, suggested_action: 'training' },
-        created_at: new Date().toISOString()
-      },
-      {
-        id: '5',
-        title: 'Optimal Project Size Identified',
-        description: 'Projects between $15K-$30K show highest profit margins (67%) and client satisfaction (4.7/5).',
-        type: 'recommendation',
-        impact: 'medium',
-        confidence: 94,
-        actionable: true,
-        data: { optimal_range: '15K-30K', profit_margin: 67, satisfaction: 4.7 },
-        created_at: new Date().toISOString()
-      },
-      {
-        id: '6',
-        title: 'Seasonal Demand Pattern',
-        description: 'Historical data shows 40% increase in e-commerce projects during Q4. Prepare resources accordingly.',
-        type: 'trend',
-        impact: 'medium',
-        confidence: 87,
-        actionable: true,
-        data: { season: 'Q4', increase: 40, project_type: 'e-commerce' },
-        created_at: new Date().toISOString()
-      }
-    ];
+    fetchInsights();
+  }, [user?.id, profile?.agency_id]);
 
-    setInsights(mockInsights);
-  }, []);
+  const fetchInsights = async () => {
+    try {
+      setLoading(true);
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) {
+        setInsights([]);
+        return;
+      }
+
+      // Fetch real data to generate insights
+      const [projects, invoices, clients, tasks] = await Promise.all([
+        selectRecords('projects', {
+          where: { agency_id: agencyId },
+          orderBy: 'created_at DESC',
+          limit: 500
+        }).catch(() => []),
+        selectRecords('invoices', {
+          where: { agency_id: agencyId },
+          orderBy: 'created_at DESC',
+          limit: 500
+        }).catch(() => []),
+        selectRecords('clients', {
+          where: { agency_id: agencyId, status: 'active' },
+          orderBy: 'created_at DESC',
+          limit: 500
+        }).catch(() => []),
+        selectRecords('tasks', {
+          where: { agency_id: agencyId },
+          orderBy: 'created_at DESC',
+          limit: 500
+        }).catch(() => [])
+      ]);
+
+      const generatedInsights: Insight[] = [];
+
+      // Budget overrun warning
+      const overBudgetProjects = (projects || []).filter((p: any) => {
+        if (!p.budget || !p.actual_cost) return false;
+        return p.actual_cost > p.budget;
+      });
+      if (overBudgetProjects.length > 0) {
+        generatedInsights.push({
+          id: 'insight-budget-overrun',
+          title: 'Budget Overrun Detected',
+          description: `${overBudgetProjects.length} project(s) have exceeded their allocated budget. Immediate review recommended.`,
+          type: 'warning',
+          impact: 'high',
+          confidence: 95,
+          actionable: true,
+          data: { project_count: overBudgetProjects.length },
+          created_at: new Date().toISOString()
+        });
+      }
+
+      // Revenue opportunity from pending invoices
+      const pendingInvoices = (invoices || []).filter((inv: any) => 
+        inv.status === 'sent' || inv.status === 'pending'
+      );
+      const pendingAmount = pendingInvoices.reduce((sum: number, inv: any) => 
+        sum + (Number(inv.total_amount) || 0), 0
+      );
+      if (pendingAmount > 0) {
+        generatedInsights.push({
+          id: 'insight-pending-revenue',
+          title: 'Revenue Collection Opportunity',
+          description: `$${pendingAmount.toLocaleString()} in pending invoices. Implementing automated follow-ups could improve collection rates.`,
+          type: 'opportunity',
+          impact: 'high',
+          confidence: 85,
+          actionable: true,
+          data: { pending_amount: pendingAmount, invoice_count: pendingInvoices.length },
+          created_at: new Date().toISOString()
+        });
+      }
+
+      // Project completion trend
+      const completedProjects = (projects || []).filter((p: any) => p.status === 'completed').length;
+      const totalProjects = projects.length || 1;
+      const completionRate = (completedProjects / totalProjects) * 100;
+      if (completionRate < 70 && totalProjects > 5) {
+        generatedInsights.push({
+          id: 'insight-completion-trend',
+          title: 'Project Completion Rate Below Target',
+          description: `Current completion rate is ${Math.round(completionRate)}%. Consider reviewing project management processes.`,
+          type: 'trend',
+          impact: 'medium',
+          confidence: 88,
+          actionable: true,
+          data: { completion_rate: Math.round(completionRate), total_projects: totalProjects },
+          created_at: new Date().toISOString()
+        });
+      }
+
+      // Client engagement opportunity
+      const clientsWithoutRecentProjects = (clients || []).filter((c: any) => {
+        const clientProjects = (projects || []).filter((p: any) => p.client_id === c.id);
+        if (clientProjects.length === 0) return true;
+        const lastProject = clientProjects.sort((a: any, b: any) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )[0];
+        const daysSinceLastProject = (Date.now() - new Date(lastProject.created_at).getTime()) / (1000 * 60 * 60 * 24);
+        return daysSinceLastProject > 90;
+      });
+      if (clientsWithoutRecentProjects.length > 0) {
+        generatedInsights.push({
+          id: 'insight-client-engagement',
+          title: 'Client Re-engagement Opportunity',
+          description: `${clientsWithoutRecentProjects.length} active client(s) haven't had a project in 90+ days. Consider reaching out for new opportunities.`,
+          type: 'opportunity',
+          impact: 'medium',
+          confidence: 82,
+          actionable: true,
+          data: { client_count: clientsWithoutRecentProjects.length },
+          created_at: new Date().toISOString()
+        });
+      }
+
+      // Task completion efficiency
+      const overdueTasks = (tasks || []).filter((t: any) => {
+        if (!t.due_date || t.status === 'completed') return false;
+        return new Date(t.due_date) < new Date();
+      });
+      if (overdueTasks.length > 0) {
+        const overduePercent = (overdueTasks.length / (tasks.length || 1)) * 100;
+        generatedInsights.push({
+          id: 'insight-task-efficiency',
+          title: 'Task Completion Efficiency Alert',
+          description: `${overdueTasks.length} task(s) (${Math.round(overduePercent)}%) are overdue. Consider resource reallocation or deadline adjustments.`,
+          type: 'warning',
+          impact: 'medium',
+          confidence: 91,
+          actionable: true,
+          data: { overdue_count: overdueTasks.length, overdue_percent: Math.round(overduePercent) },
+          created_at: new Date().toISOString()
+        });
+      }
+
+      // Revenue growth recommendation
+      const recentInvoices = (invoices || []).slice(0, 6);
+      if (recentInvoices.length >= 3) {
+        const avgRevenue = recentInvoices.reduce((sum: number, inv: any) => 
+          sum + (Number(inv.total_amount) || 0), 0
+        ) / recentInvoices.length;
+        const potentialGrowth = avgRevenue * 0.2; // 20% growth potential
+        generatedInsights.push({
+          id: 'insight-revenue-growth',
+          title: 'Revenue Growth Potential',
+          description: `Based on current trends, implementing client retention strategies could increase revenue by approximately $${Math.round(potentialGrowth).toLocaleString()} per month.`,
+          type: 'recommendation',
+          impact: 'high',
+          confidence: 78,
+          actionable: true,
+          data: { potential_growth: Math.round(potentialGrowth) },
+          created_at: new Date().toISOString()
+        });
+      }
+
+      setInsights(generatedInsights);
+    } catch (error) {
+      console.error('Error fetching insights:', error);
+      setInsights([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getInsightIcon = (type: string) => {
     switch (type) {
@@ -150,15 +250,7 @@ export function AIInsights() {
   };
 
   const refreshInsights = async () => {
-    setLoading(true);
-    try {
-      // Simulate AI insight generation
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    } catch (error) {
-      console.error('Error refreshing insights:', error);
-    } finally {
-      setLoading(false);
-    }
+    await fetchInsights();
   };
 
   const implementInsight = async (insightId: string) => {

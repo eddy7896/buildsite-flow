@@ -21,14 +21,17 @@ import {
   Briefcase,
   Users2,
   FileCheck,
-  Brain,
   Monitor,
   FolderKanban,
   CalendarDays,
   UserCog,
   Settings2,
   UserPlus,
-  TrendingUp
+  TrendingUp,
+  Bell,
+  Package,
+  ShoppingCart,
+  Mail,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -39,6 +42,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarHeader,
+  SidebarFooter,
+  SidebarSeparator,
   useSidebar,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/useAuth';
@@ -48,6 +54,8 @@ import { getPagesForRole, type PageConfig } from '@/utils/rolePages';
 import { AppRole } from '@/utils/roleUtils';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { canAccessRoute } from '@/utils/routePermissions';
+import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 // Icon mapping from string names to icon components
 const iconMap: Record<string, any> = {
@@ -67,7 +75,7 @@ const iconMap: Record<string, any> = {
   CalendarDays,
   Shield: Monitor,
   ChevronRight: Clock,
-  Bell: Clock,
+  Bell,
   Briefcase,
   FileText,
   Settings,
@@ -80,13 +88,27 @@ const iconMap: Record<string, any> = {
   UserCog,
   Settings2,
   UserPlus,
-  FileCheck
+  FileCheck,
+  Package,
+  ShoppingCart,
+  Mail,
 };
 
+// Category configuration with icons and colors
+const categoryConfig: Record<string, { label: string; icon: any; color: string; order: number }> = {
+  dashboard: { label: 'Overview', icon: BarChart3, color: 'text-blue-600', order: 1 },
+  system: { label: 'System', icon: Monitor, color: 'text-purple-600', order: 2 },
+  management: { label: 'Management', icon: Users, color: 'text-green-600', order: 3 },
+  hr: { label: 'Human Resources', icon: UserCheck, color: 'text-pink-600', order: 4 },
+  finance: { label: 'Finance', icon: DollarSign, color: 'text-yellow-600', order: 5 },
+  projects: { label: 'Projects', icon: Briefcase, color: 'text-indigo-600', order: 6 },
+  reports: { label: 'Reports & Analytics', icon: ChartLine, color: 'text-cyan-600', order: 7 },
+  personal: { label: 'Personal', icon: User, color: 'text-orange-600', order: 8 },
+};
 
 export function AppSidebar() {
   const { state, setOpenMobile } = useSidebar();
-  const { userRole, loading } = useAuth();
+  const { userRole, loading, profile } = useAuth();
   const { settings: agencySettings } = useAgencySettings();
   const location = useLocation();
   const currentPath = location.pathname;
@@ -99,7 +121,7 @@ export function AppSidebar() {
       try {
         const agencyDatabase = localStorage.getItem('agency_database');
         if (!agencyDatabase) {
-          setSetupComplete(true); // No agency database means no setup needed
+          setSetupComplete(true);
           return;
         }
 
@@ -117,11 +139,11 @@ export function AppSidebar() {
           const result = await response.json();
           setSetupComplete(result.setupComplete || false);
         } else {
-          setSetupComplete(true); // Assume complete on error
+          setSetupComplete(true);
         }
       } catch (error) {
         console.error('Error checking setup status:', error);
-        setSetupComplete(true); // Assume complete on error
+        setSetupComplete(true);
       }
     };
 
@@ -142,11 +164,11 @@ export function AppSidebar() {
     return (
       <Sidebar className="w-14" collapsible="icon">
         <SidebarContent className="flex flex-col">
-          <div className="p-3 border-b border-sidebar-border">
-            <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Building className="h-4 w-4 text-primary" />
+          <SidebarHeader className="p-3 sm:p-4 border-b border-sidebar-border bg-gradient-to-br from-primary/5 via-primary/3 to-transparent">
+            <div className="h-9 w-9 sm:h-10 sm:w-10 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+              <Building className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
-          </div>
+          </SidebarHeader>
         </SidebarContent>
       </Sidebar>
     );
@@ -156,48 +178,34 @@ export function AppSidebar() {
   const role = userRole as AppRole;
   const rolePages = getPagesForRole(role);
   
-  // Filter to only show pages that:
-  // 1. Actually exist
-  // 2. Are not settings (settings goes at bottom)
-  // 3. User can actually access based on routePermissions (CRITICAL: prevents "Access Denied" errors)
+  // Filter and organize pages by category
   const mainPages = rolePages
     .filter(page => {
-      // Must exist
       if (!page.exists) return false;
-      
-      // Skip settings (shown at bottom)
       if (page.category === 'settings') return false;
-      
-      // CRITICAL: Check if user can actually access this route
-      // This ensures sidebar only shows pages that won't show "Access Denied"
-      if (userRole && !canAccessRoute(userRole, page.path)) {
-        return false;
-      }
-      
+      if (userRole && !canAccessRoute(userRole, page.path)) return false;
       return true;
     })
     .sort((a, b) => {
-      // Define category order
-      const categoryOrder: Record<string, number> = {
-        'dashboard': 1,
-        'system': 2,
-        'management': 3,
-        'hr': 4,
-        'finance': 5,
-        'projects': 6,
-        'reports': 7,
-        'personal': 8
-      };
-      const orderA = categoryOrder[a.category] || 99;
-      const orderB = categoryOrder[b.category] || 99;
+      const orderA = categoryConfig[a.category]?.order || 99;
+      const orderB = categoryConfig[b.category]?.order || 99;
       if (orderA !== orderB) return orderA - orderB;
       return a.title.localeCompare(b.title);
     });
   
-  // Find settings page, but also verify user can access it
+  // Group pages by category
+  const pagesByCategory = mainPages.reduce((acc, page) => {
+    const category = page.category || 'other';
+    if (!acc[category]) {
+      acc[category] = [];
+    }
+    acc[category].push(page);
+    return acc;
+  }, {} as Record<string, PageConfig[]>);
+  
+  // Find settings page
   const settingsPage = rolePages.find(page => {
     if (page.path !== '/settings' || !page.exists) return false;
-    // Verify user can access settings route
     if (userRole && !canAccessRoute(userRole, '/settings')) return false;
     return true;
   });
@@ -212,107 +220,299 @@ export function AppSidebar() {
   };
 
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
-    isActive ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted/50";
+    cn(
+      "relative rounded-lg",
+      isActive 
+        ? "bg-gradient-to-r from-primary/15 to-primary/5 text-primary font-semibold shadow-sm shadow-primary/10 border-l-2 border-primary" 
+        : "hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+    );
+
+  const CategoryIcon = ({ category }: { category: string }) => {
+    const config = categoryConfig[category];
+    if (!config) return null;
+    const Icon = config.icon;
+    return <Icon className={cn("h-3.5 w-3.5 flex-shrink-0", config.color)} />;
+  };
 
   return (
-    <Sidebar
-      className={isMobile ? "w-full" : collapsed ? "w-14" : "w-60"}
-      collapsible={isMobile ? "offcanvas" : "icon"}
-      variant={isMobile ? "floating" : "sidebar"}
-      side={isMobile ? "left" : "left"}
-    >
-      <SidebarContent className="flex flex-col">
-        {/* Logo placeholder when collapsed */}
-        {collapsed && !isMobile && (
-          <div className="p-3 border-b border-sidebar-border">
-            <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Building className="h-4 w-4 text-primary" />
-            </div>
-          </div>
+    <TooltipProvider delayDuration={300}>
+      <Sidebar
+        className={cn(
+          "border-r border-sidebar-border bg-gradient-to-b from-sidebar-background to-sidebar-background/95",
+          isMobile ? "w-full" : collapsed ? "w-20" : "w-64"
         )}
-        
-        <SidebarGroup className="flex-1 mt-6">
-          <SidebarGroupLabel>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                {agencySettings?.logo_url ? (
+        collapsible={isMobile ? "offcanvas" : "icon"}
+        variant={isMobile ? "floating" : "sidebar"}
+        side="left"
+      >
+        <SidebarContent className="flex flex-col overflow-hidden">
+          {/* Professional Header with Branding */}
+          <SidebarHeader className={cn(
+            "border-b border-sidebar-border bg-gradient-to-br from-primary/8 via-primary/5 to-transparent flex-shrink-0",
+            collapsed && !isMobile ? "p-2 flex justify-center" : "p-3 sm:p-4"
+          )}>
+            <div className={cn(
+              "flex items-center min-w-0",
+              collapsed && !isMobile ? "justify-center w-full" : "gap-2 sm:gap-3"
+            )}>
+              {agencySettings?.logo_url ? (
+                <div className="relative flex-shrink-0">
                   <img
                     src={agencySettings.logo_url}
                     alt={agencySettings.agency_name || 'Agency Logo'}
-                    className="h-8 w-8 rounded-lg object-contain bg-primary/5"
+                    className={cn(
+                      "rounded-xl object-contain bg-white/50 backdrop-blur-sm border border-primary/10 shadow-lg",
+                      collapsed && !isMobile ? "h-10 w-10" : "h-10 w-10 sm:h-12 sm:w-12"
+                    )}
                   />
-                ) : (
-                  <div className="h-8 w-8 bg-primary/10 rounded-lg flex items-center justify-center">
-                    <Building className="h-4 w-4 text-primary" />
-                  </div>
-                )}
-                {(!collapsed || isMobile) && (
-                  <span className="text-xl font-bold">
+                  <div className="absolute -inset-0.5 bg-gradient-to-br from-primary/20 to-transparent rounded-xl blur-sm -z-10" />
+                </div>
+              ) : (
+                <div className={cn(
+                  "bg-gradient-to-br from-primary to-primary/70 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 flex-shrink-0",
+                  collapsed && !isMobile ? "h-10 w-10" : "h-10 w-10 sm:h-12 sm:w-12"
+                )}>
+                  <Building className={cn(
+                    "text-white",
+                    collapsed && !isMobile ? "h-5 w-5" : "h-5 w-5 sm:h-6 sm:w-6"
+                  )} />
+                </div>
+              )}
+              {(!collapsed || isMobile) && (
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-sm sm:text-base font-bold text-foreground truncate">
                     {agencySettings?.agency_name || 'BuildFlow'}
                   </span>
-                )}
-              </div>
-            </div>
-          </SidebarGroupLabel>
-          
-          <SidebarGroupContent className="mt-8">
-            <SidebarMenu>
-              {/* Setup Progress Link - Show only if setup is incomplete */}
-              {setupComplete === false && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink 
-                      to="/agency-setup-progress" 
-                      className={({ isActive }) => getNavCls({ isActive })}
-                    >
-                      <TrendingUp className="h-4 w-4" />
-                      {(!collapsed || isMobile) && <span>Setup Progress</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                  <span className="text-[10px] sm:text-xs text-muted-foreground font-medium truncate">
+                    Enterprise ERP
+                  </span>
+                </div>
               )}
-              {mainPages.map((page) => {
-                const IconComponent = iconMap[page.icon] || User;
-                return (
-                  <SidebarMenuItem key={page.path}>
-                    <SidebarMenuButton asChild>
-                      <NavLink 
-                        to={page.path} 
-                        end={page.path === '/'}
-                        className={({ isActive }) => getNavCls({ isActive })}
-                      >
-                        <IconComponent className="h-4 w-4" />
-                        {(!collapsed || isMobile) && <span>{page.title}</span>}
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        
-        {/* Settings at bottom */}
-        {settingsPage && (
-          <SidebarGroup className="mt-auto">
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild>
-                    <NavLink 
-                      to={settingsPage.path} 
-                      className={({ isActive }) => getNavCls({ isActive })}
-                    >
-                      <Settings className="h-4 w-4" />
-                      {(!collapsed || isMobile) && <span>{settingsPage.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-      </SidebarContent>
-    </Sidebar>
+            </div>
+          </SidebarHeader>
+          
+          {/* Main Navigation - Scrollable */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden py-3 sm:py-4" data-sidebar="content">
+            {/* Setup Progress - Special Highlight */}
+            {setupComplete === false && (
+              <div className={cn(
+                "mb-3 sm:mb-4",
+                collapsed && !isMobile ? "px-0 flex justify-center" : "px-2 sm:px-3"
+              )}>
+                <NavLink 
+                  to="/agency-setup-progress" 
+                  className={({ isActive }) => cn(
+                    "flex items-center rounded-lg",
+                    collapsed && !isMobile 
+                      ? "justify-center px-0 py-2 w-full" 
+                      : "gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5",
+                    "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20",
+                    "hover:from-amber-500/15 hover:to-orange-500/15",
+                    isActive && "ring-2 ring-amber-500/30"
+                  )}
+                >
+                  <div className="relative flex-shrink-0">
+                    <TrendingUp className={cn(
+                      "text-amber-600",
+                      collapsed && !isMobile ? "h-5 w-5" : "h-3.5 w-3.5 sm:h-4 sm:w-4"
+                    )} />
+                    {!collapsed || isMobile ? (
+                      <div className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 sm:h-2 sm:w-2 bg-amber-500 rounded-full" />
+                    ) : null}
+                  </div>
+                  {(!collapsed || isMobile) && (
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs sm:text-sm font-semibold text-foreground truncate">Setup Progress</div>
+                      <div className="text-[10px] sm:text-xs text-muted-foreground truncate">Complete your setup</div>
+                    </div>
+                  )}
+                </NavLink>
+              </div>
+            )}
+
+            {/* Category-based Navigation Groups */}
+            {Object.entries(pagesByCategory).map(([category, pages]) => {
+              const config = categoryConfig[category];
+              if (!config || pages.length === 0) return null;
+
+              return (
+                <SidebarGroup key={category} className={cn(
+                  collapsed && !isMobile ? "px-0" : "px-1 sm:px-2"
+                )}>
+                  {/* Only show category label when expanded */}
+                  {(!collapsed || isMobile) && (
+                    <SidebarGroupLabel className="px-2 sm:px-3 py-1.5 sm:py-2 mb-1">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <CategoryIcon category={category} />
+                        <span className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate">
+                          {config.label}
+                        </span>
+                      </div>
+                    </SidebarGroupLabel>
+                  )}
+                  <SidebarGroupContent className={cn(
+                    collapsed && !isMobile && "flex items-center justify-center"
+                  )}>
+                    <SidebarMenu className={cn(
+                      "space-y-0.5",
+                      collapsed && !isMobile && "space-y-1 w-full"
+                    )}>
+                      {pages.map((page) => {
+                        const IconComponent = iconMap[page.icon] || User;
+                        const active = isActive(page.path);
+                        
+                        return (
+                          <Tooltip key={page.path} delayDuration={300}>
+                            <TooltipTrigger asChild>
+                              <SidebarMenuItem className={cn(
+                                collapsed && !isMobile && "flex justify-center"
+                              )}>
+                                <SidebarMenuButton asChild className={cn(
+                                  collapsed && !isMobile ? "w-auto justify-center" : "w-full"
+                                )}>
+                                  <NavLink 
+                                    to={page.path} 
+                                    end={page.path === '/'}
+                                    className={({ isActive }) => getNavCls({ isActive: active || isActive })}
+                                  >
+                                    <div className={cn(
+                                      "flex items-center min-w-0",
+                                      collapsed && !isMobile 
+                                        ? "justify-center px-0 py-2.5 w-full" 
+                                        : "w-full gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5",
+                                      active && !collapsed && "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 sm:before:w-1 before:bg-primary before:rounded-r-full"
+                                    )}>
+                                      <IconComponent className={cn(
+                                        "flex-shrink-0",
+                                        collapsed && !isMobile 
+                                          ? "h-5 w-5" 
+                                          : "h-3.5 w-3.5 sm:h-4 sm:w-4"
+                                      )} />
+                                      {(!collapsed || isMobile) && (
+                                        <span className="text-xs sm:text-sm font-medium flex-1 text-left truncate min-w-0">
+                                          {page.title}
+                                        </span>
+                                      )}
+                                      {active && (!collapsed || isMobile) && (
+                                        <div className="h-1 w-1 sm:h-1.5 sm:w-1.5 rounded-full bg-primary flex-shrink-0" />
+                                      )}
+                                    </div>
+                                  </NavLink>
+                                </SidebarMenuButton>
+                              </SidebarMenuItem>
+                            </TooltipTrigger>
+                            {collapsed && !isMobile && (
+                              <TooltipContent side="right" className="ml-2">
+                                <p className="font-medium">{page.title}</p>
+                                {config && (
+                                  <p className="text-xs text-muted-foreground mt-0.5">{config.label}</p>
+                                )}
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        );
+                      })}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              );
+            })}
+          </div>
+          
+          {/* Settings Footer */}
+          {settingsPage && (
+            <>
+              <SidebarSeparator className={cn(
+                collapsed && !isMobile ? "mx-2" : "mx-2 sm:mx-4"
+              )} />
+              <SidebarFooter className={cn(
+                "flex-shrink-0",
+                collapsed && !isMobile ? "p-2 flex justify-center" : "p-2"
+              )}>
+                <SidebarGroup className={cn(
+                  collapsed && !isMobile && "w-full"
+                )}>
+                  <SidebarGroupContent className={cn(
+                    collapsed && !isMobile && "flex justify-center"
+                  )}>
+                    <SidebarMenu className={cn(
+                      collapsed && !isMobile && "w-full"
+                    )}>
+                      <Tooltip delayDuration={300}>
+                        <TooltipTrigger asChild>
+                          <SidebarMenuItem className={cn(
+                            collapsed && !isMobile && "flex justify-center"
+                          )}>
+                            <SidebarMenuButton asChild className={cn(
+                              collapsed && !isMobile ? "w-auto justify-center" : "w-full"
+                            )}>
+                              <NavLink 
+                                to={settingsPage.path} 
+                                className={({ isActive }) => getNavCls({ isActive })}
+                              >
+                                <div className={cn(
+                                  "flex items-center",
+                                  collapsed && !isMobile 
+                                    ? "justify-center px-0 py-2.5 w-full" 
+                                    : "w-full gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5"
+                                )}>
+                                  <Settings className={cn(
+                                    "flex-shrink-0",
+                                    collapsed && !isMobile 
+                                      ? "h-5 w-5" 
+                                      : "h-3.5 w-3.5 sm:h-4 sm:w-4"
+                                  )} />
+                                  {(!collapsed || isMobile) && (
+                                    <span className="text-xs sm:text-sm font-medium flex-1 text-left truncate">
+                                      {settingsPage.title}
+                                    </span>
+                                  )}
+                                </div>
+                              </NavLink>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        </TooltipTrigger>
+                        {collapsed && !isMobile && (
+                          <TooltipContent side="right" className="ml-2">
+                            <p className="font-medium">{settingsPage.title}</p>
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </SidebarFooter>
+            </>
+          )}
+
+          {/* User Info Footer (when expanded) */}
+          {(!collapsed || isMobile) && profile && (
+            <>
+              <SidebarSeparator className="mx-2 sm:mx-4" />
+              <SidebarFooter className="p-2 sm:p-3 border-t border-sidebar-border bg-muted/30 flex-shrink-0">
+                <div className="flex items-center gap-2 sm:gap-3 px-1 sm:px-2 min-w-0">
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-white text-[10px] sm:text-xs font-bold shadow-md flex-shrink-0">
+                    {(profile.full_name || 'U')
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .toUpperCase()
+                      .slice(0, 2)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] sm:text-xs font-semibold text-foreground truncate">
+                      {profile.full_name || 'User'}
+                    </div>
+                    <div className="text-[9px] sm:text-[10px] text-muted-foreground truncate">
+                      {profile.position || userRole || 'Member'}
+                    </div>
+                  </div>
+                </div>
+              </SidebarFooter>
+            </>
+          )}
+        </SidebarContent>
+      </Sidebar>
+    </TooltipProvider>
   );
 }

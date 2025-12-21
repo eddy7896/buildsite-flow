@@ -66,18 +66,18 @@ DO $$
 DECLARE
   missing_columns TEXT[];
 BEGIN
-  SELECT array_agg(column_name)
+  SELECT array_agg(required.column_name)
   INTO missing_columns
   FROM (
+    SELECT unnest(ARRAY['two_factor_secret', 'two_factor_enabled', 'recovery_codes', 'two_factor_verified_at']) AS column_name
+  ) AS required
+  LEFT JOIN (
     SELECT column_name
     FROM information_schema.columns
     WHERE table_schema = 'public'
     AND table_name = 'users'
     AND column_name IN ('two_factor_secret', 'two_factor_enabled', 'recovery_codes', 'two_factor_verified_at')
-  ) AS existing
-  RIGHT JOIN (
-    SELECT unnest(ARRAY['two_factor_secret', 'two_factor_enabled', 'recovery_codes', 'two_factor_verified_at']) AS column_name
-  ) AS required ON existing.column_name = required.column_name
+  ) AS existing ON existing.column_name = required.column_name
   WHERE existing.column_name IS NULL;
 
   IF missing_columns IS NOT NULL AND array_length(missing_columns, 1) > 0 THEN

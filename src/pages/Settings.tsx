@@ -18,8 +18,22 @@ import { compressImage } from "@/utils/imageCompression";
 import { 
   Save, Bell, Shield, User, Building, Upload, X, DollarSign, 
   Palette, Globe, Calendar, Clock, Lock, Eye, EyeOff, Mail, 
-  Smartphone, CheckCircle, AlertCircle, Loader2
+  Smartphone, CheckCircle, AlertCircle, Loader2, KeyRound, QrCode
 } from "lucide-react";
+import { TwoFactorSetup } from "@/components/TwoFactorSetup";
+import { getTwoFactorStatus, disableTwoFactor } from "@/services/api/twoFactor-service";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Type definitions for all settings
 interface AgencySettings {
@@ -132,7 +146,15 @@ const Settings = () => {
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [loadingSecurity, setLoadingSecurity] = useState(false);
+  const [loading2FA, setLoading2FA] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  
+  // 2FA states
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [twoFactorVerifiedAt, setTwoFactorVerifiedAt] = useState<string | null>(null);
+  const [show2FASetup, setShow2FASetup] = useState(false);
+  const [disable2FAPassword, setDisable2FAPassword] = useState('');
+  const [showDisableDialog, setShowDisableDialog] = useState(false);
   
   // File states
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -199,12 +221,30 @@ const Settings = () => {
       await Promise.all([
         fetchProfileSettings(),
         fetchNotificationSettings(),
+        fetch2FAStatus(),
       ]);
       setInitialLoading(false);
     };
     
     fetchAllSettings();
   }, [user?.id]);
+  
+  // Fetch 2FA status
+  const fetch2FAStatus = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await getTwoFactorStatus();
+      if (response.success) {
+        setTwoFactorEnabled(response.data.enabled);
+        setTwoFactorVerifiedAt(response.data.verifiedAt);
+      }
+    } catch (error) {
+      console.error('Error fetching 2FA status:', error);
+      // If 2FA is not set up, status will be false
+      setTwoFactorEnabled(false);
+    }
+  };
 
   // Update agency settings when hook data changes
   useEffect(() => {
@@ -697,6 +737,40 @@ const Settings = () => {
       });
     } finally {
       setLoadingSecurity(false);
+    }
+  };
+
+  // Handle disable 2FA
+  const handleDisable2FA = async () => {
+    if (!disable2FAPassword) {
+      toast({
+        title: "Error",
+        description: "Please enter your password",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading2FA(true);
+    try {
+      await disableTwoFactor(disable2FAPassword);
+      setTwoFactorEnabled(false);
+      setTwoFactorVerifiedAt(null);
+      setDisable2FAPassword('');
+      setShowDisableDialog(false);
+      
+      toast({
+        title: "Success",
+        description: "Two-factor authentication has been disabled",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to disable 2FA",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading2FA(false);
     }
   };
 
@@ -1468,26 +1542,158 @@ const Settings = () => {
             </CardContent>
           </Card>
 
+          {/* Two-Factor Authentication */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="h-5 w-5" />
+                Two-Factor Authentication
+              </CardTitle>
+              <CardDescription>
+                Add an extra layer of security to your account with 2FA
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {!show2FASetup ? (
+                <>
+                  {/* 2FA Status */}
+                  <div className="flex items-center justify-between p-4 rounded-lg border">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">Status</p>
+                        {twoFactorEnabled ? (
+                          <span className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400">
+                            <CheckCircle className="h-4 w-4" />
+                            Enabled
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <AlertCircle className="h-4 w-4" />
+                            Disabled
+                          </span>
+                        )}
+                      </div>
+                      {twoFactorEnabled && twoFactorVerifiedAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Last verified: {new Date(twoFactorVerifiedAt).toLocaleDateString()}
+                        </p>
+                      )}
+                      <p className="text-sm text-muted-foreground">
+                        {twoFactorEnabled
+                          ? 'Your account is protected with two-factor authentication'
+                          : 'Enable 2FA to add an extra layer of security to your account'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 2FA Actions */}
+                  <div className="flex gap-2">
+                    {!twoFactorEnabled ? (
+                      <Button
+                        onClick={() => setShow2FASetup(true)}
+                        className="flex items-center gap-2"
+                      >
+                        <QrCode className="h-4 w-4" />
+                        Enable Two-Factor Authentication
+                      </Button>
+                    ) : (
+                      <AlertDialog open={showDisableDialog} onOpenChange={setShowDisableDialog}>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" className="flex items-center gap-2">
+                            <X className="h-4 w-4" />
+                            Disable 2FA
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Disable Two-Factor Authentication?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will remove the extra security layer from your account. 
+                              You'll need to enter your password to confirm.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <div className="space-y-4 py-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="disable2FAPassword">Enter your password</Label>
+                              <Input
+                                id="disable2FAPassword"
+                                type="password"
+                                value={disable2FAPassword}
+                                onChange={(e) => setDisable2FAPassword(e.target.value)}
+                                placeholder="Enter your password to confirm"
+                              />
+                            </div>
+                          </div>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setDisable2FAPassword('')}>
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleDisable2FA}
+                              disabled={!disable2FAPassword || loading2FA}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {loading2FA ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Disabling...
+                                </>
+                              ) : (
+                                'Disable 2FA'
+                              )}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </div>
+
+                  {/* 2FA Info */}
+                  <Alert>
+                    <Shield className="h-4 w-4" />
+                    <AlertDescription>
+                      <strong>How 2FA works:</strong> When enabled, you'll need to enter a 6-digit code 
+                      from your authenticator app (like Google Authenticator or Authy) each time you sign in. 
+                      You'll also receive recovery codes that you can use if you lose access to your device.
+                    </AlertDescription>
+                  </Alert>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">Set Up Two-Factor Authentication</h3>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setShow2FASetup(false);
+                        fetch2FAStatus();
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  <TwoFactorSetup 
+                    onComplete={() => {
+                      setShow2FASetup(false);
+                      fetch2FAStatus();
+                    }}
+                  />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Additional Security Info */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
-                Account Security
+                Additional Security
               </CardTitle>
-              <CardDescription>Additional security information for your account</CardDescription>
+              <CardDescription>Additional security features for your account</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg border">
-                <div className="space-y-0.5">
-                  <p className="font-medium">Two-Factor Authentication</p>
-                  <p className="text-sm text-muted-foreground">Add an extra layer of security to your account</p>
-                </div>
-                <Button variant="outline" disabled>
-                  Coming Soon
-                </Button>
-              </div>
-
               <div className="flex items-center justify-between p-4 rounded-lg border">
                 <div className="space-y-0.5">
                   <p className="font-medium">Active Sessions</p>

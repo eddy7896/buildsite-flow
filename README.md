@@ -4,15 +4,92 @@ A comprehensive multi-tenant SaaS ERP platform for construction and agency manag
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option 1: Docker (Recommended) 🐳
+
+**Prerequisites:**
+- Docker Desktop (Windows/Mac) or Docker Engine (Linux)
+- Docker Compose
+
+**Start with Docker:**
+
+```bash
+# Development mode (with hot reload)
+docker compose -f docker-compose.dev.yml up -d
+
+# Or use PowerShell script (Windows)
+.\scripts\docker-start.ps1 dev
+
+# Production mode (see Production Deployment section below)
+docker compose -f docker-compose.prod.yml up -d
+```
+
+**Access the application:**
+- **Development**: Frontend at http://localhost:5173, Backend at http://localhost:3000/api
+- **Production**: Frontend at http://localhost:8080, Backend at http://localhost:3000/api
+
+**View logs:**
+```bash
+docker compose logs -f
+```
+
+## 🏭 Production Deployment
+
+### Multi-Tenant Database Architecture
+
+This system uses **isolated databases per agency** for complete data isolation:
+
+- **Main Database** (`buildflow_db`): Stores agency metadata and configuration
+- **Agency Databases** (`agency_*`): One isolated database per agency with complete schema
+
+### Quick Production Setup
+
+```bash
+# 1. Copy and configure environment
+cp .env.production.example .env.production
+# Edit .env.production with your values
+
+# 2. Deploy to production
+./scripts/production-deploy.sh
+
+# Or manually:
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Production Features
+
+✅ **Complete Database Isolation** - Each agency has its own isolated database  
+✅ **Automated Backups** - Scheduled backups for all databases  
+✅ **Health Monitoring** - Built-in health checks for all services  
+✅ **Security Hardened** - Non-root containers, secure defaults  
+✅ **Resource Limits** - CPU and memory limits configured  
+✅ **Multi-Tenant Ready** - Automatic agency database creation and management  
+
+📚 **For detailed production deployment guide, see [docs/PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md)**
+
+**Stop services:**
+```bash
+docker compose down
+```
+
+📚 **For detailed Docker setup, see [Docker Setup Guide](docs/DOCKER_SETUP.md)**
+
+---
+
+### Option 2: Local Development
+
+**Prerequisites:**
 - Node.js 18+ 
 - npm or bun
+- PostgreSQL 15+ (running locally)
+- Redis (optional, for caching)
 
-### Installation
+**Installation:**
 
 ```bash
 # Install dependencies
 npm install
+cd server && npm install && cd ..
 
 # Start development server
 npm run dev

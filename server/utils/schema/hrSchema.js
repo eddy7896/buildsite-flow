@@ -312,22 +312,138 @@ async function ensureLeaveTypesTable(client) {
  * Ensure leave_requests table exists
  */
 async function ensureLeaveRequestsTable(client) {
+  try {
+    // Check if table already exists first
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'leave_requests'
+      )
+    `);
+    
+    if (tableCheck.rows[0].exists) {
+      return; // Table already exists
+    }
+    
+    // Use DO block to handle all errors including type conflicts
+    await client.query(`
+      DO $$ 
+      BEGIN
+        CREATE TABLE IF NOT EXISTS public.leave_requests (
+          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+          user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+          employee_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+          leave_type_id UUID REFERENCES public.leave_types(id),
+          start_date DATE NOT NULL,
+          end_date DATE NOT NULL,
+          days_requested NUMERIC(5, 2) NOT NULL,
+          reason TEXT,
+          status TEXT DEFAULT 'pending',
+          approved_by UUID REFERENCES public.users(id),
+          approved_at TIMESTAMP WITH TIME ZONE,
+          rejection_reason TEXT,
+          agency_id UUID,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      EXCEPTION
+        WHEN duplicate_table THEN
+          -- Table already exists, that's fine
+          NULL;
+        WHEN OTHERS THEN
+          -- If table exists now, that's fine
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'leave_requests'
+          ) THEN
+            -- If it's a type conflict, wait and check again
+            IF SQLSTATE = '23505' AND SQLERRM LIKE '%pg_type_typname_nsp_index%' THEN
+              PERFORM pg_sleep(1.0);
+              IF EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = 'leave_requests'
+              ) THEN
+                RETURN;
+              END IF;
+            END IF;
+            RAISE;
+          END IF;
+      END $$;
+    `);
+  } catch (error) {
+    // If it's a duplicate key or type conflict, wait and check if table exists
+    if (error.code === '23505' || error.code === '42P07' || 
+        error.message.includes('duplicate key') || 
+        error.message.includes('already exists') ||
+        error.message.includes('pg_type_typname_nsp_index')) {
+      // Wait for concurrent creation to complete
+      for (let i = 0; i < 3; i++) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const tableCheck = await client.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'leave_requests'
+          )
+        `);
+        if (tableCheck.rows[0].exists) {
+          return; // Table exists now, that's fine
+        }
+      }
+      // If still doesn't exist after retries, it's a real error
+      if (error.message.includes('pg_type_typname_nsp_index')) {
+        // Type conflict - this might be a transient issue, log and continue
+        console.warn('[SQL] ⚠️ Type conflict during leave_requests table creation, but table may exist');
+        // Final check
+        const finalCheck = await client.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'leave_requests'
+          )
+        `);
+        if (finalCheck.rows[0].exists) {
+          return;
+        }
+      }
+    }
+    throw error;
+  }
+
+  // Add missing columns if they don't exist (for backward compatibility)
   await client.query(`
-    CREATE TABLE IF NOT EXISTS public.leave_requests (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-      leave_type_id UUID REFERENCES public.leave_types(id),
-      start_date DATE NOT NULL,
-      end_date DATE NOT NULL,
-      days_requested NUMERIC(5, 2) NOT NULL,
-      reason TEXT,
-      status TEXT DEFAULT 'pending',
-      approved_by UUID REFERENCES public.users(id),
-      approved_at TIMESTAMP WITH TIME ZONE,
-      rejection_reason TEXT,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    );
+    DO $$ 
+    BEGIN
+      -- Add employee_id column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'leave_requests' 
+        AND column_name = 'employee_id'
+      ) THEN
+        ALTER TABLE public.leave_requests ADD COLUMN employee_id UUID REFERENCES public.users(id) ON DELETE CASCADE;
+        -- Copy user_id to employee_id for existing records
+        UPDATE public.leave_requests SET employee_id = user_id WHERE employee_id IS NULL;
+        CREATE INDEX IF NOT EXISTS idx_leave_requests_employee_id ON public.leave_requests(employee_id);
+      END IF;
+
+      -- Add agency_id column if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'leave_requests' 
+        AND column_name = 'agency_id'
+      ) THEN
+        ALTER TABLE public.leave_requests ADD COLUMN agency_id UUID;
+        CREATE INDEX IF NOT EXISTS idx_leave_requests_agency_id ON public.leave_requests(agency_id);
+      END IF;
+
+      -- Add status index if it doesn't exist
+      CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON public.leave_requests(status);
+    END $$;
   `);
 }
 

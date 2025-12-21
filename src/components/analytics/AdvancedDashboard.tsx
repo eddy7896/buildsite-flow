@@ -13,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/database';
 import { toast } from 'sonner';
 import { getAgencyId } from '@/utils/agencyUtils';
+import { selectRecords } from '@/services/api/postgresql-service';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart as RechartsPieChart, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 
 interface DashboardWidget {
@@ -210,14 +211,165 @@ export function AdvancedDashboard() {
     }
   };
 
+  const [widgetData, setWidgetData] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    if (widgets.length > 0 && agencyId) {
+      fetchWidgetData();
+    }
+  }, [widgets, agencyId]);
+
+  const fetchWidgetData = async () => {
+    try {
+      const dataMap: Record<string, any> = {};
+      
+      for (const widget of widgets) {
+        try {
+          let data: any[] = [];
+          
+          // Fetch data based on widget data_source
+          switch (widget.data_source) {
+            case 'invoices':
+              data = await selectRecords('invoices', {
+                where: { agency_id: agencyId },
+                orderBy: 'created_at DESC',
+                limit: 12
+              }).catch(() => []);
+              // Transform to chart data (monthly revenue)
+              const monthlyData = transformToMonthlyData(data, 'total_amount', 'created_at');
+              dataMap[widget.id] = monthlyData;
+              break;
+              
+            case 'projects':
+              data = await selectRecords('projects', {
+                where: { agency_id: agencyId },
+                orderBy: 'created_at DESC',
+                limit: 12
+              }).catch(() => []);
+              const projectMonthlyData = transformToMonthlyData(data, 'budget', 'created_at');
+              dataMap[widget.id] = projectMonthlyData;
+              break;
+              
+            case 'clients':
+              data = await selectRecords('clients', {
+                where: { agency_id: agencyId, status: 'active' },
+                orderBy: 'created_at DESC',
+                limit: 12
+              }).catch(() => []);
+              const clientMonthlyData = transformToMonthlyData(data, 'id', 'created_at', true); // count
+              dataMap[widget.id] = clientMonthlyData;
+              break;
+              
+            case 'tasks':
+              data = await selectRecords('tasks', {
+                where: { agency_id: agencyId },
+                orderBy: 'created_at DESC',
+                limit: 12
+              }).catch(() => []);
+              const taskMonthlyData = transformToMonthlyData(data, 'id', 'created_at', true); // count
+              dataMap[widget.id] = taskMonthlyData;
+              break;
+              
+            default:
+              // Default sample data if data_source not recognized
+              dataMap[widget.id] = [
+                { name: 'Jan', value: 0 },
+                { name: 'Feb', value: 0 },
+                { name: 'Mar', value: 0 },
+                { name: 'Apr', value: 0 },
+                { name: 'May', value: 0 }
+              ];
+          }
+        } catch (error: any) {
+          console.error(`Error fetching data for widget ${widget.id}:`, error);
+          // Set empty data on error
+          dataMap[widget.id] = [
+            { name: 'Jan', value: 0 },
+            { name: 'Feb', value: 0 },
+            { name: 'Mar', value: 0 },
+            { name: 'Apr', value: 0 },
+            { name: 'May', value: 0 }
+          ];
+        }
+      }
+      
+      setWidgetData(dataMap);
+    } catch (error) {
+      console.error('Error fetching widget data:', error);
+    }
+  };
+
+  const transformToMonthlyData = (data: any[], valueKey: string, dateKey: string, isCount = false) => {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const now = new Date();
+    const monthlyMap: Record<string, number> = {};
+    
+    // Initialize last 6 months
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthKey = monthNames[date.getMonth()];
+      monthlyMap[monthKey] = 0;
+    }
+    
+    // Aggregate data by month
+    (data || []).forEach((item: any) => {
+      if (!item[dateKey]) return;
+      const date = new Date(item[dateKey]);
+      const monthKey = monthNames[date.getMonth()];
+      if (monthlyMap.hasOwnProperty(monthKey)) {
+        if (isCount) {
+          monthlyMap[monthKey]++;
+        } else {
+          monthlyMap[monthKey] += Number(item[valueKey]) || 0;
+        }
+      }
+    });
+    
+    return Object.entries(monthlyMap).map(([name, value]) => ({ name, value: Math.round(value) }));
+  };
+
+  const getWidgetMetric = async (widget: DashboardWidget): Promise<number> => {
+    try {
+      switch (widget.data_source) {
+        case 'invoices':
+          const invoices = await selectRecords('invoices', {
+            where: { agency_id: agencyId },
+            limit: 1000
+          }).catch(() => []);
+          return (invoices || []).reduce((sum: number, inv: any) => 
+            sum + (Number(inv.total_amount) || 0), 0
+          );
+        case 'projects':
+          const projects = await selectRecords('projects', {
+            where: { agency_id: agencyId }
+          }).catch(() => []);
+          return (projects || []).length;
+        case 'clients':
+          const clients = await selectRecords('clients', {
+            where: { agency_id: agencyId, status: 'active' }
+          }).catch(() => []);
+          return (clients || []).length;
+        case 'tasks':
+          const tasks = await selectRecords('tasks', {
+            where: { agency_id: agencyId }
+          }).catch(() => []);
+          return (tasks || []).length;
+        default:
+          return 0;
+      }
+    } catch (error) {
+      console.error(`Error fetching metric for widget ${widget.id}:`, error);
+      return 0;
+    }
+  };
+
   const renderWidget = (widget: DashboardWidget) => {
-    // Mock data for demonstration
-    const sampleData = [
-      { name: 'Jan', value: 400 },
-      { name: 'Feb', value: 300 },
-      { name: 'Mar', value: 600 },
-      { name: 'Apr', value: 800 },
-      { name: 'May', value: 500 }
+    const chartData = widgetData[widget.id] || [
+      { name: 'Jan', value: 0 },
+      { name: 'Feb', value: 0 },
+      { name: 'Mar', value: 0 },
+      { name: 'Apr', value: 0 },
+      { name: 'May', value: 0 }
     ];
 
     return (
@@ -257,7 +409,7 @@ export function AdvancedDashboard() {
           <div className="h-[200px] w-full">
             {widget.widget_type === 'chart' && (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={sampleData}>
+                <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
                   <YAxis />
@@ -267,12 +419,7 @@ export function AdvancedDashboard() {
               </ResponsiveContainer>
             )}
             {widget.widget_type === 'metric' && (
-              <div className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-primary">1,234</div>
-                  <p className="text-sm text-muted-foreground">Total {widget.data_source}</p>
-                </div>
-              </div>
+              <WidgetMetricDisplay widget={widget} />
             )}
             {widget.widget_type === 'table' && (
               <div className="text-center text-muted-foreground">
@@ -289,6 +436,25 @@ export function AdvancedDashboard() {
           </div>
         </CardContent>
       </Card>
+    );
+  };
+
+  const WidgetMetricDisplay = ({ widget }: { widget: DashboardWidget }) => {
+    const [metric, setMetric] = useState<number | null>(null);
+    
+    useEffect(() => {
+      getWidgetMetric(widget).then(setMetric);
+    }, [widget.id, agencyId]);
+    
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="text-3xl font-bold text-primary">
+            {metric !== null ? metric.toLocaleString() : '...'}
+          </div>
+          <p className="text-sm text-muted-foreground">Total {widget.data_source}</p>
+        </div>
+      </div>
     );
   };
 

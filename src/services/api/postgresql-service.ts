@@ -43,7 +43,7 @@ function buildWhereClause(where: Record<string, any>, startIndex: number = 1): {
       params.push(...value);
     } else if (typeof value === 'object' && value.operator) {
       // Support operators like { operator: '>', value: 100 }
-      if (value.operator === 'in' && Array.isArray(value.value)) {
+      if (value.operator.toLowerCase() === 'in' && Array.isArray(value.value)) {
         // Handle IN operator with arrays
         const placeholders = value.value.map(() => `$${paramIndex++}`).join(',');
         conditions.push(`${key} IN (${placeholders})`);

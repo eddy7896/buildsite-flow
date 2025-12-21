@@ -10,21 +10,25 @@ import { selectOne } from '@/services/api/postgresql-service';
  * NOTE: In the new multi-database architecture, agency_id is not needed
  * as each agency has its own isolated database. This function returns a
  * placeholder value to maintain backward compatibility.
- * @param profile - User profile from useAuth hook
- * @param userId - User ID
+ * @param profile - User profile from useAuth hook (optional)
+ * @param userId - User ID (optional)
  * @returns agency_id (placeholder) or null if not available
  */
 export async function getAgencyId(
-  profile: { agency_id?: string | null } | null | undefined,
-  userId: string | null | undefined
+  profile?: { agency_id?: string | null } | null | undefined,
+  userId?: string | null | undefined
 ): Promise<string | null> {
-  // In new architecture, each agency has its own database
-  // So agency_id is not needed for data isolation
-  // Return a placeholder to maintain backward compatibility
-  
   // First try from profile (for backward compatibility)
   if (profile?.agency_id) {
     return profile.agency_id;
+  }
+
+  // Try from localStorage (set by frontend)
+  if (typeof window !== 'undefined') {
+    const storedAgencyId = window.localStorage.getItem('agency_id');
+    if (storedAgencyId && storedAgencyId !== '00000000-0000-0000-0000-000000000000') {
+      return storedAgencyId;
+    }
   }
 
   // If not in profile, try to fetch from database (for backward compatibility)
@@ -39,8 +43,49 @@ export async function getAgencyId(
     }
   }
 
-  // In new architecture, we don't need agency_id
-  // Return a placeholder value to prevent errors
+  // Try to get from agency_settings table (first record)
+  try {
+    const { selectOne } = await import('@/services/api/postgresql-service');
+    const agencySettings = await selectOne('agency_settings', {});
+    if (agencySettings?.agency_id) {
+      return agencySettings.agency_id;
+    }
+  } catch (error) {
+    // Ignore - table might not exist
+  }
+
+  // Try to get from profiles table (first user's agency_id)
+  try {
+    const { selectOne } = await import('@/services/api/postgresql-service');
+    const firstProfile = await selectOne('profiles', {});
+    if (firstProfile?.agency_id && firstProfile.agency_id !== '00000000-0000-0000-0000-000000000000') {
+      return firstProfile.agency_id;
+    }
+  } catch (error) {
+    // Ignore
+  }
+
+  // Try to get from agencies table by database name
+  if (typeof window !== 'undefined') {
+    const agencyDatabase = window.localStorage.getItem('agency_database');
+    if (agencyDatabase) {
+      try {
+        // Query main database for agency_id
+        const { queryMainDatabase } = await import('@/integrations/postgresql/client-http');
+        const result = await queryMainDatabase(`
+          SELECT id FROM public.agencies WHERE database_name = $1
+        `, [agencyDatabase]);
+        if (result.rows && result.rows.length > 0 && result.rows[0].id) {
+          return result.rows[0].id;
+        }
+      } catch (error) {
+        // Ignore
+      }
+    }
+  }
+
+  // Last resort: In new architecture, we don't need agency_id for isolation
+  // But GST tables require it, so return a consistent placeholder
   // The database isolation handles multi-tenancy
   return '00000000-0000-0000-0000-000000000000';
 }

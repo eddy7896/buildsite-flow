@@ -58,7 +58,55 @@ class HttpDatabaseClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Database API error: ${response.status} ${errorText}`);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText };
+        }
+
+        // Handle missing agency database - clear auth and redirect to login
+        // Only logout for database-level errors (3D000), NOT for column/table errors (42703, 42P01, 42P10)
+        const isDatabaseNotFound = errorData.code === 'AGENCY_DB_NOT_FOUND' || errorData.code === '3D000';
+        
+        // Schema errors (missing columns/tables) should NOT cause logout
+        const isSchemaError = errorData.code === '42703' || // column does not exist
+                             errorData.code === '42P01' || // relation does not exist
+                             errorData.code === '42P10' || // invalid ORDER BY in DISTINCT
+                             (errorData.message && (
+                               (errorData.message.includes('column') && errorData.message.includes('does not exist')) ||
+                               (errorData.message.includes('relation') && errorData.message.includes('does not exist')) ||
+                               errorData.message.includes('SELECT DISTINCT, ORDER BY expressions')
+                             )) ||
+                             (errorData.error && (
+                               (errorData.error.includes('column') && errorData.error.includes('does not exist')) ||
+                               (errorData.error.includes('relation') && errorData.error.includes('does not exist')) ||
+                               errorData.error.includes('SELECT DISTINCT, ORDER BY expressions')
+                             ));
+        
+        if (isDatabaseNotFound && !isSchemaError) {
+          console.warn('[HTTP DB] Agency database not found, clearing auth...');
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('agency_database');
+            localStorage.removeItem('user_id');
+            // Redirect to login after a short delay
+            setTimeout(() => {
+              window.location.href = '/login';
+            }, 1000);
+          }
+        } else if (isSchemaError) {
+          // Log schema errors but don't logout - these are expected during migrations
+          console.warn('[HTTP DB] Schema error (expected during migrations):', errorData.message || errorData.error);
+        }
+
+        const error = new Error(
+          errorData.message || errorData.error || `Database API error: ${response.status} ${errorText}`
+        );
+        (error as any).status = response.status;
+        (error as any).data = errorData;
+        (error as any).code = errorData.code;
+        throw error;
       }
 
       const result = await response.json();

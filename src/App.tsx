@@ -74,6 +74,10 @@ const HolidayManagement = React.lazy(() => import('./pages/HolidayManagement'));
 const CentralizedReports = React.lazy(() => import("./pages/CentralizedReports"));
 const Notifications = React.lazy(() => import("./pages/Notifications"));
 const EmployeePerformance = React.lazy(() => import("./pages/EmployeePerformance"));
+const SystemHealth = React.lazy(() => import("./pages/SystemHealth"));
+const InventoryManagement = React.lazy(() => import("./pages/InventoryManagement"));
+const ProcurementManagement = React.lazy(() => import("./pages/ProcurementManagement"));
+const EmailTesting = React.lazy(() => import("./pages/EmailTesting"));
 
 // Lazy load component modules
 const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
@@ -100,14 +104,14 @@ const queryClient = new QueryClient();
 
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
   <SidebarProvider defaultOpen={false}>
-    <div className="min-h-screen flex w-full">
+    <div className="min-h-screen flex w-full overflow-hidden">
       <AppSidebar />
-      <main className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 flex items-center border-b bg-card px-4 lg:px-6 sticky top-0 z-40">
-          <SidebarTrigger className="mr-2" />
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header className="min-h-14 sm:min-h-16 h-auto py-2 sm:py-3 flex items-center border-b bg-gradient-to-r from-card via-card to-card/95 px-3 sm:px-4 lg:px-6 sticky top-0 z-40 shadow-sm backdrop-blur-sm">
+          <SidebarTrigger className="mr-2 sm:mr-3 flex-shrink-0 h-8 w-8 sm:h-9 sm:w-9 rounded-lg hover:bg-muted/60 transition-colors" />
           <AgencyHeader />
         </header>
-        <div className="flex-1 p-4 lg:p-6 overflow-auto">
+        <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto">
           {children}
         </div>
       </main>
@@ -135,7 +139,7 @@ const AppContent = () => {
               <Route 
                 path="/agency-setup" 
                 element={
-                  <ProtectedRoute requiredRole="admin">
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><AgencySetup /></SuspenseRoute>
                     </DashboardLayout>
@@ -168,7 +172,7 @@ const AppContent = () => {
               <Route 
                 path="/employee-management" 
                 element={
-                  <ProtectedRoute requiredRole="admin">
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><EmployeeManagement /></SuspenseRoute>
                     </DashboardLayout>
@@ -248,7 +252,7 @@ const AppContent = () => {
               <Route 
                 path="/attendance" 
                 element={
-                  <ProtectedRoute requiredRole="hr">
+                  <ProtectedRoute requiredRole={["hr", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Attendance /></SuspenseRoute>
                     </DashboardLayout>
@@ -270,7 +274,7 @@ const AppContent = () => {
               <Route 
                 path="/payroll" 
                 element={
-                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
+                  <ProtectedRoute requiredRole={["admin", "super_admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Payroll /></SuspenseRoute>
                     </DashboardLayout>
@@ -281,7 +285,7 @@ const AppContent = () => {
               <Route 
                 path="/invoices" 
                 element={
-                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
+                  <ProtectedRoute requiredRole={["admin", "super_admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Invoices /></SuspenseRoute>
                     </DashboardLayout>
@@ -303,7 +307,7 @@ const AppContent = () => {
               <Route 
                 path="/receipts" 
                 element={
-                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
+                  <ProtectedRoute requiredRole={["admin", "super_admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Receipts /></SuspenseRoute>
                     </DashboardLayout>
@@ -347,7 +351,7 @@ const AppContent = () => {
               <Route 
                 path="/ledger" 
                 element={
-                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
+                  <ProtectedRoute requiredRole={["admin", "super_admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Ledger /></SuspenseRoute>
                     </DashboardLayout>
@@ -402,7 +406,7 @@ const AppContent = () => {
               <Route 
                 path="/reports" 
                 element={
-                  <ProtectedRoute requiredRole="admin">
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><Reports /></SuspenseRoute>
                     </DashboardLayout>
@@ -446,7 +450,7 @@ const AppContent = () => {
               <Route 
                 path="/create-employee" 
                 element={
-                  <ProtectedRoute requiredRole="admin">
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><CreateEmployee /></SuspenseRoute>
                     </DashboardLayout>
@@ -457,7 +461,7 @@ const AppContent = () => {
               <Route 
                 path="/assign-user-roles" 
                 element={
-                  <ProtectedRoute requiredRole="admin">
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><AssignUserRoles /></SuspenseRoute>
                     </DashboardLayout>
@@ -474,6 +478,28 @@ const AppContent = () => {
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 
+              />
+              
+              <Route 
+                path="/inventory"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><InventoryManagement /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/procurement"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProcurementManagement /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
               />
               
               <Route 
@@ -512,7 +538,7 @@ const AppContent = () => {
               <Route 
                 path="/crm" 
                 element={
-                  <ProtectedRoute requiredRole="hr">
+                  <ProtectedRoute requiredRole={["hr", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><CRM /></SuspenseRoute>
                     </DashboardLayout>
@@ -534,7 +560,7 @@ const AppContent = () => {
               <Route 
                 path="/crm/activities/:activityId" 
                 element={
-                  <ProtectedRoute requiredRole="hr">
+                  <ProtectedRoute requiredRole={["hr", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><ActivityDetail /></SuspenseRoute>
                     </DashboardLayout>
@@ -556,7 +582,7 @@ const AppContent = () => {
               <Route 
                 path="/financial-management" 
                 element={
-                  <ProtectedRoute requiredRole={["admin", "finance_manager", "ceo", "cfo"]}>
+                  <ProtectedRoute requiredRole={["admin", "super_admin", "finance_manager", "ceo", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><FinancialManagement /></SuspenseRoute>
                     </DashboardLayout>
@@ -567,7 +593,7 @@ const AppContent = () => {
               <Route 
                 path="/gst-compliance" 
                 element={
-                  <ProtectedRoute requiredRole={["admin", "finance_manager", "cfo"]}>
+                  <ProtectedRoute requiredRole={["admin", "super_admin", "finance_manager", "cfo"]}>
                     <DashboardLayout>
                       <SuspenseRoute><GstCompliance /></SuspenseRoute>
                     </DashboardLayout>
@@ -600,7 +626,7 @@ const AppContent = () => {
               <Route 
                 path="/holiday-management" 
                 element={
-                  <ProtectedRoute requiredRole="hr">
+                  <ProtectedRoute requiredRole={["hr", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><HolidayManagement /></SuspenseRoute>
                     </DashboardLayout>
@@ -622,7 +648,7 @@ const AppContent = () => {
               <Route
                 path="/agency" 
                 element={
-                  <ProtectedRoute requiredRole="admin">
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><AgencyDashboard /></SuspenseRoute>
                     </DashboardLayout>
@@ -636,6 +662,17 @@ const AppContent = () => {
                   <ProtectedRoute requiredRole="super_admin">
                     <DashboardLayout>
                       <SuspenseRoute><SuperAdminDashboard /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/system-health"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><SystemHealth /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 }
@@ -677,7 +714,7 @@ const AppContent = () => {
               <Route 
                 path="/advanced-dashboard" 
                 element={
-                  <ProtectedRoute requiredRole="admin">
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><AdvancedDashboard /></SuspenseRoute>
                     </DashboardLayout>
@@ -724,6 +761,17 @@ const AppContent = () => {
                   <ProtectedRoute>
                     <DashboardLayout>
                       <SuspenseRoute><EmployeePerformance /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/email-testing" 
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><EmailTesting /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 

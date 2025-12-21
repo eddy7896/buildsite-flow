@@ -94,15 +94,50 @@ export const ReimbursementWorkflow: React.FC<ReimbursementWorkflowProps> = ({
   });
 
   const fetchRequest = async () => {
-    const { data, error } = await db
-      .from('reimbursement_requests')
-      .select(`
-        *,
-        employee:profiles!reimbursement_requests_employee_id_fkey(full_name, department),
-        category:expense_categories(name)
-      `)
-      .eq('id', requestId)
-      .single();
+    // Try with employee_id foreign key first, fall back to user_id if it doesn't exist
+    let data, error;
+    
+    try {
+      const result = await db
+        .from('reimbursement_requests')
+        .select(`
+          *,
+          employee:profiles!reimbursement_requests_employee_id_fkey(full_name, department),
+          category:expense_categories(name)
+        `)
+        .eq('id', requestId)
+        .single();
+      data = result.data;
+      error = result.error;
+    } catch (err: any) {
+      // If employee_id foreign key doesn't exist, try with user_id
+      if (err?.message?.includes('employee_id') || err?.code === '42703') {
+        const result = await db
+          .from('reimbursement_requests')
+          .select(`
+            *,
+            employee:profiles!reimbursement_requests_user_id_fkey(full_name, department),
+            category:expense_categories(name)
+          `)
+          .eq('id', requestId)
+          .single();
+        data = result.data;
+        error = result.error;
+      } else {
+        throw err;
+      }
+    }
+    
+    // If still error, try without foreign key joins
+    if (error) {
+      const result = await db
+        .from('reimbursement_requests')
+        .select('*')
+        .eq('id', requestId)
+        .single();
+      data = result.data;
+      error = result.error;
+    }
 
     if (error) throw error;
     setRequest(data as unknown as ReimbursementRequest);

@@ -203,6 +203,42 @@ async function repairMissingColumn(agencyDatabase, tableName, columnName) {
         ON public.journal_entry_lines(journal_entry_id, line_number)
       `);
       console.log(`[API] ✅ Added ${columnName} column to ${tableName} table and backfilled values`);
+    } else if (tableName === 'reimbursement_requests' && (columnName === 'agency_id' || columnName === 'employee_id')) {
+      // Handle reimbursement_requests missing columns
+      if (columnName === 'agency_id') {
+        await agencyClient.query('ALTER TABLE public.reimbursement_requests ADD COLUMN IF NOT EXISTS agency_id UUID');
+        await agencyClient.query('CREATE INDEX IF NOT EXISTS idx_reimbursement_requests_agency_id ON public.reimbursement_requests(agency_id)');
+        console.log(`[API] ✅ Added ${columnName} column to ${tableName} table`);
+      } else if (columnName === 'employee_id') {
+        await agencyClient.query('ALTER TABLE public.reimbursement_requests ADD COLUMN IF NOT EXISTS employee_id UUID REFERENCES public.users(id)');
+        // Populate employee_id from user_id for existing records
+        await agencyClient.query('UPDATE public.reimbursement_requests SET employee_id = user_id WHERE employee_id IS NULL AND user_id IS NOT NULL');
+        await agencyClient.query('CREATE INDEX IF NOT EXISTS idx_reimbursement_requests_employee_id ON public.reimbursement_requests(employee_id)');
+        console.log(`[API] ✅ Added ${columnName} column to ${tableName} table and backfilled values`);
+      }
+    } else if (tableName === 'expense_categories' && columnName === 'agency_id') {
+      // Handle expense_categories missing agency_id
+      await agencyClient.query('ALTER TABLE public.expense_categories ADD COLUMN IF NOT EXISTS agency_id UUID');
+      // Drop old unique constraint on name if it exists
+      await agencyClient.query(`
+        DO $$ 
+        BEGIN
+          IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'expense_categories_name_key') THEN
+            ALTER TABLE public.expense_categories DROP CONSTRAINT expense_categories_name_key;
+          END IF;
+        END $$;
+      `);
+      // Create new unique constraint on (agency_id, name)
+      await agencyClient.query(`
+        DO $$ 
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'expense_categories_agency_id_name_key') THEN
+            ALTER TABLE public.expense_categories ADD CONSTRAINT expense_categories_agency_id_name_key UNIQUE(agency_id, name);
+          END IF;
+        END $$;
+      `);
+      await agencyClient.query('CREATE INDEX IF NOT EXISTS idx_expense_categories_agency_id ON public.expense_categories(agency_id)');
+      console.log(`[API] ✅ Added ${columnName} column to ${tableName} table and updated constraints`);
     } else if (tableName === 'departments') {
       console.log(`[API] 🔧 Adding ${columnName} to departments table...`);
       try {

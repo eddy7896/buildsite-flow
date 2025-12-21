@@ -90,6 +90,7 @@ const Payments = () => {
         SELECT DISTINCT
           je.id as journal_entry_id,
           je.entry_date as payment_date,
+          je.created_at,
           je.reference,
           je.description,
           je.entry_number,
@@ -156,7 +157,7 @@ const Payments = () => {
       const pendingInvoices = await selectRecords('invoices', {
         where: {
           agency_id: effectiveAgencyId,
-          status: { operator: 'IN', value: ['sent', 'overdue', 'partial'] }
+          status: { operator: 'in', value: ['sent', 'overdue', 'partial'] }
         },
       });
 

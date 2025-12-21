@@ -1,0 +1,61 @@
+# Optimized Development Dockerfile for Backend (with nodemon for hot reload)
+# Improvements: npm ci for reproducibility, build cache mounts, retry logic, better error handling
+
+# Use build argument for Node version with fallback
+ARG NODE_VERSION=20-alpine
+FROM node:${NODE_VERSION}
+
+# Set build arguments for better control
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG BUILDKIT_INLINE_CACHE=1
+
+# Configure npm with retry settings and registry
+RUN npm config set registry ${NPM_REGISTRY} && \
+    npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set fetch-timeout 300000
+
+WORKDIR /app
+
+# Copy package files first for better layer caching
+COPY package.json package-lock.json* ./
+
+# Install dependencies with cache mount and retry logic
+# Using sh -c to allow retry logic
+# Ensure devDependencies are installed (nodemon is needed for dev mode)
+RUN --mount=type=cache,target=/root/.npm \
+    --mount=type=cache,target=/app/.npm \
+    sh -c ' \
+    export NODE_ENV=development && \
+    for i in 1 2 3 4 5; do \
+        npm ci --prefer-offline --no-audit && break || \
+        (echo "Attempt $i failed, retrying in 5 seconds..." && sleep 5); \
+    done || exit 1'
+
+# Note: nodemon is installed as devDependency, will be available via npx
+
+# Copy source files (will be overridden by volume mounts in dev, but ensures container works standalone)
+COPY . .
+
+# Note: node_modules will be preserved via anonymous volume in docker-compose
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    chown -R nodejs:nodejs /app
+
+USER nodejs
+
+# Set entrypoint
+ENTRYPOINT ["docker-entrypoint.sh"]
+
+# Expose port
+EXPOSE 3000
+
+# Health check for container
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})" || exit 1
+
+# Use npm script instead of global nodemon (ensure "dev": "nodemon index.js" in package.json)
+CMD ["npm", "run", "dev"]

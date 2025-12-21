@@ -41,8 +41,11 @@ function buildCorsOptions() {
       'Authorization',
       'X-Agency-Database',
       'X-Requested-With',
+      'X-API-Key',
     ],
     credentials: false, // Auth is header-based, not cookie-based
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   };
 
   return corsOptions;

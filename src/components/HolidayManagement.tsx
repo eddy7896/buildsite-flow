@@ -40,7 +40,7 @@ interface Holiday {
 }
 
 export function HolidayManagement() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { toast } = useToast();
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,8 +88,11 @@ export function HolidayManagement() {
   };
 
   useEffect(() => {
-    fetchHolidays();
-  }, [profile?.agency_id]);
+    if (user?.id || profile?.user_id) {
+      fetchHolidays();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, profile?.user_id, profile?.agency_id]);
 
   const filteredHolidays = holidays.filter(holiday => {
     const matchesSearch = !searchTerm || holiday.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

@@ -368,14 +368,23 @@ export const useGST = () => {
     }
   };
 
+  const [hasFetched, setHasFetched] = useState(false);
+  
   useEffect(() => {
-    // Only fetch data when user is authenticated and profile is loaded
-    if (!authLoading && user && profile?.agency_id) {
-      fetchSettings();
-      fetchReturns();
-      fetchTransactions();
+    // Only fetch data ONCE when user is authenticated and profile is loaded
+    if (!authLoading && user && profile?.agency_id && !hasFetched) {
+      setHasFetched(true);
+      
+      // Use a delay to batch requests
+      const timeoutId = setTimeout(() => {
+        fetchSettings();
+        fetchReturns();
+        fetchTransactions();
+      }, 500);
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [user, profile, authLoading]);
+  }, [user?.id, profile?.agency_id, authLoading, hasFetched]); // Track if we've already fetched
 
   return {
     settings,

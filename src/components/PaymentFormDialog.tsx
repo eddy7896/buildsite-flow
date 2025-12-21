@@ -123,7 +123,7 @@ const PaymentFormDialog: React.FC<PaymentFormDialogProps> = ({
       const invoicesData = await selectRecords('invoices', {
         where: { 
           agency_id: profile.agency_id,
-          status: { operator: 'IN', value: ['draft', 'sent', 'overdue', 'partial'] }
+          status: { operator: 'in', value: ['draft', 'sent', 'overdue', 'partial'] }
         },
         orderBy: 'issue_date DESC',
       });

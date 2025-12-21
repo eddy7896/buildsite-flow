@@ -246,18 +246,26 @@ export class GSTService extends BaseApiService {
       return { data: null, error: 'Agency ID not found', success: false };
     }
 
-    const queryFilters: Record<string, any> = { agency_id: agencyId };
-    if (filters?.transaction_type) queryFilters.transaction_type = filters.transaction_type;
-    if (filters?.invoice_number) queryFilters.invoice_number = filters.invoice_number;
-
-    let query = `SELECT * FROM gst_transactions WHERE agency_id = $1`;
+    // Build query with date filters
+    let query = `SELECT * FROM public.gst_transactions WHERE agency_id = $1`;
     const params: any[] = [agencyId];
     let paramIndex = 2;
+
+    if (filters?.transaction_type) {
+      query += ` AND transaction_type = $${paramIndex++}`;
+      params.push(filters.transaction_type);
+    }
+    
+    if (filters?.invoice_number) {
+      query += ` AND invoice_number ILIKE $${paramIndex++}`;
+      params.push(`%${filters.invoice_number}%`);
+    }
 
     if (filters?.start_date) {
       query += ` AND invoice_date >= $${paramIndex++}`;
       params.push(filters.start_date);
     }
+    
     if (filters?.end_date) {
       query += ` AND invoice_date <= $${paramIndex++}`;
       params.push(filters.end_date);
@@ -347,30 +355,27 @@ export class GSTService extends BaseApiService {
       return { data: null, error: 'Agency ID not found', success: false };
     }
 
-    return this.rpc<GSTLiability>(
-      'calculate_gst_liability',
-      {
-        p_agency_id: agencyId,
-        p_start_date: startDate,
-        p_end_date: endDate
-      },
-      { showErrorToast: true }
-    ).then(response => {
-      if (response.success && response.data && Array.isArray(response.data) && response.data.length > 0) {
-        return { ...response, data: response.data[0] };
+    return this.execute(async () => {
+      const { pgClient } = await import('@/integrations/postgresql/client');
+      // Use explicit type casts to avoid "unknown" type errors
+      const query = `SELECT * FROM public.calculate_gst_liability($1::UUID, $2::DATE, $3::DATE)`;
+      const params = [agencyId, startDate, endDate];
+      const result = await pgClient.query(query, params);
+      
+      if (result.rows && result.rows.length > 0) {
+        return result.rows[0] as GSTLiability;
       }
+      
+      // Return default values if no data
       return {
-        ...response,
-        data: {
-          total_taxable_value: 0,
-          total_cgst: 0,
-          total_sgst: 0,
-          total_igst: 0,
-          total_cess: 0,
-          total_tax: 0
-        }
+        total_taxable_value: 0,
+        total_cgst: 0,
+        total_sgst: 0,
+        total_igst: 0,
+        total_cess: 0,
+        total_tax: 0
       };
-    });
+    }, { showErrorToast: false }); // Don't show toast on every error to reduce noise
   }
 
   // ============ Generate GST Return from Transactions ============
@@ -380,12 +385,28 @@ export class GSTService extends BaseApiService {
     filingPeriod: string
   ): Promise<ApiResponse<GSTReturn>> {
     const agencyId = await getAgencyId();
-    if (!agencyId) {
-      return { data: null, error: 'Agency ID not found', success: false };
+    if (!agencyId || agencyId === '00000000-0000-0000-0000-000000000000') {
+      return { data: null, error: 'Agency ID not found or invalid', success: false };
     }
 
+    // Parse filing period - it comes as "YYYY-MM" format, convert to first day of month
+    let periodDate: Date;
+    if (filingPeriod.match(/^\d{4}-\d{2}$/)) {
+      // Format: "2025-12" -> convert to Date object for first day of month
+      const [year, month] = filingPeriod.split('-').map(Number);
+      periodDate = new Date(year, month - 1, 1);
+    } else {
+      // Try to parse as date string
+      periodDate = new Date(filingPeriod);
+      if (isNaN(periodDate.getTime())) {
+        return { data: null, error: 'Invalid filing period format', success: false };
+      }
+    }
+    
+    // filing_period should be the first day of the month as a DATE
+    const filingPeriodDate = new Date(periodDate.getFullYear(), periodDate.getMonth(), 1);
+    
     // Calculate due date based on return type and filing period
-    const periodDate = new Date(filingPeriod);
     let dueDate = new Date(periodDate);
     
     if (returnType === 'GSTR1' || returnType === 'GSTR3B') {
@@ -429,9 +450,12 @@ export class GSTService extends BaseApiService {
     const totalCess = salesTransactions.reduce((sum, t) => sum + (Number(t.cess_amount) || 0), 0);
     const totalTax = totalCgst + totalSgst + totalIgst + totalCess;
 
+    // Ensure filing_period is a proper date (first day of the month)
+    const filingPeriodDateStr = filingPeriodDate.toISOString().split('T')[0];
+    
     const newReturn: Omit<GSTReturn, 'id' | 'agency_id' | 'created_at' | 'updated_at'> = {
       return_type: returnType,
-      filing_period: filingPeriod,
+      filing_period: filingPeriodDateStr, // DATE format (YYYY-MM-DD) - first day of month
       due_date: dueDate.toISOString().split('T')[0],
       status: 'pending',
       total_taxable_value: totalTaxableValue,

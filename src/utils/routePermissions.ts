@@ -339,6 +339,18 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     allowHigherRoles: false,
     description: 'System administration dashboard'
   },
+  '/system-health': { 
+    path: '/system-health', 
+    requiredRoles: ['super_admin'], 
+    allowHigherRoles: false,
+    description: 'System health monitoring'
+  },
+  '/email-testing': { 
+    path: '/email-testing', 
+    requiredRoles: ['super_admin', 'admin'], 
+    allowHigherRoles: true,
+    description: 'Email service testing and configuration'
+  },
   '/agency/:agencyId/super-admin-dashboard': { 
     path: '/agency/:agencyId/super-admin-dashboard', 
     requiredRoles: ['super_admin'], 

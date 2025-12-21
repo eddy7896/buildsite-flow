@@ -255,7 +255,14 @@ export class AuthService extends BaseApiService {
       try {
         // Safely access storage event properties with additional checks
         // Ensure e is a valid StorageEvent object with the expected properties
-        if (e && typeof e === 'object' && 'key' in e && 'newValue' in e && e.key === 'auth_token' && e.newValue !== undefined) {
+        if (e && 
+            typeof e === 'object' && 
+            e !== null && 
+            'key' in e && 
+            'newValue' in e && 
+            e.key === 'auth_token' && 
+            e.newValue !== undefined && 
+            e.newValue !== null) {
           const token = e.newValue || localStorage.getItem('auth_token');
           if (token) {
             callback('SIGNED_IN', { user: { id: token } });

@@ -79,16 +79,27 @@ export const GSTDashboard: React.FC = () => {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
 
+  const [lastFetchedPeriod, setLastFetchedPeriod] = useState<string | null>(null);
+  
   useEffect(() => {
     // Only fetch liability if user is authenticated and has selected a period
-    if (isAuthenticated && selectedPeriod) {
+    // AND we haven't already fetched for this period
+    if (isAuthenticated && selectedPeriod && selectedPeriod !== lastFetchedPeriod) {
       const [year, month] = selectedPeriod.split('-');
       const startDate = `${year}-${month}-01`;
       const endDate = new Date(parseInt(year), parseInt(month), 0).toISOString().split('T')[0];
-      fetchLiability(startDate, endDate);
-      fetchTransactions({ start_date: startDate, end_date: endDate });
+      
+      setLastFetchedPeriod(selectedPeriod);
+      
+      // Use a delay to prevent rapid-fire requests
+      const timeoutId = setTimeout(() => {
+        fetchLiability(startDate, endDate);
+        fetchTransactions({ start_date: startDate, end_date: endDate });
+      }, 300);
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [selectedPeriod, fetchLiability, fetchTransactions, isAuthenticated]);
+  }, [selectedPeriod, isAuthenticated, lastFetchedPeriod]); // Track last fetched period
 
   const getStatusColor = (status: GSTReturn['status']) => {
     switch (status) {

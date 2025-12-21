@@ -416,6 +416,117 @@ async function ensureCustomReportsTable(client) {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
   `);
+
+  // Add missing columns if they don't exist
+  await client.query(`
+    DO $$
+    BEGIN
+      -- Add agency_id if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'custom_reports' 
+        AND column_name = 'agency_id'
+      ) THEN
+        ALTER TABLE public.custom_reports ADD COLUMN agency_id UUID;
+        CREATE INDEX IF NOT EXISTS idx_custom_reports_agency_id ON public.custom_reports(agency_id);
+      END IF;
+
+      -- Add user_id if it doesn't exist (for compatibility with frontend)
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'custom_reports' 
+        AND column_name = 'user_id'
+      ) THEN
+        ALTER TABLE public.custom_reports ADD COLUMN user_id UUID REFERENCES public.users(id);
+        CREATE INDEX IF NOT EXISTS idx_custom_reports_user_id ON public.custom_reports(user_id);
+      END IF;
+
+      -- Add data_sources if it doesn't exist (TEXT[] for array of strings)
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'custom_reports' 
+        AND column_name = 'data_sources'
+      ) THEN
+        ALTER TABLE public.custom_reports ADD COLUMN data_sources TEXT[] DEFAULT '{}';
+      END IF;
+
+      -- Add is_public if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'custom_reports' 
+        AND column_name = 'is_public'
+      ) THEN
+        ALTER TABLE public.custom_reports ADD COLUMN is_public BOOLEAN DEFAULT false;
+      END IF;
+
+      -- Add is_scheduled if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'custom_reports' 
+        AND column_name = 'is_scheduled'
+      ) THEN
+        ALTER TABLE public.custom_reports ADD COLUMN is_scheduled BOOLEAN DEFAULT false;
+      END IF;
+
+      -- Add filters if it doesn't exist (for filter configuration)
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'custom_reports' 
+        AND column_name = 'filters'
+      ) THEN
+        ALTER TABLE public.custom_reports ADD COLUMN filters JSONB;
+      END IF;
+
+      -- Add aggregations if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'custom_reports' 
+        AND column_name = 'aggregations'
+      ) THEN
+        ALTER TABLE public.custom_reports ADD COLUMN aggregations JSONB;
+      END IF;
+
+      -- Add group_by if it doesn't exist (TEXT[] for array of strings)
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'custom_reports' 
+        AND column_name = 'group_by'
+      ) THEN
+        ALTER TABLE public.custom_reports ADD COLUMN group_by TEXT[] DEFAULT '{}';
+      END IF;
+
+      -- Add visualizations if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'custom_reports' 
+        AND column_name = 'visualizations'
+      ) THEN
+        ALTER TABLE public.custom_reports ADD COLUMN visualizations JSONB;
+      END IF;
+
+      -- Add schedule_config if it doesn't exist
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'custom_reports' 
+        AND column_name = 'schedule_config'
+      ) THEN
+        ALTER TABLE public.custom_reports ADD COLUMN schedule_config JSONB;
+      END IF;
+    EXCEPTION
+      WHEN OTHERS THEN
+        RAISE NOTICE 'Error adding columns to custom_reports table: %', SQLERRM;
+    END $$;
+  `);
 }
 
 /**
@@ -476,6 +587,174 @@ async function ensureFileStorageTable(client) {
 }
 
 /**
+ * Ensure document_folders table exists
+ */
+async function ensureDocumentFoldersTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.document_folders (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      name TEXT NOT NULL,
+      description TEXT,
+      parent_folder_id UUID REFERENCES public.document_folders(id) ON DELETE CASCADE,
+      created_by UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+      agency_id UUID NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Create indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_document_folders_agency_id ON public.document_folders(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_document_folders_parent_folder_id ON public.document_folders(parent_folder_id);
+    CREATE INDEX IF NOT EXISTS idx_document_folders_created_by ON public.document_folders(created_by);
+    CREATE INDEX IF NOT EXISTS idx_document_folders_name ON public.document_folders(name);
+  `);
+
+  // Create updated_at trigger (only if function exists)
+  try {
+    const functionCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public' 
+        AND p.proname = 'update_updated_at_column'
+      );
+    `);
+    
+    if (functionCheck.rows[0].exists) {
+      await client.query(`
+        DROP TRIGGER IF EXISTS update_document_folders_updated_at ON public.document_folders;
+        CREATE TRIGGER update_document_folders_updated_at
+          BEFORE UPDATE ON public.document_folders
+          FOR EACH ROW
+          EXECUTE FUNCTION public.update_updated_at_column();
+      `);
+    } else {
+      console.warn('[SQL] ⚠️ update_updated_at_column function not found, skipping trigger creation for document_folders');
+    }
+  } catch (error) {
+    console.warn('[SQL] ⚠️ Could not create trigger for document_folders:', error.message);
+  }
+}
+
+/**
+ * Ensure documents table exists
+ */
+async function ensureDocumentsTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.documents (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      name TEXT NOT NULL,
+      description TEXT,
+      file_path TEXT NOT NULL,
+      file_size BIGINT NOT NULL DEFAULT 0,
+      file_type TEXT NOT NULL,
+      uploaded_by UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+      folder_id UUID REFERENCES public.document_folders(id) ON DELETE SET NULL,
+      agency_id UUID NOT NULL,
+      tags TEXT[] DEFAULT '{}',
+      is_public BOOLEAN NOT NULL DEFAULT false,
+      download_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Create indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_documents_agency_id ON public.documents(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_folder_id ON public.documents(folder_id);
+    CREATE INDEX IF NOT EXISTS idx_documents_uploaded_by ON public.documents(uploaded_by);
+    CREATE INDEX IF NOT EXISTS idx_documents_name ON public.documents(name);
+    CREATE INDEX IF NOT EXISTS idx_documents_tags ON public.documents USING GIN(tags);
+    CREATE INDEX IF NOT EXISTS idx_documents_created_at ON public.documents(created_at);
+    CREATE INDEX IF NOT EXISTS idx_documents_is_public ON public.documents(is_public);
+  `);
+
+  // Create updated_at trigger (only if function exists)
+  try {
+    const functionCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public' 
+        AND p.proname = 'update_updated_at_column'
+      );
+    `);
+    
+    if (functionCheck.rows[0].exists) {
+      await client.query(`
+        DROP TRIGGER IF EXISTS update_documents_updated_at ON public.documents;
+        CREATE TRIGGER update_documents_updated_at
+          BEFORE UPDATE ON public.documents
+          FOR EACH ROW
+          EXECUTE FUNCTION public.update_updated_at_column();
+      `);
+    } else {
+      console.warn('[SQL] ⚠️ update_updated_at_column function not found, skipping trigger creation for documents');
+    }
+  } catch (error) {
+    console.warn('[SQL] ⚠️ Could not create trigger for documents:', error.message);
+  }
+}
+
+/**
+ * Ensure document_versions table exists
+ */
+async function ensureDocumentVersionsTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.document_versions (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      document_id UUID NOT NULL REFERENCES public.documents(id) ON DELETE CASCADE,
+      version_number INTEGER NOT NULL,
+      file_path TEXT NOT NULL,
+      uploaded_by UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+      upload_date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      change_summary TEXT,
+      is_current BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+  `);
+
+  // Create indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_document_versions_document_id ON public.document_versions(document_id);
+    CREATE INDEX IF NOT EXISTS idx_document_versions_uploaded_by ON public.document_versions(uploaded_by);
+    CREATE INDEX IF NOT EXISTS idx_document_versions_is_current ON public.document_versions(is_current);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_document_versions_unique ON public.document_versions(document_id, version_number);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_document_versions_one_current 
+      ON public.document_versions(document_id) 
+      WHERE is_current = true;
+  `);
+}
+
+/**
+ * Ensure document_permissions table exists
+ */
+async function ensureDocumentPermissionsTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.document_permissions (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      document_id UUID NOT NULL REFERENCES public.documents(id) ON DELETE CASCADE,
+      user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+      role TEXT,
+      permission_type TEXT NOT NULL CHECK (permission_type IN ('read', 'write', 'admin')),
+      granted_by UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+      UNIQUE(document_id, user_id)
+    );
+  `);
+
+  // Create indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_document_permissions_document_id ON public.document_permissions(document_id);
+    CREATE INDEX IF NOT EXISTS idx_document_permissions_user_id ON public.document_permissions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_document_permissions_permission_type ON public.document_permissions(permission_type);
+  `);
+}
+
+/**
  * Ensure all miscellaneous tables
  */
 async function ensureMiscSchema(client) {
@@ -491,6 +770,12 @@ async function ensureMiscSchema(client) {
   await ensureFeatureFlagsTable(client);
   await ensureFileStorageTable(client);
   
+  // Document management tables
+  await ensureDocumentFoldersTable(client);
+  await ensureDocumentsTable(client);
+  await ensureDocumentVersionsTable(client);
+  await ensureDocumentPermissionsTable(client);
+  
   console.log('[SQL] ✅ Miscellaneous schema ensured');
 }
 
@@ -505,4 +790,8 @@ module.exports = {
   ensureRoleChangeRequestsTable,
   ensureFeatureFlagsTable,
   ensureFileStorageTable,
+  ensureDocumentFoldersTable,
+  ensureDocumentsTable,
+  ensureDocumentVersionsTable,
+  ensureDocumentPermissionsTable,
 };

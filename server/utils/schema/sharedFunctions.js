@@ -14,15 +14,50 @@
  */
 async function ensureExtensions(client) {
   try {
-    await client.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
-    await client.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
-    
-    // Verify extensions are installed
+    // Check if extensions already exist first to avoid race conditions
     const extCheck = await client.query(`
       SELECT extname FROM pg_extension 
       WHERE extname IN ('uuid-ossp', 'pgcrypto')
     `);
-    const installedExts = extCheck.rows.map(r => r.extname);
+    const existingExts = extCheck.rows.map(r => r.extname);
+    
+    // Only create extensions that don't exist - use DO block to catch all errors
+    if (!existingExts.includes('uuid-ossp')) {
+      await client.query(`
+        DO $$ 
+        BEGIN
+          CREATE EXTENSION "uuid-ossp";
+        EXCEPTION
+          WHEN OTHERS THEN
+            -- If extension exists now, that's fine
+            IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'uuid-ossp') THEN
+              RAISE;
+            END IF;
+        END $$;
+      `);
+    }
+    
+    if (!existingExts.includes('pgcrypto')) {
+      await client.query(`
+        DO $$ 
+        BEGIN
+          CREATE EXTENSION "pgcrypto";
+        EXCEPTION
+          WHEN OTHERS THEN
+            -- If extension exists now, that's fine
+            IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pgcrypto') THEN
+              RAISE;
+            END IF;
+        END $$;
+      `);
+    }
+    
+    // Verify extensions are installed
+    const finalCheck = await client.query(`
+      SELECT extname FROM pg_extension 
+      WHERE extname IN ('uuid-ossp', 'pgcrypto')
+    `);
+    const installedExts = finalCheck.rows.map(r => r.extname);
     
     if (!installedExts.includes('uuid-ossp')) {
       throw new Error('uuid-ossp extension was not installed');
@@ -33,6 +68,18 @@ async function ensureExtensions(client) {
     
     console.log('[SQL] ✅ Extensions verified:', installedExts.join(', '));
   } catch (error) {
+    // Final fallback: if it's a duplicate key error, check if extensions actually exist
+    if (error.code === '23505' || error.message.includes('duplicate key')) {
+      const extCheck = await client.query(`
+        SELECT extname FROM pg_extension 
+        WHERE extname IN ('uuid-ossp', 'pgcrypto')
+      `);
+      const installedExts = extCheck.rows.map(r => r.extname);
+      if (installedExts.length === 2) {
+        console.log('[SQL] ✅ Extensions already exist:', installedExts.join(', '));
+        return; // Extensions exist, that's fine
+      }
+    }
     console.error('[SQL] ❌ Error ensuring extensions:', error.message);
     throw error;
   }
@@ -42,13 +89,56 @@ async function ensureExtensions(client) {
  * Ensure app_role enum type exists
  */
 async function ensureAppRoleType(client) {
-  await client.query(`
-    DO $$ BEGIN
-      CREATE TYPE public.app_role AS ENUM ('admin', 'hr', 'finance_manager', 'employee', 'super_admin', 'ceo', 'cfo');
-    EXCEPTION
-      WHEN duplicate_object THEN null;
-    END $$;
-  `);
+  try {
+    // Check if type already exists first
+    const typeCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT 1 FROM pg_type t
+        JOIN pg_namespace n ON t.typnamespace = n.oid
+        WHERE n.nspname = 'public' 
+        AND t.typname = 'app_role'
+      )
+    `);
+    
+    if (typeCheck.rows[0].exists) {
+      return; // Type already exists
+    }
+    
+    await client.query(`
+      DO $$ 
+      BEGIN
+        CREATE TYPE public.app_role AS ENUM ('admin', 'hr', 'finance_manager', 'employee', 'super_admin', 'ceo', 'cfo');
+      EXCEPTION
+        WHEN duplicate_object THEN
+          -- Type already exists, that's fine
+          NULL;
+        WHEN OTHERS THEN
+          -- Check if type actually exists before re-raising
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_type t
+            JOIN pg_namespace n ON t.typnamespace = n.oid
+            WHERE n.nspname = 'public' AND t.typname = 'app_role'
+          ) THEN
+            RAISE;
+          END IF;
+      END $$;
+    `);
+  } catch (error) {
+    // If it's a duplicate key error, check if type actually exists
+    if (error.code === '23505' || error.message.includes('duplicate key') || error.code === '42710') {
+      const typeCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_type t
+          JOIN pg_namespace n ON t.typnamespace = n.oid
+          WHERE n.nspname = 'public' AND t.typname = 'app_role'
+        )
+      `);
+      if (typeCheck.rows[0].exists) {
+        return; // Type exists, that's fine
+      }
+    }
+    throw error;
+  }
 }
 
 /**

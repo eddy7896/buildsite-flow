@@ -17,6 +17,22 @@ async function getAgencyDb(agencyDatabase) {
   return new Pool({ connectionString: agencyDbUrl, max: 1 });
 }
 
+// Helper to ensure user_permissions table exists
+async function ensureUserPermissionsTable(client) {
+  const tableCheck = await client.query(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name = 'user_permissions'
+    );
+  `);
+  
+  if (!tableCheck.rows[0].exists) {
+    const { ensureUserPermissionsTable: ensureTable } = require('../utils/schema/authSchema');
+    await ensureTable(client);
+  }
+}
+
 // Helper to log audit trail
 async function logAudit(client, tableName, action, userId, recordId, oldValues, newValues, ipAddress, userAgent) {
   try {
@@ -350,21 +366,40 @@ router.get('/users/:userId', authenticate, requireAgencyContext, asyncHandler(as
       );
     }
 
-    // Get user-specific overrides
-    const userPermsResult = await client.query(
-      `SELECT p.*, up.granted, up.reason, up.expires_at, 'user' as source
-       FROM public.permissions p
-       INNER JOIN public.user_permissions up ON p.id = up.permission_id
-       WHERE up.user_id = $1 AND p.is_active = true`,
-      [userId]
-    );
+    // Get user-specific overrides (if user_permissions table exists)
+    let userPermsResult = { rows: [] };
+    try {
+      // Check if user_permissions table exists
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'user_permissions'
+        );
+      `);
+      
+      if (tableCheck.rows[0].exists) {
+        userPermsResult = await client.query(
+          `SELECT p.*, up.granted, up.reason, up.expires_at, 'user' as source
+           FROM public.permissions p
+           INNER JOIN public.user_permissions up ON p.id = up.permission_id
+           WHERE up.user_id = $1 AND p.is_active = true`,
+          [userId]
+        );
+      }
+    } catch (error) {
+      // If table doesn't exist or query fails, continue without user permissions
+      if (error.code !== '42P01') {
+        console.warn('[Permissions] Error fetching user permissions:', error.message);
+      }
+    }
 
     // Merge and deduplicate (user overrides take precedence)
     const permissionsMap = new Map();
     rolePermsResult.rows.forEach(p => {
       permissionsMap.set(p.id, p);
     });
-    userPermsResult.rows.forEach(p => {
+    (userPermsResult.rows || []).forEach(p => {
       permissionsMap.set(p.id, p);
     });
 
@@ -425,6 +460,9 @@ router.put('/users/:userId', authenticate, requireRole(['super_admin', 'ceo', 'a
         });
       }
 
+      // Ensure user_permissions table exists
+      await ensureUserPermissionsTable(client);
+      
       // Check if user_permission exists
       const existing = await client.query(
         'SELECT id, granted FROM public.user_permissions WHERE user_id = $1 AND permission_id = $2',
@@ -483,6 +521,9 @@ router.delete('/users/:userId/overrides', authenticate, requireRole(['super_admi
   const client = await pool.connect();
 
   try {
+    // Ensure user_permissions table exists
+    await ensureUserPermissionsTable(client);
+    
     await client.query('BEGIN');
 
     // Get all overrides before deleting
@@ -535,6 +576,11 @@ router.post('/bulk', authenticate, requireRole(['super_admin', 'ceo', 'admin']),
   const client = await pool.connect();
 
   try {
+    // Ensure user_permissions table exists if needed
+    if (type === 'users') {
+      await ensureUserPermissionsTable(client);
+    }
+    
     await client.query('BEGIN');
 
     for (const target of targets) {
@@ -782,6 +828,11 @@ router.post('/templates/:templateId/apply', authenticate, requireRole(['super_ad
     }
     if (!Array.isArray(permissions)) {
       permissions = [];
+    }
+
+    // Ensure user_permissions table exists if needed
+    if (type === 'users') {
+      await ensureUserPermissionsTable(client);
     }
 
     for (const target of targets) {

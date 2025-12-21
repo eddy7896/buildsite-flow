@@ -136,7 +136,9 @@ export class BaseApiService {
   ): Promise<ApiResponse<T>> {
     return this.execute(async () => {
       const columns = options.select || '*';
-      let query = `SELECT ${columns} FROM ${table}`;
+      // Ensure table name has schema prefix if not already present
+      const tableName = table.includes('.') ? table : `public.${table}`;
+      let query = `SELECT ${columns} FROM ${tableName}`;
       const params: any[] = [];
       let paramIndex = 1;
 
@@ -227,8 +229,11 @@ export class BaseApiService {
       const filterValues = Object.values(filters);
       const whereClause = filterKeys.map((key, i) => `${key} = $${updateColumns.length + i + 1}`).join(' AND ');
 
+      // Ensure table name has schema prefix if not already present
+      const tableName = table.includes('.') ? table : `public.${table}`;
+
       const query = `
-        UPDATE ${table}
+        UPDATE ${tableName}
         SET ${setClause}
         WHERE ${whereClause}
         RETURNING *
@@ -250,7 +255,10 @@ export class BaseApiService {
       const filterValues = Object.values(filters);
       const whereClause = filterKeys.map((key, i) => `${key} = $${i + 1}`).join(' AND ');
 
-      const query = `DELETE FROM ${table} WHERE ${whereClause}`;
+      // Ensure table name has schema prefix if not already present
+      const tableName = table.includes('.') ? table : `public.${table}`;
+
+      const query = `DELETE FROM ${tableName} WHERE ${whereClause}`;
 
       await pgClient.query(query, filterValues);
       return null as T;

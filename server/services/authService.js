@@ -36,44 +36,64 @@ async function findUserAcrossAgencies(email, password) {
 
     // Search each agency database for this user
     for (const agency of agencies.rows) {
+      // Skip test databases that might not exist
+      if (agency.database_name && agency.database_name.startsWith('test_')) {
+        continue;
+      }
+      
+      if (!agency.database_name) {
+        continue;
+      }
+
       try {
         const agencyDbUrl = `postgresql://${user}:${dbPassword}@${host}:${port}/${agency.database_name}`;
-        const { Pool: AgencyPool } = require('pg');
-        const agencyPool = new AgencyPool({ connectionString: agencyDbUrl, max: 1 });
+        const { Pool } = require('pg');
+        const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
         const agencyClient = await agencyPool.connect();
 
         try {
+          // Check if user exists in this agency database
           const userResult = await agencyClient.query(
-            'SELECT * FROM public.users WHERE email = $1 AND is_active = true',
+            `SELECT id, email, password_hash, email_confirmed, is_active, 
+                    two_factor_enabled, two_factor_secret, password_policy_id
+             FROM public.users 
+             WHERE email = $1`,
             [email]
           );
 
           if (userResult.rows.length > 0) {
-            const user = userResult.rows[0];
-
-            const passwordMatch = await bcrypt.compare(password, user.password_hash);
+            const dbUser = userResult.rows[0];
+            
+            // Verify password
+            const passwordMatch = await bcrypt.compare(password, dbUser.password_hash);
             if (passwordMatch) {
-              foundUser = user;
-              foundAgency = agency;
-
+              // Get user profile
               const profileResult = await agencyClient.query(
-                'SELECT * FROM public.profiles WHERE user_id = $1',
-                [user.id]
+                `SELECT id, user_id, first_name, last_name, agency_id, phone, avatar_url
+                 FROM public.profiles 
+                 WHERE user_id = $1`,
+                [dbUser.id]
               );
-              userProfile = profileResult.rows[0] || null;
 
+              // Get user roles
               const rolesResult = await agencyClient.query(
-                'SELECT * FROM public.user_roles WHERE user_id = $1',
-                [user.id]
+                `SELECT role FROM public.user_roles 
+                 WHERE user_id = $1 AND agency_id = $2`,
+                [dbUser.id, agency.id]
               );
-              userRoles = rolesResult.rows;
 
+              foundUser = dbUser;
+              foundAgency = agency;
+              userProfile = profileResult.rows[0] || null;
+              userRoles = rolesResult.rows.map(r => r.role);
+              
+              // Update last sign in time
               await agencyClient.query(
                 'UPDATE public.users SET last_sign_in_at = NOW() WHERE id = $1',
-                [user.id]
+                [dbUser.id]
               );
-
-              break;
+              
+              break; // Found user, stop searching
             }
           }
         } finally {
@@ -81,7 +101,13 @@ async function findUserAcrossAgencies(email, password) {
           await agencyPool.end();
         }
       } catch (error) {
-        console.warn(`[API] Error searching database ${agency.database_name}:`, error.message);
+        // Skip databases that don't exist or have connection issues
+        // Only log if it's not a "database does not exist" error (3D000)
+        // This prevents spam from test databases or deleted databases
+        if (error.code !== '3D000') {
+          console.warn(`[API] Error searching database ${agency.database_name}:`, error.message);
+        }
+        // Continue searching other databases
         continue;
       }
     }

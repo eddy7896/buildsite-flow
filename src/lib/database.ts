@@ -663,7 +663,11 @@ const storage = {
           const userId = (window as any).__currentUserId || null;
           // Pass ArrayBuffer directly - uploadFile now handles it
           const result = await uploadFile(bucket, path, fileBuffer, userId, file.type);
-          return { data: { path: result.file_path }, error: null };
+          // Return the full path (bucket/path) for documents table
+          // The API returns path in result.data.path, or use bucket + file_path
+          const resultData = (result as any).data || {};
+          const fullPath = resultData.path || `${bucket}/${(result as any).file_path || path}`;
+          return { data: { path: fullPath }, error: null };
         } catch (error: any) {
           return { data: null, error };
         }
