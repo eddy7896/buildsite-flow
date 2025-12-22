@@ -2,7 +2,7 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: buildflow-postgres
+    container_name: postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: admin
@@ -46,7 +46,7 @@ services:
       context: ./server
       dockerfile: Dockerfile
     image: dezign-backend:latest
-    container_name: buildflow-backend
+    container_name: backend
     environment:
       # Database
       VITE_DATABASE_URL: postgresql://postgres:admin@postgres:5432/buildflow_db
@@ -113,7 +113,7 @@ services:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
         VITE_DATABASE_URL: ${VITE_DATABASE_URL:-}
     image: dezign-frontend:latest
-    container_name: buildflow-frontend
+    container_name: frontend
     environment:
       VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
       VITE_APP_NAME: ${VITE_APP_NAME:-BuildFlow Agency Management}
