@@ -33,6 +33,9 @@ RUN --mount=type=cache,target=/root/.npm \
         npm install; \
     fi
 
+# Verify vite is installed
+RUN test -f node_modules/.bin/vite || (echo "Vite not found!" && npm list vite && exit 1)
+
 # Copy all config files needed for build
 COPY vite.config.ts tailwind.config.ts postcss.config.js components.json ./
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./
@@ -42,8 +45,8 @@ COPY index.html ./
 COPY src ./src
 COPY public ./public
 
-# Build the frontend
-RUN npm run build
+# Build the frontend - use explicit path to ensure it works
+RUN ./node_modules/.bin/vite build
 
 # Stage 2: Production
 FROM nginx:alpine
