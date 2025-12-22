@@ -446,7 +446,7 @@ export default function EmployeePerformance() {
   }
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col space-y-4 lg:flex-row lg:justify-between lg:items-center lg:space-y-0">
         <div>

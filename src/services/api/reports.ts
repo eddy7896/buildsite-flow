@@ -75,6 +75,75 @@ export interface Report {
   created_at: string;
 }
 
+export interface ScheduledReport {
+  id: string;
+  agency_id: string;
+  report_template_id?: string;
+  schedule_name: string;
+  schedule_type: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'custom';
+  cron_expression?: string;
+  day_of_week?: number;
+  day_of_month?: number;
+  time?: string;
+  recipients: string[];
+  format: 'pdf' | 'excel' | 'csv';
+  filters?: Record<string, any>;
+  is_active: boolean;
+  last_run_at?: string;
+  next_run_at?: string;
+  created_by?: string;
+  created_by_email?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReportExport {
+  id: string;
+  agency_id: string;
+  report_id?: string;
+  schedule_id?: string;
+  name: string;
+  report_type: string;
+  format: 'pdf' | 'excel' | 'csv' | 'json';
+  file_path?: string;
+  file_name?: string;
+  file_size?: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  generated_by?: string;
+  generated_by_email?: string;
+  generated_at: string;
+  expires_at?: string;
+  download_count: number;
+  parameters?: Record<string, any>;
+}
+
+export interface AnalyticsMetrics {
+  total_revenue: number;
+  total_expenses: number;
+  net_profit: number;
+  revenue_growth: number;
+  expense_growth: number;
+  profit_margin: number;
+  inventory_value: number;
+  inventory_turnover: number;
+  procurement_spend: number;
+  asset_value: number;
+  active_projects: number;
+  employee_count: number;
+  top_performers: Array<{
+    name: string;
+    metric: string;
+    value: number;
+    change: number;
+  }>;
+  trends: Array<{
+    period: string;
+    revenue: number;
+    expenses: number;
+    profit: number;
+  }>;
+}
+
 export class ReportService extends BaseApiService {
   /**
    * Get monthly report data
@@ -787,6 +856,391 @@ export class ReportService extends BaseApiService {
       // For now, we'll just filter by type
     }
     return this.getReports(filters, options);
+  }
+
+  /**
+   * Get comprehensive dashboard data
+   */
+  static async getDashboardData(
+    filters?: {
+      date_from?: string;
+      date_to?: string;
+    },
+    options: ApiOptions = {}
+  ): Promise<ApiResponse<any>> {
+    return this.execute(async () => {
+      const { getApiBaseUrl } = await import('@/config/api');
+      const API_BASE = getApiBaseUrl();
+      
+      // Safely access localStorage (handles SSR)
+      const getStorageItem = (key: string): string | null => {
+        if (typeof window === 'undefined') return null;
+        try {
+          return localStorage.getItem(key);
+        } catch (error) {
+          console.error(`Error accessing localStorage key ${key}:`, error);
+          return null;
+        }
+      };
+      
+      const token = getStorageItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      // Validate date filters
+      if (filters?.date_from && isNaN(Date.parse(filters.date_from))) {
+        throw new Error('Invalid date_from format. Use YYYY-MM-DD');
+      }
+      
+      if (filters?.date_to && isNaN(Date.parse(filters.date_to))) {
+        throw new Error('Invalid date_to format. Use YYYY-MM-DD');
+      }
+      
+      if (filters?.date_from && filters?.date_to && new Date(filters.date_from) > new Date(filters.date_to)) {
+        throw new Error('date_from must be before or equal to date_to');
+      }
+
+      const queryParams = new URLSearchParams();
+      if (filters?.date_from) queryParams.append('date_from', filters.date_from);
+      if (filters?.date_to) queryParams.append('date_to', filters.date_to);
+
+      const agencyDatabase = getStorageItem('agency_database') || '';
+      
+      const response = await fetch(`${API_BASE}/api/reports/dashboard?${queryParams.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Agency-Database': agencyDatabase,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        let errorMessage = 'Failed to fetch dashboard data';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch dashboard data');
+      }
+      
+      return result.data;
+    }, options);
+  }
+
+  /**
+   * Generate custom report
+   */
+  static async generateCustomReport(
+    module: 'inventory' | 'procurement' | 'assets' | 'financial',
+    options: {
+      filters?: Record<string, any>;
+      columns?: string[];
+      groupBy?: string[];
+      orderBy?: string;
+    } = {}
+  ): Promise<any[]> {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+
+    const response = await fetch(`${API_BASE}/api/reports/custom`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-Agency-Database': localStorage.getItem('agency_database') || '',
+      },
+      body: JSON.stringify({
+        module,
+        ...options,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to generate custom report' }));
+      throw new Error(error.error || 'Failed to generate custom report');
+    }
+
+    const result = await response.json();
+    return result.data || [];
+  }
+
+  /**
+   * Get scheduled reports
+   */
+  static async getScheduledReports(filters?: {
+    report_type?: string;
+    is_active?: boolean;
+    search?: string;
+  }): Promise<ScheduledReport[]> {
+    return this.execute(async () => {
+      const token = getStorageItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const queryParams = new URLSearchParams();
+      if (filters?.report_type) queryParams.append('report_type', filters.report_type);
+      if (filters?.is_active !== undefined) queryParams.append('is_active', String(filters.is_active));
+      if (filters?.search) queryParams.append('search', filters.search);
+
+      const agencyDatabase = getStorageItem('agency_database') || '';
+      
+      const response = await fetch(`${API_BASE}/api/reports/scheduled?${queryParams.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Agency-Database': agencyDatabase,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to fetch scheduled reports' }));
+        throw new Error(error.error || 'Failed to fetch scheduled reports');
+      }
+
+      const result = await response.json();
+      return result.data || [];
+    });
+  }
+
+  /**
+   * Get scheduled report by ID
+   */
+  static async getScheduledReportById(scheduleId: string): Promise<ScheduledReport> {
+    return this.execute(async () => {
+      const token = getStorageItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const agencyDatabase = getStorageItem('agency_database') || '';
+      
+      const response = await fetch(`${API_BASE}/api/reports/scheduled/${scheduleId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Agency-Database': agencyDatabase,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to fetch scheduled report' }));
+        throw new Error(error.error || 'Failed to fetch scheduled report');
+      }
+
+      const result = await response.json();
+      return result.data;
+    });
+  }
+
+  /**
+   * Create scheduled report
+   */
+  static async createScheduledReport(scheduleData: Partial<ScheduledReport>): Promise<ScheduledReport> {
+    return this.execute(async () => {
+      const token = getStorageItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const agencyDatabase = getStorageItem('agency_database') || '';
+      
+      const response = await fetch(`${API_BASE}/api/reports/scheduled`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Agency-Database': agencyDatabase,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(scheduleData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to create scheduled report' }));
+        throw new Error(error.error || 'Failed to create scheduled report');
+      }
+
+      const result = await response.json();
+      return result.data;
+    });
+  }
+
+  /**
+   * Update scheduled report
+   */
+  static async updateScheduledReport(scheduleId: string, scheduleData: Partial<ScheduledReport>): Promise<ScheduledReport> {
+    return this.execute(async () => {
+      const token = getStorageItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const agencyDatabase = getStorageItem('agency_database') || '';
+      
+      const response = await fetch(`${API_BASE}/api/reports/scheduled/${scheduleId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Agency-Database': agencyDatabase,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(scheduleData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to update scheduled report' }));
+        throw new Error(error.error || 'Failed to update scheduled report');
+      }
+
+      const result = await response.json();
+      return result.data;
+    });
+  }
+
+  /**
+   * Delete scheduled report
+   */
+  static async deleteScheduledReport(scheduleId: string): Promise<void> {
+    return this.execute(async () => {
+      const token = getStorageItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const agencyDatabase = getStorageItem('agency_database') || '';
+      
+      const response = await fetch(`${API_BASE}/api/reports/scheduled/${scheduleId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Agency-Database': agencyDatabase,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to delete scheduled report' }));
+        throw new Error(error.error || 'Failed to delete scheduled report');
+      }
+    });
+  }
+
+  /**
+   * Get report exports
+   */
+  static async getReportExports(filters?: {
+    status?: string;
+    format?: string;
+    date_from?: string;
+    date_to?: string;
+    search?: string;
+  }): Promise<ReportExport[]> {
+    return this.execute(async () => {
+      const token = getStorageItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const queryParams = new URLSearchParams();
+      if (filters?.status) queryParams.append('status', filters.status);
+      if (filters?.format) queryParams.append('format', filters.format);
+      if (filters?.date_from) queryParams.append('date_from', filters.date_from);
+      if (filters?.date_to) queryParams.append('date_to', filters.date_to);
+      if (filters?.search) queryParams.append('search', filters.search);
+
+      const agencyDatabase = getStorageItem('agency_database') || '';
+      
+      const response = await fetch(`${API_BASE}/api/reports/exports?${queryParams.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Agency-Database': agencyDatabase,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to fetch report exports' }));
+        throw new Error(error.error || 'Failed to fetch report exports');
+      }
+
+      const result = await response.json();
+      return result.data || [];
+    });
+  }
+
+  /**
+   * Delete report export
+   */
+  static async deleteReportExport(exportId: string): Promise<void> {
+    return this.execute(async () => {
+      const token = getStorageItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const agencyDatabase = getStorageItem('agency_database') || '';
+      
+      const response = await fetch(`${API_BASE}/api/reports/exports/${exportId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Agency-Database': agencyDatabase,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to delete report export' }));
+        throw new Error(error.error || 'Failed to delete report export');
+      }
+    });
+  }
+
+  /**
+   * Get analytics dashboard data
+   */
+  static async getAnalyticsDashboard(filters?: {
+    date_from?: string;
+    date_to?: string;
+    period?: string;
+  }): Promise<AnalyticsMetrics> {
+    return this.execute(async () => {
+      const token = getStorageItem('auth_token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const queryParams = new URLSearchParams();
+      if (filters?.date_from) queryParams.append('date_from', filters.date_from);
+      if (filters?.date_to) queryParams.append('date_to', filters.date_to);
+      if (filters?.period) queryParams.append('period', filters.period);
+
+      const agencyDatabase = getStorageItem('agency_database') || '';
+      
+      const response = await fetch(`${API_BASE}/api/reports/analytics?${queryParams.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Agency-Database': agencyDatabase,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to fetch analytics data' }));
+        throw new Error(error.error || 'Failed to fetch analytics data');
+      }
+
+      const result = await response.json();
+      return result.data;
+    });
   }
 }
 

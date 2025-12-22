@@ -20,7 +20,7 @@ import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { generateUUID, isValidUUID } from '@/lib/uuid';
 import { useAuth } from "@/hooks/useAuth";
-import { insertRecord, updateRecord, selectOne, selectRecords } from '@/services/api/postgresql-service';
+import { insertRecord, updateRecord, selectOne, selectRecords, deleteRecord } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 import bcrypt from '@/lib/bcrypt';
 
@@ -152,7 +152,7 @@ const CreateEmployee = () => {
       }
 
       // Check if user with this email already exists
-      const existingUser = await selectOne('users', { email: values.email });
+      const existingUser = await selectOne('users', { email: values.email.toLowerCase().trim() });
       if (existingUser) {
         // Check if this is an orphaned user (user exists but no employee_details)
         // This can happen if a previous creation attempt failed
@@ -161,7 +161,10 @@ const CreateEmployee = () => {
           // Orphaned user - delete it and continue with creation
           console.warn('Found orphaned user, cleaning up and retrying...');
           try {
-            await db.from('users').delete().eq('id', existingUser.id);
+            // Delete related records first (user_roles, profiles)
+            await deleteRecord('user_roles', { user_id: existingUser.id }).catch(() => {});
+            await deleteRecord('profiles', { user_id: existingUser.id }).catch(() => {});
+            await deleteRecord('users', { id: existingUser.id });
             toast({
               title: "Cleaned up incomplete record",
               description: "Found an incomplete employee record. Cleaning up and retrying...",
@@ -222,9 +225,10 @@ const CreateEmployee = () => {
       }
 
       // Create user record with current user context for audit logs
+      // Normalize email to lowercase
       await insertRecord('users', {
           id: userId,
-          email: values.email,
+          email: values.email.toLowerCase().trim(),
         password_hash: passwordHash,
           is_active: true,
           email_confirmed: true,
@@ -321,11 +325,34 @@ const CreateEmployee = () => {
           agency_id: agencyId,
       }, currentUserId);
 
-      // Set user role
+      // Validate and set user role
+      // Valid enum values for app_role
+      const validRoles = [
+        'super_admin', 'ceo', 'cto', 'cfo', 'coo', 'admin', 
+        'operations_manager', 'department_head', 'team_lead', 
+        'project_manager', 'hr', 'finance_manager', 'sales_manager',
+        'marketing_manager', 'quality_assurance', 'it_support', 
+        'legal_counsel', 'business_analyst', 'customer_success',
+        'employee', 'contractor', 'intern'
+      ];
+      
+      // Normalize role value (handle underscores vs hyphens)
+      const normalizedRole = values.role?.replace(/-/g, '_').toLowerCase();
+      const finalRole = validRoles.includes(normalizedRole) ? normalizedRole : 'employee';
+      
+      if (normalizedRole !== finalRole) {
+        console.warn(`[CreateEmployee] Invalid role "${values.role}" normalized to "${finalRole}"`);
+        toast({
+          title: "Role adjusted",
+          description: `Role "${values.role}" is not valid. Using "${finalRole}" instead.`,
+          variant: "default",
+        });
+      }
+      
       await insertRecord('user_roles', {
           id: generateUUID(),
           user_id: userId,
-          role: values.role,
+          role: finalRole,
           agency_id: agencyId,
       }, currentUserId, agencyId);
 
@@ -370,6 +397,11 @@ const CreateEmployee = () => {
             errorStr.includes('23505')) {
           errorMessage = `A user with email "${values.email}" already exists. Please use a different email address.`;
         } 
+        // Check for invalid enum value
+        else if (errorStr.includes('invalid input value for enum app_role') ||
+                 errorStr.includes('22P02')) {
+          errorMessage = `Invalid role selected: "${values.role}". Please select a valid role from the dropdown.`;
+        }
         // Check for duplicate employee_id constraint
         else if (errorStr.includes('duplicate key value violates unique constraint') && 
                  errorStr.includes('employee_id')) {
@@ -524,6 +556,16 @@ const CreateEmployee = () => {
         return;
       }
 
+      // Valid enum values for app_role (must match database enum)
+      const validRoles = [
+        'super_admin', 'ceo', 'cto', 'cfo', 'coo', 'admin', 
+        'operations_manager', 'department_head', 'team_lead', 
+        'project_manager', 'hr', 'finance_manager', 'sales_manager',
+        'marketing_manager', 'quality_assurance', 'it_support', 
+        'legal_counsel', 'business_analyst', 'customer_success',
+        'employee', 'contractor', 'intern'
+      ];
+
       // Fetch distinct roles from user_roles filtered by agency
       const rolesData = await selectRecords('user_roles', {
         select: 'role',
@@ -532,18 +574,22 @@ const CreateEmployee = () => {
         ]
       });
 
-      // Get unique roles
+      // Get unique roles and filter to only valid enum values
       const uniqueRoles = Array.from(new Set((rolesData || []).map((r: any) => r.role).filter(Boolean)));
+      const validUniqueRoles = uniqueRoles.filter((role: string) => validRoles.includes(role.toLowerCase()));
       
-      // If no roles found, use default roles
-      if (uniqueRoles.length === 0) {
+      // If no valid roles found, use default valid roles
+      if (validUniqueRoles.length === 0) {
         setRoles(['employee', 'hr', 'finance_manager', 'admin', 'super_admin']);
       } else {
-        setRoles(uniqueRoles.sort());
+        // Always include common roles even if not in database yet
+        const defaultRoles = ['employee', 'hr', 'admin'];
+        const combinedRoles = Array.from(new Set([...defaultRoles, ...validUniqueRoles]));
+        setRoles(combinedRoles.sort());
       }
     } catch (error) {
       console.error('Error fetching roles:', error);
-      // Fallback to default roles
+      // Fallback to default valid roles
       setRoles(['employee', 'hr', 'finance_manager', 'admin', 'super_admin']);
     }
   };
@@ -675,7 +721,7 @@ const CreateEmployee = () => {
   }, []);
 
   return (
-    <div className="p-4 lg:p-6">
+    <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0 mb-6">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl lg:text-3xl font-bold break-words">Create New Employee</h1>

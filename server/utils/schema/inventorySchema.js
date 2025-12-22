@@ -302,6 +302,188 @@ async function ensureSuppliersTable(client) {
 }
 
 /**
+ * Ensure bom (Bill of Materials) table exists
+ */
+async function ensureBomTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.bom (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      agency_id UUID NOT NULL,
+      product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      version VARCHAR(50),
+      is_active BOOLEAN DEFAULT true,
+      notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+  `);
+
+  // Add indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_bom_agency_id ON public.bom(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_bom_product_id ON public.bom(product_id);
+    CREATE INDEX IF NOT EXISTS idx_bom_is_active ON public.bom(is_active);
+  `);
+}
+
+/**
+ * Ensure bom_items table exists
+ */
+async function ensureBomItemsTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.bom_items (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      bom_id UUID NOT NULL REFERENCES public.bom(id) ON DELETE CASCADE,
+      component_product_id UUID NOT NULL REFERENCES public.products(id),
+      quantity DECIMAL(10,2) NOT NULL,
+      unit_of_measure VARCHAR(50) DEFAULT 'pcs',
+      sequence INTEGER DEFAULT 0,
+      notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+  `);
+
+  // Add indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_bom_items_bom_id ON public.bom_items(bom_id);
+    CREATE INDEX IF NOT EXISTS idx_bom_items_component_product_id ON public.bom_items(component_product_id);
+  `);
+}
+
+/**
+ * Ensure serial_numbers table exists
+ */
+async function ensureSerialNumbersTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.serial_numbers (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      agency_id UUID NOT NULL,
+      product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+      variant_id UUID REFERENCES public.product_variants(id) ON DELETE CASCADE,
+      serial_number VARCHAR(255) UNIQUE NOT NULL,
+      warehouse_id UUID REFERENCES public.warehouses(id),
+      inventory_id UUID REFERENCES public.inventory(id),
+      status VARCHAR(50) DEFAULT 'available', -- available, reserved, sold, returned, damaged
+      purchase_order_id UUID, -- Will add foreign key constraint after procurement schema is created
+      sale_id UUID, -- Reference to sale/invoice
+      notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+  `);
+
+  // Add foreign key constraint to purchase_orders if the table exists
+  try {
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'purchase_orders'
+        ) THEN
+          -- Check if constraint already exists
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE constraint_schema = 'public' 
+            AND table_name = 'serial_numbers' 
+            AND constraint_name = 'serial_numbers_purchase_order_id_fkey'
+          ) THEN
+            ALTER TABLE public.serial_numbers 
+            ADD CONSTRAINT serial_numbers_purchase_order_id_fkey 
+            FOREIGN KEY (purchase_order_id) 
+            REFERENCES public.purchase_orders(id);
+          END IF;
+        END IF;
+      END $$;
+    `);
+  } catch (error) {
+    // Ignore if constraint already exists or table doesn't exist yet
+    if (!error.message.includes('already exists') && !error.message.includes('does not exist')) {
+      console.warn('[SQL] Warning adding purchase_orders FK to serial_numbers:', error.message);
+    }
+  }
+
+  // Add indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_serial_numbers_agency_id ON public.serial_numbers(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_serial_numbers_product_id ON public.serial_numbers(product_id);
+    CREATE INDEX IF NOT EXISTS idx_serial_numbers_serial_number ON public.serial_numbers(serial_number);
+    CREATE INDEX IF NOT EXISTS idx_serial_numbers_status ON public.serial_numbers(status);
+    CREATE INDEX IF NOT EXISTS idx_serial_numbers_warehouse_id ON public.serial_numbers(warehouse_id);
+  `);
+}
+
+/**
+ * Ensure batches table exists
+ */
+async function ensureBatchesTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.batches (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      agency_id UUID NOT NULL,
+      product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+      variant_id UUID REFERENCES public.product_variants(id) ON DELETE CASCADE,
+      batch_number VARCHAR(255) NOT NULL,
+      warehouse_id UUID REFERENCES public.warehouses(id),
+      inventory_id UUID REFERENCES public.inventory(id),
+      quantity DECIMAL(10,2) DEFAULT 0,
+      manufacture_date DATE,
+      expiry_date DATE,
+      purchase_order_id UUID, -- Will add foreign key constraint after procurement schema is created
+      cost_per_unit DECIMAL(15,2),
+      status VARCHAR(50) DEFAULT 'active', -- active, expired, consumed, damaged
+      notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(agency_id, product_id, batch_number)
+    );
+  `);
+
+  // Add foreign key constraint to purchase_orders if the table exists
+  try {
+    await client.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'purchase_orders'
+        ) THEN
+          -- Check if constraint already exists
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.table_constraints 
+            WHERE constraint_schema = 'public' 
+            AND table_name = 'batches' 
+            AND constraint_name = 'batches_purchase_order_id_fkey'
+          ) THEN
+            ALTER TABLE public.batches 
+            ADD CONSTRAINT batches_purchase_order_id_fkey 
+            FOREIGN KEY (purchase_order_id) 
+            REFERENCES public.purchase_orders(id);
+          END IF;
+        END IF;
+      END $$;
+    `);
+  } catch (error) {
+    // Ignore if constraint already exists or table doesn't exist yet
+    if (!error.message.includes('already exists') && !error.message.includes('does not exist')) {
+      console.warn('[SQL] Warning adding purchase_orders FK to batches:', error.message);
+    }
+  }
+
+  // Add indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_batches_agency_id ON public.batches(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_batches_product_id ON public.batches(product_id);
+    CREATE INDEX IF NOT EXISTS idx_batches_batch_number ON public.batches(batch_number);
+    CREATE INDEX IF NOT EXISTS idx_batches_expiry_date ON public.batches(expiry_date);
+    CREATE INDEX IF NOT EXISTS idx_batches_status ON public.batches(status);
+  `);
+}
+
+/**
  * Ensure all inventory management tables
  */
 async function ensureInventorySchema(client) {
@@ -315,6 +497,10 @@ async function ensureInventorySchema(client) {
     await ensureInventoryTable(client);
     await ensureInventoryTransactionsTable(client);
     await ensureSuppliersTable(client);
+    await ensureBomTable(client);
+    await ensureBomItemsTable(client);
+    await ensureSerialNumbersTable(client);
+    await ensureBatchesTable(client);
     
     console.log('[SQL] ✅ Inventory management schema ensured');
   } catch (error) {
@@ -332,4 +518,8 @@ module.exports = {
   ensureInventoryTable,
   ensureInventoryTransactionsTable,
   ensureSuppliersTable,
+  ensureBomTable,
+  ensureBomItemsTable,
+  ensureSerialNumbersTable,
+  ensureBatchesTable,
 };

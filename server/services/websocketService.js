@@ -233,12 +233,37 @@ function initializeWebSocket(server) {
   return io;
 }
 
+// Rate limiting for error logging to prevent spam
+const wsErrorLogCache = new Map();
+const WS_ERROR_LOG_THROTTLE_MS = 5000;
+
+/**
+ * Check if token looks like valid base64
+ */
+function isValidBase64(str) {
+  if (!str || typeof str !== 'string' || str.length < 10) {
+    return false;
+  }
+  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+  return base64Regex.test(str);
+}
+
 /**
  * Decode token (same as authMiddleware)
  */
 function decodeToken(token) {
   try {
+    // Validate token format before attempting decode
+    if (!token || typeof token !== 'string' || !isValidBase64(token)) {
+      return null;
+    }
+
     const json = Buffer.from(token, 'base64').toString('utf8');
+    
+    if (!json || json.trim().length === 0) {
+      return null;
+    }
+
     const payload = JSON.parse(json);
 
     if (!payload.exp || typeof payload.exp !== 'number') {
@@ -252,7 +277,15 @@ function decodeToken(token) {
 
     return payload;
   } catch (error) {
-    console.warn('[WebSocket] Failed to decode auth token:', error.message);
+    // Throttle error logging to prevent spam
+    const errorKey = `ws_decode_error_${error.message.substring(0, 50)}`;
+    const lastLog = wsErrorLogCache.get(errorKey);
+    const now = Date.now();
+    
+    if (!lastLog || (now - lastLog) > WS_ERROR_LOG_THROTTLE_MS) {
+      console.warn('[WebSocket] Failed to decode auth token:', error.message);
+      wsErrorLogCache.set(errorKey, now);
+    }
     return null;
   }
 }

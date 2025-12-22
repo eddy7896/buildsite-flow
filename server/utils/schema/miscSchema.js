@@ -755,6 +755,54 @@ async function ensureDocumentPermissionsTable(client) {
 }
 
 /**
+ * Ensure module_settings table exists
+ */
+async function ensureModuleSettingsTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.module_settings (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      agency_id UUID NOT NULL,
+      module VARCHAR(100) NOT NULL, -- inventory, procurement, assets, workflow, integration
+      settings JSONB DEFAULT '{}'::jsonb,
+      created_by UUID REFERENCES public.users(id),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE(agency_id, module)
+    );
+  `);
+
+  // Create indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_module_settings_agency_id ON public.module_settings(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_module_settings_module ON public.module_settings(module);
+  `);
+
+  // Create updated_at trigger
+  try {
+    const functionCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public' 
+        AND p.proname = 'update_updated_at_column'
+      );
+    `);
+    
+    if (functionCheck.rows[0].exists) {
+      await client.query(`
+        DROP TRIGGER IF EXISTS update_module_settings_updated_at ON public.module_settings;
+        CREATE TRIGGER update_module_settings_updated_at
+          BEFORE UPDATE ON public.module_settings
+          FOR EACH ROW
+          EXECUTE FUNCTION public.update_updated_at_column();
+      `);
+    }
+  } catch (error) {
+    console.warn('[SQL] ⚠️ Could not create trigger for module_settings:', error.message);
+  }
+}
+
+/**
  * Ensure all miscellaneous tables
  */
 async function ensureMiscSchema(client) {
@@ -769,6 +817,7 @@ async function ensureMiscSchema(client) {
   await ensureRoleChangeRequestsTable(client);
   await ensureFeatureFlagsTable(client);
   await ensureFileStorageTable(client);
+  await ensureModuleSettingsTable(client);
   
   // Document management tables
   await ensureDocumentFoldersTable(client);
@@ -790,6 +839,7 @@ module.exports = {
   ensureRoleChangeRequestsTable,
   ensureFeatureFlagsTable,
   ensureFileStorageTable,
+  ensureModuleSettingsTable,
   ensureDocumentFoldersTable,
   ensureDocumentsTable,
   ensureDocumentVersionsTable,

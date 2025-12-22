@@ -342,6 +342,8 @@ async function createAgency(agencyData) {
     industry,
     companySize,
     address,
+    business_goals,
+    page_ids,
   } = agencyData;
 
   // Validate required fields
@@ -403,6 +405,61 @@ async function createAgency(agencyData) {
   let agencyPool = null;
 
   try {
+    // Check domain availability BEFORE creating database
+    const domainAvailable = await checkDomainAvailability(domain);
+    if (!domainAvailable) {
+      // If the domain is already taken, treat this as an idempotent request:
+      // return the existing agency instead of throwing an error.
+      console.log(`[API] Domain "${domain}" is already registered. Returning existing agency (idempotent create).`);
+
+      // Try to find the existing agency by domain (supports full domain and subdomain-based patterns)
+      const subdomainForSearch = (domain || '').toLowerCase().trim().split('.')[0];
+      const existingAgencyResult = await mainClient.query(
+        `SELECT 
+           id, name, domain, database_name, owner_user_id, 
+           subscription_plan, max_users
+         FROM public.agencies
+         WHERE domain = $1
+            OR domain = $2
+            OR domain LIKE $3
+         ORDER BY created_at ASC
+         LIMIT 1`,
+        [
+          domain,
+          subdomainForSearch,
+          `${subdomainForSearch}.%`,
+        ]
+      );
+
+      if (existingAgencyResult.rows.length > 0) {
+        const existing = existingAgencyResult.rows[0];
+
+        console.log(
+          `[API] ✅ Using existing agency for domain "${domain}": ${existing.id} (db: ${existing.database_name})`
+        );
+
+        return {
+          agency: {
+            id: existing.id,
+            name: existing.name,
+            domain: existing.domain,
+            databaseName: existing.database_name,
+            subscriptionPlan: existing.subscription_plan,
+          },
+          admin: {
+            id: existing.owner_user_id,
+            email: adminEmail,
+            name: adminName,
+          },
+          reusedExisting: true,
+        };
+      }
+
+      // If for some reason the domain is reported as taken but no row is found,
+      // fall back to a clear error message.
+      throw new Error(`Domain "${domain}" is already taken. Please choose a different domain.`);
+    }
+
     // Connect to postgres database to create new database
     console.log(`[API] Connecting to PostgreSQL server to create database: ${dbName}`);
     postgresPool = new Pool({
@@ -770,8 +827,11 @@ async function createAgency(agencyData) {
     );
 
     // Update main database with agency info
-    await mainClient.query('BEGIN');
+    let transactionStarted = false;
     try {
+      await mainClient.query('BEGIN');
+      transactionStarted = true;
+      
       // Ensure columns exist
       await mainClient.query(`
         ALTER TABLE public.agencies 
@@ -782,17 +842,32 @@ async function createAgency(agencyData) {
         ADD COLUMN IF NOT EXISTS owner_user_id UUID
       `);
 
-      // Insert agency record
-      await mainClient.query(
-        `INSERT INTO public.agencies (
-          id, name, domain, database_name, owner_user_id,
-          is_active, subscription_plan, max_users
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (id) DO UPDATE SET
-          database_name = EXCLUDED.database_name,
-          owner_user_id = COALESCE(public.agencies.owner_user_id, EXCLUDED.owner_user_id)`,
-        [agencyId, agencyName, domain, dbName, adminUserId, true, subscriptionPlan, maxUsers]
-      );
+      // Insert agency record - handle conflicts on id and domain
+      try {
+        await mainClient.query(
+          `INSERT INTO public.agencies (
+            id, name, domain, database_name, owner_user_id,
+            is_active, subscription_plan, max_users
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (id) DO UPDATE SET
+            database_name = EXCLUDED.database_name,
+            owner_user_id = COALESCE(public.agencies.owner_user_id, EXCLUDED.owner_user_id)`,
+          [agencyId, agencyName, domain, dbName, adminUserId, true, subscriptionPlan, maxUsers]
+        );
+      } catch (insertError) {
+        // If domain conflict occurs, rollback and throw meaningful error
+        if (insertError.code === '23505' && (insertError.constraint === 'agencies_domain_key' || insertError.message.includes('agencies_domain_key'))) {
+          if (transactionStarted) {
+            try {
+              await mainClient.query('ROLLBACK');
+            } catch (rollbackError) {
+              console.error('[API] Error during rollback:', rollbackError.message);
+            }
+          }
+          throw new Error(`Domain "${domain}" is already registered. Please choose a different domain.`);
+        }
+        throw insertError;
+      }
 
       // Ensure agency_settings table exists with agency_id column and unique constraint
       await mainClient.query(`
@@ -920,12 +995,108 @@ async function createAgency(agencyData) {
       );
 
       await mainClient.query('COMMIT');
+      transactionStarted = false;
     } catch (error) {
-      await mainClient.query('ROLLBACK');
+      if (transactionStarted) {
+        try {
+          await mainClient.query('ROLLBACK');
+        } catch (rollbackError) {
+          console.error('[API] Error during rollback:', rollbackError.message);
+        }
+      }
       throw error;
     }
 
     console.log(`[API] Agency created successfully: ${agencyName} (${domain}) - Database: ${dbName}`);
+
+    // Assign pages to agency (if provided or use recommendations)
+    try {
+      const { getRecommendedPages } = require('../services/pageRecommendationService');
+      
+      // Get page IDs to assign
+      let pageIdsToAssign = [];
+      
+      // If page_ids provided, use them
+      if (agencyData.page_ids && Array.isArray(agencyData.page_ids) && agencyData.page_ids.length > 0) {
+        pageIdsToAssign = [...agencyData.page_ids];
+        console.log(`[API] Using ${pageIdsToAssign.length} provided page IDs`);
+      }
+      
+      // If business_goals provided, also get recommendations and merge
+      if (agencyData.business_goals && (industry || companySize || primaryFocus)) {
+        const criteria = {
+          industry: industry || '',
+          companySize: companySize || '',
+          primaryFocus: primaryFocus || '',
+          businessGoals: Array.isArray(agencyData.business_goals) ? agencyData.business_goals : [agencyData.business_goals]
+        };
+        
+        const recommendations = await getRecommendedPages(criteria);
+        const recommendedPageIds = recommendations.all
+          .filter(p => p.rules.some(r => r.is_required) || p.score >= 10)
+          .map(p => p.id);
+        
+        // Merge: combine provided page_ids with recommended required pages
+        pageIdsToAssign = [...new Set([...pageIdsToAssign, ...recommendedPageIds])];
+        console.log(`[API] After recommendations: ${pageIdsToAssign.length} total pages to assign`);
+      }
+      
+      // If no pages selected and no recommendations, assign all active pages (backward compatibility)
+      if (pageIdsToAssign.length === 0) {
+        const allPagesResult = await mainClient.query(
+          `SELECT id FROM public.page_catalog WHERE is_active = true`
+        );
+        pageIdsToAssign = allPagesResult.rows.map(r => r.id);
+        console.log(`[API] No pages specified, assigning all ${pageIdsToAssign.length} active pages (backward compatibility)`);
+      }
+      
+      // Assign pages
+      if (pageIdsToAssign.length > 0) {
+        const placeholders = pageIdsToAssign.map((_, i) => `$${i + 1}`).join(',');
+        const pageCheck = await mainClient.query(
+          `SELECT id FROM public.page_catalog WHERE id IN (${placeholders}) AND is_active = true`,
+          pageIdsToAssign
+        );
+        
+        const validPageIds = pageCheck.rows.map(r => r.id);
+        
+        if (validPageIds.length > 0) {
+          /**
+           * IMPORTANT:
+           * ----------
+           * The agency_page_assignments.assigned_by column has a foreign key
+           * constraint to public.users.id in the MAIN database (where super admin
+           * and staff users live), not the isolated agency database.
+           *
+           * During agency onboarding we are creating the FIRST admin user inside
+           * the isolated agency database only, so adminUserId does NOT exist in
+           * public.users yet. Using it here causes a foreign key violation like:
+           *
+           *   insert or update on table "agency_page_assignments"
+           *   violates foreign key constraint "agency_page_assignments_assigned_by_fkey"
+           *
+           * To avoid this, we set assigned_by to NULL for these initial automatic
+           * assignments. Later manual assignments (via the page catalog routes)
+           * correctly use req.user.userId from the main users table.
+           */
+          for (const pageId of validPageIds) {
+            await mainClient.query(
+              `INSERT INTO public.agency_page_assignments 
+               (agency_id, page_id, assigned_by, status)
+               VALUES ($1, $2, $3, 'active')
+               ON CONFLICT (agency_id, page_id) 
+               DO UPDATE SET status = 'active', updated_at = now()`,
+              [agencyId, pageId, null] // assigned_by must reference main DB users; null is safe for system assignments
+            );
+          }
+          console.log(`[API] ✅ Assigned ${validPageIds.length} pages to agency`);
+        }
+      }
+    } catch (pageError) {
+      // Log but don't fail agency creation if page assignment fails
+      console.warn(`[API] ⚠️ Page assignment failed (non-fatal): ${pageError.message}`);
+      console.error(pageError);
+    }
 
     return {
       agency: {
@@ -943,11 +1114,29 @@ async function createAgency(agencyData) {
     };
   } catch (error) {
     console.error(`[API] ❌ Agency creation failed: ${error.message}`);
-    console.error(`[API] Error stack:`, error.stack);
+    console.error(`[API] Error code: ${error.code}, constraint: ${error.constraint}`);
+    if (error.stack) {
+      console.error(`[API] Error stack:`, error.stack);
+    }
     
-    // Rollback: drop database if creation failed
-    if (dbName) {
+    // Rollback: drop database if creation failed (but not for domain conflicts - those are expected)
+    if (dbName && error.code !== '23505') {
       try {
+        // Release any existing connections first
+        if (agencyDbClient) {
+          try {
+            agencyDbClient.release();
+          } catch {}
+        }
+        if (agencyPool) {
+          try {
+            await agencyPool.end();
+          } catch {}
+        }
+        
+        // Wait a moment for connections to close
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
         // Try to get a fresh connection to postgres to drop the database
         const cleanupPool = new Pool({
           host,
@@ -958,12 +1147,16 @@ async function createAgency(agencyData) {
         });
         const cleanupClient = await cleanupPool.connect();
         
-        // Terminate all connections to the database first
-        await cleanupClient.query(`
-          SELECT pg_terminate_backend(pid)
-          FROM pg_stat_activity
-          WHERE datname = $1 AND pid <> pg_backend_pid()
-        `, [dbName]);
+        // Terminate all connections to the database first (except our own)
+        try {
+          await cleanupClient.query(`
+            SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+            WHERE datname = $1 AND pid <> pg_backend_pid()
+          `, [dbName]);
+        } catch (terminateError) {
+          console.warn(`[API] Could not terminate connections: ${terminateError.message}`);
+        }
         
         // Wait a moment for connections to close
         await new Promise(resolve => setTimeout(resolve, 500));

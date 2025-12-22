@@ -29,6 +29,7 @@ const systemHealthRoutes = require('./routes/systemHealth');
 const backupRoutes = require('./routes/backups');
 const inventoryRoutes = require('./routes/inventory');
 const procurementRoutes = require('./routes/procurement');
+const assetsRoutes = require('./routes/assets');
 const currencyRoutes = require('./routes/currency');
 const financialRoutes = require('./routes/financial');
 const advancedReportsRoutes = require('./routes/advancedReports');
@@ -44,6 +45,10 @@ const apiKeysRoutes = require('./routes/apiKeys');
 const sessionManagementRoutes = require('./routes/sessionManagement');
 const emailRoutes = require('./routes/email');
 const messagingRoutes = require('./routes/messaging');
+const workflowsRoutes = require('./routes/workflows');
+const integrationsRoutes = require('./routes/integrations');
+const settingsRoutes = require('./routes/settings');
+const pageCatalogRoutes = require('./routes/pageCatalog');
 
 // Create Express app
 const app = express();
@@ -69,6 +74,7 @@ app.use('/api/system-health', systemHealthRoutes);
 app.use('/api/backups', backupRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/procurement', procurementRoutes);
+app.use('/api/assets', assetsRoutes);
 app.use('/api/currency', currencyRoutes);
 app.use('/api/financial', financialRoutes);
 app.use('/api/advanced-reports', advancedReportsRoutes);
@@ -84,6 +90,10 @@ app.use('/api/api-keys', apiKeysRoutes);
 app.use('/api/sessions', sessionManagementRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/messaging', messagingRoutes);
+app.use('/api/workflows', workflowsRoutes);
+app.use('/api/integrations', integrationsRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/system/page-catalog', pageCatalogRoutes);
 
 // Global error handler (must be last)
 app.use(errorHandler);

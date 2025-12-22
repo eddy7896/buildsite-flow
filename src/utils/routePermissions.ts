@@ -123,6 +123,12 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     allowHigherRoles: false,
     description: 'User settings'
   },
+  '/page-requests': { 
+    path: '/page-requests', 
+    requiredRoles: [], 
+    allowHigherRoles: false,
+    description: 'Request additional pages for your agency'
+  },
 
   // HR Management
   '/attendance': { 
@@ -389,6 +395,242 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     allowHigherRoles: false,
     description: 'Notifications'
   },
+
+  // Inventory sub-pages
+  '/inventory/products': {
+    path: '/inventory/products',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Product catalog management'
+  },
+  '/inventory/bom': {
+    path: '/inventory/bom',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Bill of Materials management'
+  },
+  '/inventory/serial-batch': {
+    path: '/inventory/serial-batch',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Serial numbers and batch tracking'
+  },
+  '/inventory/reports': {
+    path: '/inventory/reports',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Inventory reports and analytics'
+  },
+  '/inventory/settings': {
+    path: '/inventory/settings',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Inventory module settings'
+  },
+  '/reports/dashboard': {
+    path: '/reports/dashboard',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Advanced reporting dashboard'
+  },
+  '/reports/custom': {
+    path: '/reports/custom',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Custom report builder'
+  },
+  '/reports/scheduled': {
+    path: '/reports/scheduled',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Scheduled reports management'
+  },
+  '/reports/exports': {
+    path: '/reports/exports',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Report exports management'
+  },
+  '/reports/analytics': {
+    path: '/reports/analytics',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Analytics dashboard for reporting'
+  },
+  '/inventory/warehouses': {
+    path: '/inventory/warehouses',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Warehouse management'
+  },
+  '/inventory/stock-levels': {
+    path: '/inventory/stock-levels',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Stock levels and inventory tracking'
+  },
+  '/inventory/transfers': {
+    path: '/inventory/transfers',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Inter-warehouse inventory transfers'
+  },
+  '/inventory/adjustments': {
+    path: '/inventory/adjustments',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Inventory adjustments and corrections'
+  },
+  '/procurement/vendors': {
+    path: '/procurement/vendors',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Vendor and supplier management'
+  },
+  '/procurement/purchase-orders': {
+    path: '/procurement/purchase-orders',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Purchase order management'
+  },
+  '/procurement/requisitions': {
+    path: '/procurement/requisitions',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Purchase requisition management'
+  },
+  '/procurement/goods-receipts': {
+    path: '/procurement/goods-receipts',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Goods receipt note (GRN) management'
+  },
+  '/procurement/rfq': {
+    path: '/procurement/rfq',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'RFQ/RFP management'
+  },
+  '/procurement/vendor-contracts': {
+    path: '/procurement/vendor-contracts',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Vendor contracts management'
+  },
+  '/procurement/vendor-performance': {
+    path: '/procurement/vendor-performance',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Vendor performance tracking'
+  },
+  '/procurement/reports': {
+    path: '/procurement/reports',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Procurement reports and analytics'
+  },
+  '/procurement/settings': {
+    path: '/procurement/settings',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Procurement module settings'
+  },
+  '/assets': {
+    path: '/assets',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Asset management'
+  },
+  '/assets/categories': {
+    path: '/assets/categories',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Asset category management'
+  },
+  '/assets/locations': {
+    path: '/assets/locations',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Asset location management'
+  },
+  '/assets/maintenance': {
+    path: '/assets/maintenance',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Asset maintenance tracking'
+  },
+  '/assets/depreciation': {
+    path: '/assets/depreciation',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Asset depreciation tracking'
+  },
+  '/assets/disposals': {
+    path: '/assets/disposals',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Asset disposal management'
+  },
+  '/assets/reports': {
+    path: '/assets/reports',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Asset reports and analytics'
+  },
+  '/assets/settings': {
+    path: '/assets/settings',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Asset management settings'
+  },
+  '/workflows': {
+    path: '/workflows',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Workflow engine management'
+  },
+  '/workflows/instances': {
+    path: '/workflows/instances',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Workflow instance tracking'
+  },
+  '/workflows/approvals': {
+    path: '/workflows/approvals',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Workflow approval queue'
+  },
+  '/workflows/automation': {
+    path: '/workflows/automation',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Workflow automation rules'
+  },
+  '/workflows/settings': {
+    path: '/workflows/settings',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Workflow engine settings'
+  },
+  '/workflows/builder': {
+    path: '/workflows/builder',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Visual workflow builder'
+  },
+  '/integrations': {
+    path: '/integrations',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Integration hub management'
+  },
+  '/integrations/settings': {
+    path: '/integrations/settings',
+    requiredRoles: ['admin'],
+    allowHigherRoles: true,
+    description: 'Integration hub settings'
+  },
 };
 
 /**
@@ -418,8 +660,72 @@ export function getRequiredRolesForRoute(path: string): AppRole[] {
 
 /**
  * Check if a user role can access a route
+ * Now also checks agency page assignments for non-super-admin users
  */
-export function canAccessRoute(userRole: AppRole | null, routePath: string): boolean {
+export async function canAccessRoute(userRole: AppRole | null, routePath: string): Promise<boolean> {
+  if (!userRole) {
+    return false;
+  }
+
+  // Super admin always has access to all routes
+  if (userRole === 'super_admin') {
+    return true;
+  }
+
+  // Check page assignments for non-super-admin users
+  try {
+    const { hasPageAccess } = await import('./agencyPageAccess');
+    const hasAccess = await hasPageAccess(routePath);
+    if (!hasAccess) {
+      return false; // Agency doesn't have this page assigned
+    }
+  } catch (error) {
+    console.warn('Error checking page access, falling back to role check:', error);
+    // Fall through to role-based check if page access check fails
+  }
+
+  const permission = ROUTE_PERMISSIONS[routePath];
+  
+  // If route not found, try parameterized matching
+  let routePermission: RoutePermission | undefined = permission;
+  if (!routePermission) {
+    for (const [routePathPattern, perm] of Object.entries(ROUTE_PERMISSIONS)) {
+      const pattern = routePathPattern.replace(/:[^/]+/g, '[^/]+');
+      const regex = new RegExp(`^${pattern}$`);
+      if (regex.test(routePath)) {
+        routePermission = perm;
+        break;
+      }
+    }
+  }
+
+  // If still not found, default to requiring authentication (which we have)
+  if (!routePermission) {
+    return true; // Authenticated users can access unknown routes (if page is assigned)
+  }
+
+  // If no roles required, all authenticated users can access
+  if (routePermission.requiredRoles.length === 0) {
+    return true;
+  }
+
+  // Check if user's role is in the required roles
+  if (routePermission.requiredRoles.includes(userRole)) {
+    return true;
+  }
+
+  // Check if higher roles can access
+  if (routePermission.allowHigherRoles) {
+    return routePermission.requiredRoles.some(role => hasRoleOrHigher(userRole, role));
+  }
+
+  return false;
+}
+
+/**
+ * Synchronous version for backward compatibility (checks role only, not page assignments)
+ */
+export function canAccessRouteSync(userRole: AppRole | null, routePath: string): boolean {
   if (!userRole) {
     return false;
   }

@@ -15,15 +15,23 @@ export const PageHeader = ({
   className 
 }: PageHeaderProps) => {
   return (
-    <div className={cn("flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between", className)}>
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+    <div className={cn(
+      "flex flex-col gap-4 mb-6",
+      "lg:flex-row lg:items-start lg:justify-between lg:gap-6",
+      className
+    )}>
+      <div className="space-y-1.5 min-w-0 flex-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {title}
+        </h1>
         {description && (
-          <p className="text-muted-foreground">{description}</p>
+          <p className="text-sm text-muted-foreground leading-normal">
+            {description}
+          </p>
         )}
       </div>
       {actions && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {actions}
         </div>
       )}

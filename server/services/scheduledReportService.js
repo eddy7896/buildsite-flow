@@ -258,10 +258,351 @@ function initializeScheduledReports() {
   console.log('[Scheduled Reports] ✅ Scheduler initialized');
 }
 
+/**
+ * Get all report schedules for an agency
+ */
+async function getReportSchedules(agencyDatabase, agencyId, filters = {}) {
+  const client = await getAgencyConnection(agencyDatabase);
+  try {
+    let query = `
+      SELECT 
+        rs.*,
+        u.email as created_by_email
+      FROM public.report_schedules rs
+      LEFT JOIN public.users u ON rs.created_by = u.id
+      WHERE rs.agency_id = $1
+    `;
+    const params = [agencyId];
+    let paramIndex = 2;
+
+    if (filters.report_type) {
+      query += ` AND rs.report_template_id IN (
+        SELECT id FROM public.custom_reports WHERE report_type = $${paramIndex}
+      )`;
+      params.push(filters.report_type);
+      paramIndex++;
+    }
+
+    if (filters.is_active !== undefined) {
+      query += ` AND rs.is_active = $${paramIndex}`;
+      params.push(filters.is_active);
+      paramIndex++;
+    }
+
+    if (filters.search) {
+      query += ` AND (rs.schedule_name ILIKE $${paramIndex} OR rs.description ILIKE $${paramIndex})`;
+      params.push(`%${filters.search}%`);
+      paramIndex++;
+    }
+
+    query += ' ORDER BY rs.created_at DESC';
+
+    const result = await client.query(query, params);
+    return result.rows;
+  } catch (error) {
+    console.error('[Scheduled Report Service] Error fetching schedules:', error);
+    if (error.code === '42P01' || error.message.includes('does not exist')) {
+      return [];
+    }
+    throw error;
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error releasing client:', err);
+      }
+    }
+    if (client && client.pool) {
+      try {
+        await client.pool.end();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error ending pool:', err);
+      }
+    }
+  }
+}
+
+/**
+ * Get report schedule by ID
+ */
+async function getReportScheduleById(agencyDatabase, agencyId, scheduleId) {
+  const client = await getAgencyConnection(agencyDatabase);
+  try {
+    const result = await client.query(
+      `SELECT 
+        rs.*,
+        u.email as created_by_email
+      FROM public.report_schedules rs
+      LEFT JOIN public.users u ON rs.created_by = u.id
+      WHERE rs.id = $1 AND rs.agency_id = $2`,
+      [scheduleId, agencyId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Report schedule not found');
+    }
+
+    return result.rows[0];
+  } catch (error) {
+    console.error('[Scheduled Report Service] Error fetching schedule:', error);
+    throw error;
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error releasing client:', err);
+      }
+    }
+    if (client && client.pool) {
+      try {
+        await client.pool.end();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error ending pool:', err);
+      }
+    }
+  }
+}
+
+/**
+ * Update report schedule
+ */
+async function updateReportSchedule(agencyDatabase, agencyId, scheduleId, scheduleData, userId) {
+  const client = await getAgencyConnection(agencyDatabase);
+  try {
+    const updates = [];
+    const values = [];
+    let paramIndex = 1;
+
+    const allowedFields = [
+      'schedule_name', 'schedule_type', 'cron_expression', 'day_of_week',
+      'day_of_month', 'time', 'recipients', 'format', 'filters', 'is_active'
+    ];
+
+    for (const field of allowedFields) {
+      if (scheduleData[field] !== undefined) {
+        if (field === 'recipients' || field === 'filters') {
+          updates.push(`${field} = $${paramIndex}::jsonb`);
+          values.push(JSON.stringify(scheduleData[field]));
+        } else {
+          updates.push(`${field} = $${paramIndex}`);
+          values.push(scheduleData[field]);
+        }
+        paramIndex++;
+      }
+    }
+
+    if (updates.length === 0) {
+      throw new Error('No valid fields to update');
+    }
+
+    // Recalculate next run if schedule changed
+    if (scheduleData.schedule_type || scheduleData.cron_expression || scheduleData.day_of_week || scheduleData.day_of_month || scheduleData.time) {
+      const currentSchedule = await getReportScheduleById(agencyDatabase, agencyId, scheduleId);
+      const nextRun = calculateNextRun({ ...currentSchedule, ...scheduleData });
+      updates.push(`next_run_at = $${paramIndex}`);
+      values.push(nextRun);
+      paramIndex++;
+    }
+
+    updates.push(`updated_at = NOW()`);
+    values.push(scheduleId, agencyId);
+
+    const query = `
+      UPDATE public.report_schedules 
+      SET ${updates.join(', ')}
+      WHERE id = $${paramIndex} AND agency_id = $${paramIndex + 1}
+      RETURNING *
+    `;
+
+    const result = await client.query(query, values);
+
+    if (result.rows.length === 0) {
+      throw new Error('Report schedule not found');
+    }
+
+    return result.rows[0];
+  } catch (error) {
+    console.error('[Scheduled Report Service] Error updating schedule:', error);
+    throw error;
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error releasing client:', err);
+      }
+    }
+    if (client && client.pool) {
+      try {
+        await client.pool.end();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error ending pool:', err);
+      }
+    }
+  }
+}
+
+/**
+ * Delete report schedule
+ */
+async function deleteReportSchedule(agencyDatabase, agencyId, scheduleId) {
+  const client = await getAgencyConnection(agencyDatabase);
+  try {
+    const result = await client.query(
+      'DELETE FROM public.report_schedules WHERE id = $1 AND agency_id = $2 RETURNING *',
+      [scheduleId, agencyId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Report schedule not found');
+    }
+
+    return result.rows[0];
+  } catch (error) {
+    console.error('[Scheduled Report Service] Error deleting schedule:', error);
+    throw error;
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error releasing client:', err);
+      }
+    }
+    if (client && client.pool) {
+      try {
+        await client.pool.end();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error ending pool:', err);
+      }
+    }
+  }
+}
+
+/**
+ * Get report exports
+ */
+async function getReportExports(agencyDatabase, agencyId, filters = {}) {
+  const client = await getAgencyConnection(agencyDatabase);
+  try {
+    let query = `
+      SELECT 
+        re.*,
+        u.email as generated_by_email
+      FROM public.report_executions re
+      LEFT JOIN public.users u ON re.generated_by = u.id
+      WHERE re.agency_id = $1
+    `;
+    const params = [agencyId];
+    let paramIndex = 2;
+
+    if (filters.status) {
+      query += ` AND re.status = $${paramIndex}`;
+      params.push(filters.status);
+      paramIndex++;
+    }
+
+    if (filters.format) {
+      query += ` AND re.format = $${paramIndex}`;
+      params.push(filters.format);
+      paramIndex++;
+    }
+
+    if (filters.date_from) {
+      query += ` AND re.generated_at >= $${paramIndex}::date`;
+      params.push(filters.date_from);
+      paramIndex++;
+    }
+
+    if (filters.date_to) {
+      query += ` AND re.generated_at <= $${paramIndex}::date`;
+      params.push(filters.date_to);
+      paramIndex++;
+    }
+
+    if (filters.search) {
+      query += ` AND (re.name ILIKE $${paramIndex} OR re.report_type ILIKE $${paramIndex})`;
+      params.push(`%${filters.search}%`);
+      paramIndex++;
+    }
+
+    query += ' ORDER BY re.generated_at DESC LIMIT 100';
+
+    const result = await client.query(query, params);
+    return result.rows;
+  } catch (error) {
+    console.error('[Scheduled Report Service] Error fetching exports:', error);
+    if (error.code === '42P01' || error.message.includes('does not exist')) {
+      return [];
+    }
+    throw error;
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error releasing client:', err);
+      }
+    }
+    if (client && client.pool) {
+      try {
+        await client.pool.end();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error ending pool:', err);
+      }
+    }
+  }
+}
+
+/**
+ * Delete report export
+ */
+async function deleteReportExport(agencyDatabase, agencyId, exportId) {
+  const client = await getAgencyConnection(agencyDatabase);
+  try {
+    const result = await client.query(
+      'DELETE FROM public.report_executions WHERE id = $1 AND agency_id = $2 RETURNING *',
+      [exportId, agencyId]
+    );
+
+    if (result.rows.length === 0) {
+      throw new Error('Report export not found');
+    }
+
+    return result.rows[0];
+  } catch (error) {
+    console.error('[Scheduled Report Service] Error deleting export:', error);
+    throw error;
+  } finally {
+    if (client) {
+      try {
+        client.release();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error releasing client:', err);
+      }
+    }
+    if (client && client.pool) {
+      try {
+        await client.pool.end();
+      } catch (err) {
+        console.error('[Scheduled Report Service] Error ending pool:', err);
+      }
+    }
+  }
+}
+
 module.exports = {
   createReportSchedule,
+  getReportSchedules,
+  getReportScheduleById,
+  updateReportSchedule,
+  deleteReportSchedule,
   executeScheduledReport,
   getSchedulesDue,
   initializeScheduledReports,
   calculateNextRun,
+  getReportExports,
+  deleteReportExport,
 };

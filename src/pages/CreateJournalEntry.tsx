@@ -395,7 +395,7 @@ const CreateJournalEntry = () => {
   }
 
   return (
-    <div className="p-4 lg:p-6 max-w-6xl mx-auto">
+    <div className="container mx-auto p-6 space-y-6">
       <div className="mb-6">
         <Button
           variant="ghost"

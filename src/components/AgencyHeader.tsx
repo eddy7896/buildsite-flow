@@ -263,12 +263,12 @@ export const AgencyHeader = () => {
 
   return (
     <TooltipProvider>
-      <div className="flex items-center justify-between w-full gap-2 sm:gap-4 min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full gap-2 sm:gap-3 md:gap-4 min-w-0">
         {/* Left Section: Enhanced Breadcrumbs with Page Context */}
         <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0 overflow-hidden">
           {/* Current Page Icon & Title */}
           <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
-            <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/10 flex items-center justify-center flex-shrink-0">
+            <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
               <CurrentPageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
             </div>
             <div className="flex flex-col min-w-0">
@@ -363,7 +363,7 @@ export const AgencyHeader = () => {
         )}
 
         {/* Right Section: Actions */}
-        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 sm:mt-0 mt-1">
           {/* Global Search */}
           <Tooltip>
             <TooltipTrigger asChild>

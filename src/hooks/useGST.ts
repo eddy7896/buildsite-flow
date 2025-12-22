@@ -16,7 +16,7 @@ export const useGST = () => {
   const { user, profile, loading: authLoading } = useAuth();
 
   const fetchSettings = async () => {
-    if (!user || !profile?.agency_id) {
+    if (!user) {
       return;
     }
 
@@ -43,7 +43,7 @@ export const useGST = () => {
   };
 
   const fetchReturns = async () => {
-    if (!user || !profile?.agency_id) {
+    if (!user) {
       return;
     }
 
@@ -75,7 +75,7 @@ export const useGST = () => {
     end_date?: string;
     invoice_number?: string;
   }) => {
-    if (!user || !profile?.agency_id) {
+    if (!user) {
       return;
     }
 
@@ -102,7 +102,7 @@ export const useGST = () => {
   };
 
   const fetchLiability = async (startDate: string, endDate: string) => {
-    if (!user || !profile?.agency_id) {
+    if (!user) {
       return;
     }
 
@@ -143,10 +143,10 @@ export const useGST = () => {
   };
 
   const saveSettings = async (settingsData: Omit<GSTSettings, 'id' | 'agency_id' | 'created_at' | 'updated_at'>) => {
-    if (!user || !profile?.agency_id) {
+    if (!user) {
       toast({
         title: "Error",
-        description: "User not authenticated or no agency found",
+        description: "User not authenticated",
         variant: "destructive"
       });
       return;
@@ -185,10 +185,10 @@ export const useGST = () => {
   };
 
   const createTransaction = async (transaction: Omit<GSTTransaction, 'id' | 'agency_id' | 'created_at' | 'updated_at'>) => {
-    if (!user || !profile?.agency_id) {
+    if (!user) {
       toast({
         title: "Error",
-        description: "User not authenticated or no agency found",
+        description: "User not authenticated",
         variant: "destructive"
       });
       return;
@@ -222,10 +222,10 @@ export const useGST = () => {
   };
 
   const updateTransaction = async (transactionId: string, transaction: Partial<Omit<GSTTransaction, 'id' | 'agency_id' | 'created_at'>>) => {
-    if (!user || !profile?.agency_id) {
+    if (!user) {
       toast({
         title: "Error",
-        description: "User not authenticated or no agency found",
+        description: "User not authenticated",
         variant: "destructive"
       });
       return;
@@ -259,10 +259,10 @@ export const useGST = () => {
   };
 
   const deleteTransaction = async (transactionId: string) => {
-    if (!user || !profile?.agency_id) {
+    if (!user) {
       toast({
         title: "Error",
-        description: "User not authenticated or no agency found",
+        description: "User not authenticated",
         variant: "destructive"
       });
       return;
@@ -295,10 +295,10 @@ export const useGST = () => {
   };
 
   const generateReturn = async (returnType: 'GSTR1' | 'GSTR3B' | 'GSTR9' | 'GSTR4', filingPeriod: string) => {
-    if (!user || !profile?.agency_id) {
+    if (!user) {
       toast({
         title: "Error",
-        description: "User not authenticated or no agency found",
+        description: "User not authenticated",
         variant: "destructive"
       });
       return;
@@ -332,10 +332,10 @@ export const useGST = () => {
   };
 
   const updateReturn = async (returnId: string, gstReturn: Partial<Omit<GSTReturn, 'id' | 'agency_id' | 'created_at'>>) => {
-    if (!user || !profile?.agency_id) {
+    if (!user) {
       toast({
         title: "Error",
-        description: "User not authenticated or no agency found",
+        description: "User not authenticated",
         variant: "destructive"
       });
       return;
@@ -371,8 +371,11 @@ export const useGST = () => {
   const [hasFetched, setHasFetched] = useState(false);
   
   useEffect(() => {
-    // Only fetch data ONCE when user is authenticated and profile is loaded
-    if (!authLoading && user && profile?.agency_id && !hasFetched) {
+    // Only fetch data ONCE when user is authenticated (with or without agency_id for super_admin)
+    const hasAgencyContext = typeof window !== 'undefined' && localStorage.getItem('agency_database');
+    const canFetch = user && (profile?.agency_id || hasAgencyContext);
+    
+    if (!authLoading && canFetch && !hasFetched) {
       setHasFetched(true);
       
       // Use a delay to batch requests
@@ -385,6 +388,14 @@ export const useGST = () => {
       return () => clearTimeout(timeoutId);
     }
   }, [user?.id, profile?.agency_id, authLoading, hasFetched]); // Track if we've already fetched
+
+  // For super_admin, check if they have agency_database context instead of agency_id
+  const hasAgencyContext = typeof window !== 'undefined' && localStorage.getItem('agency_database');
+  
+  // Allow access if:
+  // 1. User is authenticated AND has agency_id in profile, OR
+  // 2. User is authenticated AND has agency_database context (for super_admin)
+  const isAuthenticated = !!user && (!!profile?.agency_id || !!hasAgencyContext);
 
   return {
     settings,
@@ -402,6 +413,6 @@ export const useGST = () => {
     deleteTransaction,
     generateReturn,
     updateReturn,
-    isAuthenticated: !!user && !!profile?.agency_id
+    isAuthenticated
   };
 };

@@ -28,6 +28,9 @@ const { ensureReportingSchema } = require('./schema/reportingSchema');
 const { ensureWebhooksSchema } = require('./schema/webhooksSchema');
 const { ensureProjectEnhancementsSchema } = require('./schema/projectEnhancementsSchema');
 const { ensureSSOSchema } = require('./schema/ssoSchema');
+const { ensureAssetManagementSchema } = require('./schema/assetManagementSchema');
+const { ensureWorkflowSchema } = require('./schema/workflowSchema');
+const { ensureIntegrationHubSchema } = require('./schema/integrationHubSchema');
 const { ensureIndexesAndFixes } = require('./schema/indexesAndFixes');
 const { quickSyncSchema } = require('./schemaSyncService');
 
@@ -177,6 +180,69 @@ async function createAgencySchema(client) {
     console.log('[SQL] Step 12/19: Ensuring procurement management schema...');
     await ensureProcurementSchema(client);
 
+    // Step 12.5: Add foreign key constraints that depend on procurement tables
+    console.log('[SQL] Step 12.5/19: Adding procurement foreign key constraints to inventory tables...');
+    try {
+      // Add purchase_orders FK to serial_numbers if not exists
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'purchase_orders'
+          ) AND EXISTS (
+            SELECT 1 FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'serial_numbers'
+          ) THEN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.table_constraints 
+              WHERE constraint_schema = 'public' 
+              AND table_name = 'serial_numbers' 
+              AND constraint_name = 'serial_numbers_purchase_order_id_fkey'
+            ) THEN
+              ALTER TABLE public.serial_numbers 
+              ADD CONSTRAINT serial_numbers_purchase_order_id_fkey 
+              FOREIGN KEY (purchase_order_id) 
+              REFERENCES public.purchase_orders(id);
+            END IF;
+          END IF;
+        END $$;
+      `);
+
+      // Add purchase_orders FK to batches if not exists
+      await client.query(`
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'purchase_orders'
+          ) AND EXISTS (
+            SELECT 1 FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'batches'
+          ) THEN
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.table_constraints 
+              WHERE constraint_schema = 'public' 
+              AND table_name = 'batches' 
+              AND constraint_name = 'batches_purchase_order_id_fkey'
+            ) THEN
+              ALTER TABLE public.batches 
+              ADD CONSTRAINT batches_purchase_order_id_fkey 
+              FOREIGN KEY (purchase_order_id) 
+              REFERENCES public.purchase_orders(id);
+            END IF;
+          END IF;
+        END $$;
+      `);
+      console.log('[SQL] ✅ Procurement foreign key constraints added to inventory tables');
+    } catch (error) {
+      console.warn('[SQL] ⚠️  Warning adding procurement FKs (non-fatal):', error.message);
+    }
+
     // Step 13: Financial Enhancements (depends on chart_of_accounts)
     console.log('[SQL] Step 13/19: Ensuring financial enhancements schema...');
     await ensureFinancialSchema(client);
@@ -207,21 +273,33 @@ async function createAgencySchema(client) {
     await ensureMiscSchema(client);
 
     // Step 18.5: Messaging (depends on users, agencies)
-    console.log('[SQL] Step 18.5/21: Ensuring messaging schema...');
+    console.log('[SQL] Step 18.5/22: Ensuring messaging schema...');
     await ensureMessagingSchema(client);
 
-    // Step 18.6: Create unified_employees view (depends on users, profiles, employee_details, user_roles)
-    console.log('[SQL] Step 18.6/21: Ensuring unified_employees view...');
+    // Step 18.6: Asset Management (depends on suppliers, users, departments)
+    console.log('[SQL] Step 18.6/22: Ensuring asset management schema...');
+    await ensureAssetManagementSchema(client);
+
+    // Step 18.7: Workflow Engine (depends on users)
+    console.log('[SQL] Step 18.7/22: Ensuring workflow engine schema...');
+    await ensureWorkflowSchema(client);
+
+    // Step 18.8: Integration Hub (depends on users, webhooks)
+    console.log('[SQL] Step 18.8/22: Ensuring integration hub schema...');
+    await ensureIntegrationHubSchema(client);
+
+    // Step 18.9: Create unified_employees view (depends on users, profiles, employee_details, user_roles)
+    console.log('[SQL] Step 18.9/22: Ensuring unified_employees view...');
     const { ensureUnifiedEmployeesView } = require('./schema/sharedFunctions');
     await ensureUnifiedEmployeesView(client);
     console.log('[SQL] ✅ unified_employees view verified');
 
     // Step 19: Indexes and backward compatibility fixes
-    console.log('[SQL] Step 19/21: Ensuring indexes and backward compatibility fixes...');
+    console.log('[SQL] Step 19/22: Ensuring indexes and backward compatibility fixes...');
     await ensureIndexesAndFixes(client);
 
     // Step 20: Updated_at triggers for all tables with updated_at column
-    console.log('[SQL] Step 20/21: Ensuring updated_at triggers...');
+    console.log('[SQL] Step 20/22: Ensuring updated_at triggers...');
     const tablesWithUpdatedAt = [
       'chart_of_accounts', 'quotations', 'quotation_templates', 'quotation_line_items',
       'tasks', 'task_assignments', 'task_comments', 'task_time_tracking',
@@ -234,7 +312,10 @@ async function createAgencySchema(client) {
       'company_events', 'holidays', 'calendar_settings',
       'team_members', 'custom_reports', 'role_change_requests', 'feature_flags',
       'permissions', 'role_permissions', 'user_preferences',
-      'message_channels', 'message_threads', 'messages', 'message_drafts'
+      'message_channels', 'message_threads', 'messages', 'message_drafts',
+      'asset_categories', 'asset_locations', 'assets', 'asset_depreciation', 'asset_maintenance', 'asset_disposals',
+      'workflows', 'workflow_steps', 'workflow_instances', 'workflow_approvals', 'automation_rules',
+      'integrations', 'integration_logs', 'api_keys'
     ];
 
     await ensureUpdatedAtTriggers(client, tablesWithUpdatedAt);

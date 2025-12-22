@@ -27,29 +27,59 @@ function parseTableColumns(createTableSql) {
   const tableMatch = createTableSql.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:public\.)?\w+\s*\(([\s\S]+)\)/i);
   if (!tableMatch) return columns;
   
-  const columnDefinitions = tableMatch[1];
+  let columnDefinitions = tableMatch[1];
+  
+  // Remove SQL comments (-- style comments)
+  // Handle both single-line and multi-line comments
+  columnDefinitions = columnDefinitions.replace(/--[^\r\n]*/g, '');
+  columnDefinitions = columnDefinitions.replace(/\/\*[\s\S]*?\*\//g, '');
   
   // Split by comma, but be careful with nested parentheses (for constraints, etc.)
   const parts = [];
   let current = '';
   let depth = 0;
+  let inString = false;
+  let stringChar = null;
   
   for (let i = 0; i < columnDefinitions.length; i++) {
     const char = columnDefinitions[i];
-    if (char === '(') depth++;
-    else if (char === ')') depth--;
-    else if (char === ',' && depth === 0) {
-      parts.push(current.trim());
-      current = '';
-      continue;
+    
+    // Handle string literals
+    if (!inString && (char === "'" || char === '"')) {
+      inString = true;
+      stringChar = char;
+    } else if (inString && char === stringChar) {
+      // Check for escaped quotes
+      if (i === 0 || columnDefinitions[i - 1] !== '\\') {
+        inString = false;
+        stringChar = null;
+      }
+    }
+    
+    if (!inString) {
+      if (char === '(') depth++;
+      else if (char === ')') depth--;
+      else if (char === ',' && depth === 0) {
+        parts.push(current.trim());
+        current = '';
+        continue;
+      }
     }
     current += char;
   }
   if (current.trim()) parts.push(current.trim());
   
+  // Valid PostgreSQL column name pattern
+  const validColumnNamePattern = /^[a-z_][a-z0-9_]*$/i;
+  // Invalid column names (keywords, numbers, etc.)
+  const invalidColumnNames = new Set(['etc', 'and', 'or', 'not', 'null', 'default', 'unique', 'primary', 'key', 'foreign', 'references', 'constraint', 'check']);
+  
   // Parse each column definition
   for (const part of parts) {
     const trimmed = part.trim();
+    
+    // Skip empty parts
+    if (!trimmed) continue;
     
     // Skip constraints (PRIMARY KEY, FOREIGN KEY, UNIQUE, etc.)
     if (
@@ -62,81 +92,164 @@ function parseTableColumns(createTableSql) {
       continue;
     }
     
-    // Extract column name (first word)
-    const nameMatch = trimmed.match(/^(\w+)/);
+    // Extract column name (first word, must be valid identifier)
+    const nameMatch = trimmed.match(/^([a-z_][a-z0-9_]*)/i);
     if (!nameMatch) continue;
     
     const columnName = nameMatch[1];
     
-    // Extract data type
-    const typeMatch = trimmed.match(/\w+\s+(\w+(?:\s*\([^)]+\))?(?:\s+\w+)*)/i);
+    // Validate column name - skip invalid names
+    if (!validColumnNamePattern.test(columnName) || invalidColumnNames.has(columnName.toLowerCase())) {
+      continue;
+    }
+    
+    // Skip if column name starts with a number (invalid SQL identifier)
+    if (/^\d/.test(columnName)) {
+      continue;
+    }
+    
+    // Extract data type - improved parsing
     let dataType = 'TEXT'; // default
     let isNullable = true;
     let defaultValue = null;
     let isUnique = false;
     let references = null;
     
-    if (typeMatch) {
-      // Get the full type definition
-      const typePart = trimmed.substring(columnName.length).trim();
-      const typeWords = typePart.split(/\s+/);
-      
-      // Find data type (first non-keyword word)
-      const typeKeywords = ['NOT', 'NULL', 'DEFAULT', 'UNIQUE', 'REFERENCES', 'PRIMARY', 'KEY'];
-      for (let i = 0; i < typeWords.length; i++) {
-        const word = typeWords[i].toUpperCase();
-        if (!typeKeywords.includes(word) && !word.includes('(')) {
-          // This might be the type, but check if it's a compound type
-          let typeStr = typeWords[i];
-          if (typeStr.includes('(')) {
-            // Handle types like NUMERIC(15, 2) or TIMESTAMP WITH TIME ZONE
-            let j = i;
-            while (j < typeWords.length && !typeWords[j].includes(')')) {
-              j++;
-            }
-            if (j < typeWords.length) {
-              typeStr = typeWords.slice(i, j + 1).join(' ');
-            }
-          }
-          dataType = typeStr.toUpperCase();
+    // Get the full type definition (everything after column name)
+    const typePart = trimmed.substring(columnName.length).trim();
+    
+    // Valid PostgreSQL data types
+    const validTypes = [
+      'UUID', 'TEXT', 'VARCHAR', 'CHAR', 'CHARACTER',
+      'INTEGER', 'INT', 'BIGINT', 'SMALLINT', 'SERIAL', 'BIGSERIAL',
+      'NUMERIC', 'DECIMAL', 'REAL', 'DOUBLE', 'FLOAT',
+      'BOOLEAN', 'BOOL',
+      'DATE', 'TIME', 'TIMESTAMP', 'TIMESTAMPTZ', 'INTERVAL',
+      'JSON', 'JSONB',
+      'ARRAY', 'TEXT[]', 'INTEGER[]', 'UUID[]'
+    ];
+    
+    // Extract type using regex - match known PostgreSQL types
+    // Pattern: TYPE or TYPE(size) or TYPE(size, precision) or "TYPE WITH TIME ZONE"
+    const typePatterns = [
+      /(TIMESTAMP\s+WITH\s+TIME\s+ZONE)/i,
+      /(TIMESTAMP\s+WITHOUT\s+TIME\s+ZONE)/i,
+      /(TIME\s+WITH\s+TIME\s+ZONE)/i,
+      /(TIME\s+WITHOUT\s+TIME\s+ZONE)/i,
+      /(VARCHAR\s*\(\s*\d+\s*\))/i,
+      /(CHAR\s*\(\s*\d+\s*\))/i,
+      /(CHARACTER\s*\(\s*\d+\s*\))/i,
+      /(NUMERIC\s*\(\s*\d+\s*,\s*\d+\s*\))/i,
+      /(DECIMAL\s*\(\s*\d+\s*,\s*\d+\s*\))/i,
+      /(TEXT\[\])/i,
+      /(INTEGER\[\])/i,
+      /(UUID\[\])/i,
+      /(\w+)\s*\(\s*\d+\s*\)/i, // Generic type with size
+      /(\w+)/i // Generic type
+    ];
+    
+    let typeFound = false;
+    for (const pattern of typePatterns) {
+      const match = typePart.match(pattern);
+      if (match) {
+        let candidateType = match[1].toUpperCase().trim();
+        
+        // Validate it's a known type or starts with a known type
+        const isValidType = validTypes.some(validType => 
+          candidateType.startsWith(validType) || 
+          candidateType === validType ||
+          candidateType.includes(validType)
+        );
+        
+        if (isValidType || /^(UUID|TEXT|VARCHAR|CHAR|INTEGER|INT|BIGINT|NUMERIC|DECIMAL|BOOLEAN|DATE|TIMESTAMP|JSON|JSONB)/i.test(candidateType)) {
+          dataType = candidateType;
+          typeFound = true;
           break;
         }
       }
+    }
+    
+    // If no valid type found, try to extract from first word after column name
+    if (!typeFound) {
+      const typeWords = typePart.split(/\s+/);
+      const typeKeywords = ['NOT', 'NULL', 'DEFAULT', 'UNIQUE', 'REFERENCES', 'PRIMARY', 'KEY', 'WITH', 'TIME', 'ZONE'];
       
-      // Check for NOT NULL
-      if (trimmed.toUpperCase().includes('NOT NULL')) {
-        isNullable = false;
-      }
-      
-      // Check for DEFAULT
-      const defaultMatch = trimmed.match(/DEFAULT\s+([^,\s]+(?:\s+[^,\s]+)*)/i);
-      if (defaultMatch) {
-        defaultValue = defaultMatch[1].trim();
-        // Clean up common defaults
-        if (defaultValue.toUpperCase() === 'NOW()') {
-          defaultValue = 'NOW()';
-        } else if (defaultValue.toUpperCase() === 'TRUE' || defaultValue.toUpperCase() === 'FALSE') {
-          defaultValue = defaultValue.toUpperCase();
-        } else if (defaultValue.match(/^\d+$/)) {
-          // Numeric default
-        } else if (defaultValue.startsWith("'") && defaultValue.endsWith("'")) {
-          defaultValue = defaultValue.slice(1, -1);
+      for (let i = 0; i < typeWords.length; i++) {
+        const word = typeWords[i].toUpperCase();
+        if (!typeKeywords.includes(word)) {
+          // Check if it's a valid type
+          if (validTypes.some(vt => word.startsWith(vt) || word === vt)) {
+            let typeStr = typeWords[i];
+            // Handle compound types like "TIMESTAMP WITH TIME ZONE"
+            if (word === 'TIMESTAMP' && i + 3 < typeWords.length && 
+                typeWords[i + 1].toUpperCase() === 'WITH' &&
+                typeWords[i + 2].toUpperCase() === 'TIME' &&
+                typeWords[i + 3].toUpperCase() === 'ZONE') {
+              typeStr = typeWords.slice(i, i + 4).join(' ');
+            } else if (typeStr.includes('(')) {
+              // Handle types with parameters like NUMERIC(15, 2)
+              let j = i;
+              while (j < typeWords.length && !typeWords[j].includes(')')) {
+                j++;
+              }
+              if (j < typeWords.length) {
+                typeStr = typeWords.slice(i, j + 1).join(' ');
+              }
+            }
+            dataType = typeStr.toUpperCase();
+            typeFound = true;
+            break;
+          }
         }
       }
-      
-      // Check for UNIQUE
-      if (trimmed.toUpperCase().includes('UNIQUE') && !trimmed.toUpperCase().includes('UNIQUE KEY')) {
-        isUnique = true;
+    }
+    
+    // Default to TEXT if still no type found
+    if (!typeFound) {
+      dataType = 'TEXT';
+    }
+    
+    // Check for NOT NULL
+    if (trimmed.toUpperCase().includes('NOT NULL')) {
+      isNullable = false;
+    }
+    
+    // Check for DEFAULT
+    const defaultMatch = trimmed.match(/DEFAULT\s+([^,\s]+(?:\s+[^,\s]+)*)/i);
+    if (defaultMatch) {
+      defaultValue = defaultMatch[1].trim();
+      // Clean up common defaults
+      if (defaultValue.toUpperCase() === 'NOW()') {
+        defaultValue = 'NOW()';
+      } else if (defaultValue.toUpperCase() === 'TRUE' || defaultValue.toUpperCase() === 'FALSE') {
+        defaultValue = defaultValue.toUpperCase();
+      } else if (defaultValue.match(/^\d+$/)) {
+        // Numeric default
+      } else if (defaultValue.startsWith("'") && defaultValue.endsWith("'")) {
+        defaultValue = defaultValue.slice(1, -1);
       }
-      
-      // Check for REFERENCES (foreign key)
-      const refMatch = trimmed.match(/REFERENCES\s+[\w.]+\((\w+)\)/i);
-      if (refMatch) {
-        references = {
-          table: trimmed.match(/REFERENCES\s+([\w.]+)\(/i)?.[1],
-          column: refMatch[1]
-        };
-      }
+    }
+    
+    // Check for UNIQUE
+    if (trimmed.toUpperCase().includes('UNIQUE') && !trimmed.toUpperCase().includes('UNIQUE KEY')) {
+      isUnique = true;
+    }
+    
+    // Check for REFERENCES (foreign key)
+    const refMatch = trimmed.match(/REFERENCES\s+[\w.]+\((\w+)\)/i);
+    if (refMatch) {
+      references = {
+        table: trimmed.match(/REFERENCES\s+([\w.]+)\(/i)?.[1],
+        column: refMatch[1]
+      };
+    }
+    
+    // Additional validation: skip if type is clearly invalid (like another column name)
+    // If dataType looks like a column name (all lowercase, no parentheses), it's probably wrong
+    if (dataType && !dataType.includes('(') && dataType.length < 20 && 
+        /^[a-z_]+$/i.test(dataType) && !validTypes.some(vt => dataType.toUpperCase().startsWith(vt))) {
+      // This looks like a column name, not a type - skip it
+      continue;
     }
     
     columns.push({

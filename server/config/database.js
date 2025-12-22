@@ -48,6 +48,20 @@ function getAgencyPool(databaseName) {
     ...POOL_CONFIG,
   });
 
+  // Add error handlers for agency pools
+  agencyPool.on('error', (err) => {
+    console.error(`❌ PostgreSQL connection error for agency pool ${normalizedName}:`, err.message);
+    // Remove the pool from cache if it's in a bad state
+    if (err.code === 'ECONNREFUSED' || err.message.includes('timeout')) {
+      console.log(`[DB] Removing bad pool from cache: ${normalizedName}`);
+      agencyPools.delete(normalizedName);
+    }
+  });
+
+  agencyPool.on('connect', () => {
+    console.log(`✅ Connected to agency database: ${normalizedName}`);
+  });
+
   agencyPools.set(normalizedName, agencyPool);
   console.log(`[DB] Created new agency pool for database: ${normalizedName}`);
 

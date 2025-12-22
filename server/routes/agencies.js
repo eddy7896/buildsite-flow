@@ -275,6 +275,8 @@ router.post('/create', asyncHandler(async (req, res) => {
       primaryFocus,
       enableGST,
       modules,
+      business_goals,
+      page_ids,
     } = req.body;
 
     if (!agencyName || !domain || !adminName || !adminEmail || !adminPassword || !subscriptionPlan) {
@@ -291,6 +293,8 @@ router.post('/create', asyncHandler(async (req, res) => {
       domain,
       subscriptionPlan,
       adminEmail,
+      page_ids: page_ids?.length || 0,
+      business_goals: business_goals?.length || 0,
       origin: req.headers.origin,
     });
 
@@ -308,6 +312,8 @@ router.post('/create', asyncHandler(async (req, res) => {
       industry,
       companySize,
       address,
+      business_goals,
+      page_ids,
     });
 
     res.json({

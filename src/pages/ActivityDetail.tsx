@@ -143,7 +143,7 @@ const ActivityDetail = () => {
   const StatusIcon = getActivityStatusIcon(activity.status);
 
   return (
-    <div className="container mx-auto p-4 lg:p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col space-y-4 sm:flex-row sm:justify-between sm:items-start sm:space-y-0">
         <div className="flex items-center gap-4">

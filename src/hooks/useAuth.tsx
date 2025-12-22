@@ -58,10 +58,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper to validate token format
+  const isValidTokenFormat = (token: string): boolean => {
+    if (!token || typeof token !== 'string' || token.length < 10) {
+      return false;
+    }
+    // Base64 should only contain A-Z, a-z, 0-9, +, /, and = for padding
+    const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+    // Check if it's base64 (our format) or JWT (legacy format with dots)
+    return base64Regex.test(token) || (token.includes('.') && token.split('.').length === 3);
+  };
+
   useEffect(() => {
     // Check for existing session on mount
     const token = localStorage.getItem('auth_token');
     if (token) {
+      // Validate token format first
+      if (!isValidTokenFormat(token)) {
+        console.warn('[Auth] Invalid token format detected, clearing corrupted token');
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('agency_database');
+        localStorage.removeItem('agency_id');
+        setLoading(false);
+        return;
+      }
+
       try {
         // Verify token is still valid
         // Token can be either:
@@ -71,7 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (token.includes('.')) {
           // JWT format - decode the payload part
-          decoded = JSON.parse(atob(token.split('.')[1]));
+          const parts = token.split('.');
+          if (parts.length !== 3) {
+            throw new Error('Invalid JWT format');
+          }
+          decoded = JSON.parse(atob(parts[1]));
         } else {
           // Simple base64 format - decode directly
           decoded = JSON.parse(atob(token));
@@ -102,8 +127,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem('auth_token');
         }
       } catch (error) {
-        console.error('Error validating token:', error);
+        console.warn('[Auth] Failed to decode token, clearing corrupted token:', error);
+        // Clear all auth-related localStorage items
         localStorage.removeItem('auth_token');
+        localStorage.removeItem('agency_database');
+        localStorage.removeItem('agency_id');
+        localStorage.removeItem('user_role');
       }
     }
     setLoading(false);

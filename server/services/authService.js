@@ -52,10 +52,54 @@ async function findUserAcrossAgencies(email, password) {
         const agencyClient = await agencyPool.connect();
 
         try {
+          // Check which optional columns exist in the users table
+          const columnCheck = await agencyClient.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'users' 
+            AND column_name IN ('two_factor_enabled', 'two_factor_secret', 'password_policy_id')
+          `);
+          
+          const availableColumns = columnCheck.rows.map(row => row.column_name);
+          let hasTwoFactorEnabled = availableColumns.includes('two_factor_enabled');
+          let hasTwoFactorSecret = availableColumns.includes('two_factor_secret');
+          let hasPasswordPolicyId = availableColumns.includes('password_policy_id');
+          
+          // Auto-repair: Add missing columns if they don't exist
+          if (!hasTwoFactorEnabled) {
+            try {
+              await agencyClient.query('ALTER TABLE public.users ADD COLUMN IF NOT EXISTS two_factor_enabled BOOLEAN DEFAULT false');
+              hasTwoFactorEnabled = true;
+            } catch (addError) {
+              // Column might have been added by another process, ignore
+            }
+          }
+          
+          if (!hasTwoFactorSecret) {
+            try {
+              await agencyClient.query('ALTER TABLE public.users ADD COLUMN IF NOT EXISTS two_factor_secret TEXT');
+              hasTwoFactorSecret = true;
+            } catch (addError) {
+              // Column might have been added by another process, ignore
+            }
+          }
+          
+          if (!hasPasswordPolicyId) {
+            try {
+              await agencyClient.query('ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_policy_id UUID');
+              hasPasswordPolicyId = true;
+            } catch (addError) {
+              // Column might have been added by another process, ignore
+            }
+          }
+          
+          // Build query with all columns (they should all exist now)
+          const selectColumns = 'id, email, password_hash, email_confirmed, is_active, two_factor_enabled, two_factor_secret, password_policy_id';
+          
           // Check if user exists in this agency database
           const userResult = await agencyClient.query(
-            `SELECT id, email, password_hash, email_confirmed, is_active, 
-                    two_factor_enabled, two_factor_secret, password_policy_id
+            `SELECT ${selectColumns}
              FROM public.users 
              WHERE email = $1`,
             [email]
@@ -69,7 +113,7 @@ async function findUserAcrossAgencies(email, password) {
             if (passwordMatch) {
               // Get user profile
               const profileResult = await agencyClient.query(
-                `SELECT id, user_id, first_name, last_name, agency_id, phone, avatar_url
+                `SELECT id, user_id, full_name, agency_id, phone, avatar_url
                  FROM public.profiles 
                  WHERE user_id = $1`,
                 [dbUser.id]

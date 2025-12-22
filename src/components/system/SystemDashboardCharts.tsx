@@ -1,14 +1,120 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, LineChart, Line } from 'recharts';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import type { SystemMetrics } from '@/hooks/useSystemAnalytics';
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 
 interface SystemDashboardChartsProps {
   metrics: SystemMetrics;
 }
 
+// Lazy load recharts to prevent blocking the entire page
+let RechartsComponents: any = null;
+let rechartsError: Error | null = null;
+
+const loadRecharts = async () => {
+  if (RechartsComponents) return RechartsComponents;
+  if (rechartsError) throw rechartsError;
+  
+  try {
+    const recharts = await import('recharts');
+    RechartsComponents = {
+      PieChart: recharts.PieChart,
+      Pie: recharts.Pie,
+      Cell: recharts.Cell,
+      ResponsiveContainer: recharts.ResponsiveContainer,
+      BarChart: recharts.BarChart,
+      Bar: recharts.Bar,
+      XAxis: recharts.XAxis,
+      YAxis: recharts.YAxis,
+      CartesianGrid: recharts.CartesianGrid,
+      Tooltip: recharts.Tooltip,
+      LineChart: recharts.LineChart,
+      Line: recharts.Line,
+    };
+    return RechartsComponents;
+  } catch (error) {
+    rechartsError = error as Error;
+    throw error;
+  }
+};
+
 export const SystemDashboardCharts = ({ metrics }: SystemDashboardChartsProps) => {
+  const [recharts, setRecharts] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    loadRecharts()
+      .then(setRecharts)
+      .catch((err) => {
+        console.error('Failed to load recharts:', err);
+        setError(err);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-center h-80">
+              <div className="text-center space-y-2">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+                <p className="text-sm text-muted-foreground">Loading charts...</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error || !recharts) {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription className="flex items-center justify-between">
+          <span>Failed to load chart library. Please refresh the page.</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setError(null);
+              setLoading(true);
+              RechartsComponents = null;
+              rechartsError = null;
+              loadRecharts()
+                .then(setRecharts)
+                .catch((err) => setError(err))
+                .finally(() => setLoading(false));
+            }}
+            className="ml-4"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const {
+    PieChart,
+    Pie,
+    Cell,
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    LineChart,
+    Line,
+  } = recharts;
   if (!metrics) {
     return (
       <Alert>

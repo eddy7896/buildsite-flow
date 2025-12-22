@@ -54,7 +54,7 @@ export const GSTDashboard: React.FC = () => {
     updateReturn,
     isAuthenticated 
   } = useGST();
-  const { user, loading: authLoading } = useAuth();
+  const { user, userRole, loading: authLoading } = useAuth();
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [showTransactionDialog, setShowTransactionDialog] = useState(false);
   const [showReturnDialog, setShowReturnDialog] = useState(false);
@@ -170,7 +170,12 @@ export const GSTDashboard: React.FC = () => {
   }
 
   // Show authentication required message if user is not authenticated
-  if (!user || !isAuthenticated) {
+  // Allow super_admin even if isAuthenticated is false (they might not have agency_id in profile)
+  const { userRole } = useAuth();
+  const hasAgencyContext = typeof window !== 'undefined' && localStorage.getItem('agency_database');
+  const canAccess = user && (isAuthenticated || (userRole === 'super_admin' && hasAgencyContext));
+  
+  if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">

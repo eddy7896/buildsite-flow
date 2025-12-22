@@ -192,7 +192,7 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
   return (
     <PageContainer>
       {/* User Welcome Header */}
-      <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border rounded-xl p-6 mb-6">
+      <div className="bg-primary/5 border rounded-lg p-6 mb-6">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           {/* User Info */}
           <div className="flex items-center gap-4">

@@ -46,45 +46,39 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4">
-      {/* Background effects */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-emerald-500/10 rounded-full filter blur-[120px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-[300px] h-[300px] bg-blue-600/10 rounded-full filter blur-[100px]" />
-      </div>
-
-      <div className="relative z-10 w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-              <Building className="h-6 w-6 text-white" />
+            <div className="w-12 h-12 rounded-lg bg-primary flex items-center justify-center">
+              <Building className="h-6 w-6 text-primary-foreground" />
             </div>
           </Link>
-          <h1 className="mt-4 text-2xl font-bold text-white">
-            Build<span className="text-emerald-400">Flow</span>
+          <h1 className="mt-4 text-2xl font-semibold text-foreground">
+            Build<span className="text-primary">Flow</span>
           </h1>
         </div>
 
-        <Card className="border-slate-800/50 bg-slate-900/50 backdrop-blur-xl shadow-2xl">
+        <Card className="border shadow-lg">
           <CardHeader className="text-center pb-2">
             {!isSubmitted ? (
               <>
-                <div className="w-14 h-14 rounded-xl bg-slate-800/50 flex items-center justify-center mx-auto mb-4">
-                  <KeyRound className="h-7 w-7 text-emerald-400" />
+                <div className="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <KeyRound className="h-7 w-7 text-primary" />
                 </div>
-                <CardTitle className="text-xl text-white">Forgot Password?</CardTitle>
-                <CardDescription className="text-slate-400">
+                <CardTitle className="text-xl">Forgot Password?</CardTitle>
+                <CardDescription>
                   No worries! Enter your email and we'll send you a reset link.
                 </CardDescription>
               </>
             ) : (
               <>
-                <div className="w-14 h-14 rounded-xl bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle2 className="h-7 w-7 text-emerald-400" />
+                <div className="w-14 h-14 rounded-lg bg-success-light flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 className="h-7 w-7 text-success" />
                 </div>
-                <CardTitle className="text-xl text-white">Check Your Email</CardTitle>
-                <CardDescription className="text-slate-400">
+                <CardTitle className="text-xl">Check Your Email</CardTitle>
+                <CardDescription>
                   We've sent a password reset link to your email address.
                 </CardDescription>
               </>
@@ -95,17 +89,17 @@ const ForgotPassword = () => {
             {!isSubmitted ? (
               <form onSubmit={handleSubmit} className="space-y-5">
                 {error && (
-                  <Alert className="border-red-500/30 bg-red-500/10">
-                    <AlertDescription className="text-red-300 text-sm">
+                  <Alert className="border-error/30 bg-error-light">
+                    <AlertDescription className="text-error-foreground text-sm">
                       {error}
                     </AlertDescription>
                   </Alert>
                 )}
                 
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-300">Email Address</Label>
+                  <Label htmlFor="email">Email Address</Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="email"
                       type="email"
@@ -115,14 +109,14 @@ const ForgotPassword = () => {
                         setEmail(e.target.value);
                         setError('');
                       }}
-                      className="pl-10 h-11 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20"
+                      className="pl-10 h-11"
                     />
                   </div>
                 </div>
 
                 <Button 
                   type="submit" 
-                  className="w-full h-11 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-medium" 
+                  className="w-full h-11" 
                   disabled={isLoading}
                 >
                   {isLoading ? (
@@ -140,19 +134,18 @@ const ForgotPassword = () => {
               </form>
             ) : (
               <div className="space-y-5">
-                <Alert className="border-emerald-500/30 bg-emerald-500/10">
-                  <AlertDescription className="text-emerald-200 text-sm">
+                <Alert className="border-success/30 bg-success-light">
+                  <AlertDescription className="text-success-foreground text-sm">
                     If an account exists for <strong>{email}</strong>, you'll receive an email with instructions to reset your password.
                   </AlertDescription>
                 </Alert>
                 
                 <div className="text-center space-y-3">
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-muted-foreground">
                     Didn't receive the email? Check your spam folder or
                   </p>
                   <Button 
                     variant="outline" 
-                    className="border-slate-700 text-slate-300 hover:bg-slate-800"
                     onClick={() => {
                       setIsSubmitted(false);
                       setEmail('');
@@ -168,7 +161,7 @@ const ForgotPassword = () => {
             <div className="mt-6 text-center">
               <Link 
                 to="/auth" 
-                className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-emerald-400"
+                className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Back to Sign In
@@ -179,9 +172,9 @@ const ForgotPassword = () => {
 
         {/* Footer */}
         <div className="mt-6 text-center">
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-muted-foreground">
             Need help?{' '}
-            <a href="mailto:support@buildflow.com" className="text-slate-400 hover:text-emerald-400">
+            <a href="mailto:support@buildflow.com" className="text-primary hover:text-primary/80 transition-colors">
               Contact Support
             </a>
           </p>

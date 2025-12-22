@@ -77,14 +77,14 @@ const SignupSuccess = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-white/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center">
             <Link to="/" className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
-                <Building className="h-5 w-5 text-white" />
+              <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center">
+                <Building className="h-5 w-5 text-primary-foreground" />
               </div>
               <span className="text-xl font-bold text-slate-900">BuildFlow</span>
             </Link>
@@ -96,8 +96,8 @@ const SignupSuccess = () => {
         {/* Success Animation */}
         <div className="text-center mb-12">
           <div className="relative inline-block mb-6">
-            <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-2xl flex items-center justify-center shadow-xl shadow-emerald-500/30">
-              <CheckCircle2 className="h-10 w-10 text-white" />
+            <div className="w-20 h-20 bg-success rounded-lg flex items-center justify-center">
+              <CheckCircle2 className="h-10 w-10 text-success-foreground" />
             </div>
             <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-lg">
               <Sparkles className="h-4 w-4 text-emerald-500" />
@@ -199,7 +199,7 @@ const SignupSuccess = () => {
         </div>
 
         {/* Feature Preview */}
-        <Card className="bg-gradient-to-br from-slate-900 to-slate-800 border-0 text-white overflow-hidden">
+        <Card className="bg-card border overflow-hidden">
           <CardContent className="p-8 sm:p-10">
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold mb-2">What's Waiting for You</h2>

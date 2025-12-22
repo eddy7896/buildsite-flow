@@ -307,7 +307,7 @@ export default function ProcurementManagement() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Procurement Management</h1>
@@ -564,7 +564,9 @@ export default function ProcurementManagement() {
                           </Badge>
                         </TableCell>
                         <TableCell>{req.required_date || '-'}</TableCell>
-                        <TableCell className="font-mono">₹{req.total_amount.toFixed(2)}</TableCell>
+                        <TableCell className="font-mono">
+                          ₹{typeof req.total_amount === 'number' ? req.total_amount.toFixed(2) : (parseFloat(String(req.total_amount || 0))).toFixed(2)}
+                        </TableCell>
                         <TableCell>{getStatusBadge(req.status)}</TableCell>
                       </TableRow>
                     ))}
@@ -783,7 +785,9 @@ export default function ProcurementManagement() {
                         <TableCell>{po.supplier_name || po.supplier_code || '-'}</TableCell>
                         <TableCell>{new Date(po.order_date).toLocaleDateString()}</TableCell>
                         <TableCell>{po.expected_delivery_date ? new Date(po.expected_delivery_date).toLocaleDateString() : '-'}</TableCell>
-                        <TableCell className="font-mono">{po.currency} {po.total_amount.toFixed(2)}</TableCell>
+                        <TableCell className="font-mono">
+                          {po.currency} {typeof po.total_amount === 'number' ? po.total_amount.toFixed(2) : (parseFloat(String(po.total_amount || 0))).toFixed(2)}
+                        </TableCell>
                         <TableCell>{getStatusBadge(po.status)}</TableCell>
                       </TableRow>
                     ))}

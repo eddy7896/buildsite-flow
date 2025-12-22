@@ -658,8 +658,8 @@ const Payroll = () => {
   );
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex justify-between items-center">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-bold">Payroll</h1>

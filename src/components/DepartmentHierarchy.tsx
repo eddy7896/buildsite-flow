@@ -90,7 +90,7 @@ const DepartmentNode = ({ data }: { data: any }) => {
     <div 
       className={`border-2 rounded-lg p-3 bg-card hover:shadow-lg transition-all w-[220px] relative ${
         data.level === 0 
-          ? 'border-primary shadow-md bg-gradient-to-br from-primary/10 to-background' 
+          ? 'border-primary shadow-md bg-primary/10' 
           : 'border-border hover:border-primary/50'
       } ${isLocked ? 'opacity-70' : ''} ${connectionMode ? 'ring-2 ring-primary/50' : ''} ${
         connectionMode ? 'cursor-default' : 'cursor-pointer'

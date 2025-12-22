@@ -1,7 +1,9 @@
 import { Navigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { hasRoleOrHigher, getRoleDisplayName } from '@/utils/roleUtils';
-import { getRoutePermission, canAccessRoute } from '@/utils/routePermissions';
+import { getRoutePermission, canAccessRouteSync, canAccessRoute } from '@/utils/routePermissions';
+import { hasPageAccess } from '@/utils/agencyPageAccess';
 import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +17,25 @@ interface ProtectedRouteProps {
 const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   const { user, userRole, profile, loading } = useAuth();
   const location = useLocation();
+  const [pageAccessChecked, setPageAccessChecked] = useState(false);
+  const [hasPageAccessResult, setHasPageAccessResult] = useState<boolean | null>(null);
+
+  // Check page access for non-super-admin users
+  // MUST be declared before any early returns to follow Rules of Hooks
+  useEffect(() => {
+    if (userRole && userRole !== 'super_admin' && user) {
+      hasPageAccess(location.pathname).then(hasAccess => {
+        setHasPageAccessResult(hasAccess);
+        setPageAccessChecked(true);
+      }).catch(() => {
+        setHasPageAccessResult(true); // Default to allowing if check fails
+        setPageAccessChecked(true);
+      });
+    } else {
+      setPageAccessChecked(true);
+      setHasPageAccessResult(true);
+    }
+  }, [location.pathname, userRole, user]);
 
   if (loading) {
     return (
@@ -52,12 +73,62 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     // If no route permission found, allow access (public/authenticated routes)
   }
 
+  // Show loading while checking page access
+  if (!pageAccessChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  // Check page access first (for non-super-admin)
+  if (userRole && userRole !== 'super_admin' && hasPageAccessResult === false) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              <CardTitle>Page Not Available</CardTitle>
+            </div>
+            <CardDescription>
+              This page is not included in your agency's subscription.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              To access this page, please request it from your administrator or contact support.
+            </p>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => window.history.back()}
+                className="flex-1"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Go Back
+              </Button>
+              <Button 
+                variant="default"
+                onClick={() => window.location.href = '/dashboard'}
+                className="flex-1"
+              >
+                Go to Dashboard
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Check role-based access
   // If requiredRoles is empty, all authenticated users can access
   if (userRole && requiredRoles.length > 0) {
-    // Use canAccessRoute for consistent permission checking (handles hierarchy automatically)
+    // Use canAccessRouteSync for role checking
     const hasAccess = useAutoDetection 
-      ? canAccessRoute(userRole, location.pathname)
+      ? canAccessRouteSync(userRole, location.pathname)
       : (requiredRoles.includes(userRole) || requiredRoles.some(role => hasRoleOrHigher(userRole, role)));
     
     if (!hasAccess) {

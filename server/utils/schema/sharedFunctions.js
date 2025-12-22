@@ -86,7 +86,7 @@ async function ensureExtensions(client) {
 }
 
 /**
- * Ensure app_role enum type exists
+ * Ensure app_role enum type exists with all valid values
  */
 async function ensureAppRoleType(client) {
   try {
@@ -100,29 +100,69 @@ async function ensureAppRoleType(client) {
       )
     `);
     
-    if (typeCheck.rows[0].exists) {
-      return; // Type already exists
+    if (!typeCheck.rows[0].exists) {
+      // Create enum with all valid values
+      await client.query(`
+        DO $$ 
+        BEGIN
+          CREATE TYPE public.app_role AS ENUM (
+            'super_admin', 'ceo', 'cto', 'cfo', 'coo', 'admin', 
+            'operations_manager', 'department_head', 'team_lead', 
+            'project_manager', 'hr', 'finance_manager', 'sales_manager',
+            'marketing_manager', 'quality_assurance', 'it_support', 
+            'legal_counsel', 'business_analyst', 'customer_success',
+            'employee', 'contractor', 'intern'
+          );
+        EXCEPTION
+          WHEN duplicate_object THEN
+            -- Type already exists, that's fine
+            NULL;
+          WHEN OTHERS THEN
+            -- Check if type actually exists before re-raising
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_type t
+              JOIN pg_namespace n ON t.typnamespace = n.oid
+              WHERE n.nspname = 'public' AND t.typname = 'app_role'
+            ) THEN
+              RAISE;
+            END IF;
+        END $$;
+      `);
     }
     
-    await client.query(`
-      DO $$ 
-      BEGIN
-        CREATE TYPE public.app_role AS ENUM ('admin', 'hr', 'finance_manager', 'employee', 'super_admin', 'ceo', 'cfo');
-      EXCEPTION
-        WHEN duplicate_object THEN
-          -- Type already exists, that's fine
-          NULL;
-        WHEN OTHERS THEN
-          -- Check if type actually exists before re-raising
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_type t
-            JOIN pg_namespace n ON t.typnamespace = n.oid
-            WHERE n.nspname = 'public' AND t.typname = 'app_role'
-          ) THEN
-            RAISE;
-          END IF;
-      END $$;
-    `);
+    // Add any missing enum values to existing enum type
+    // PostgreSQL doesn't support ALTER TYPE ADD VALUE in a transaction block,
+    // so we need to handle this carefully
+    const allRoles = [
+      'super_admin', 'ceo', 'cto', 'cfo', 'coo', 'admin', 
+      'operations_manager', 'department_head', 'team_lead', 
+      'project_manager', 'hr', 'finance_manager', 'sales_manager',
+      'marketing_manager', 'quality_assurance', 'it_support', 
+      'legal_counsel', 'business_analyst', 'customer_success',
+      'employee', 'contractor', 'intern'
+    ];
+    
+    // Get existing enum values
+    const existingValues = await client.query(`
+      SELECT unnest(enum_range(NULL::app_role))::text as role
+    `).catch(() => ({ rows: [] }));
+    
+    const existingRoles = existingValues.rows.map(r => r.role);
+    const missingRoles = allRoles.filter(role => !existingRoles.includes(role));
+    
+    // Add missing enum values one by one (outside transaction)
+    for (const role of missingRoles) {
+      try {
+        await client.query(`ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS '${role}'`);
+      } catch (addError) {
+        // Ignore errors if value already exists or can't be added in transaction
+        if (!addError.message.includes('already exists') && 
+            !addError.message.includes('cannot be run inside a transaction block')) {
+          console.warn(`[Schema] Could not add enum value '${role}':`, addError.message);
+        }
+      }
+    }
+    
   } catch (error) {
     // If it's a duplicate key error, check if type actually exists
     if (error.code === '23505' || error.message.includes('duplicate key') || error.code === '42710') {

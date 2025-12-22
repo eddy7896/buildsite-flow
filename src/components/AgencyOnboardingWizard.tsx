@@ -626,6 +626,14 @@ export default function AgencyOnboardingWizard() {
 
   const handleSubmit = useCallback(async () => {
     if (!validateStep(7)) {
+      // Show validation errors to user
+      toast({
+        title: 'Validation Error',
+        description: 'Please complete all required fields before activating your agency.',
+        variant: 'destructive',
+      });
+      // Scroll to top to show errors
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -705,9 +713,10 @@ export default function AgencyOnboardingWizard() {
       }
     } catch (error: any) {
       console.error('Agency creation error:', error);
+      const errorMessage = error.message || error.error || 'An unexpected error occurred. Please try again.';
       toast({
         title: 'Creation Failed',
-        description: error.message || 'An unexpected error occurred. Please try again.',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -2318,8 +2327,8 @@ export default function AgencyOnboardingWizard() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5 mb-6">
               <div className="relative">
-                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 dark:from-blue-600 dark:to-indigo-700 flex items-center justify-center shadow-lg">
-                  <Loader2 className="h-6 w-6 sm:h-7 sm:w-7 text-white animate-spin" />
+                <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-lg bg-primary flex items-center justify-center">
+                  <Loader2 className="h-6 w-6 sm:h-7 sm:w-7 text-primary-foreground animate-spin" />
                 </div>
                 <div className="absolute -top-1 -right-1 h-4 w-4 bg-green-500 rounded-full border-2 border-white dark:border-slate-900" />
               </div>
@@ -2343,18 +2352,16 @@ export default function AgencyOnboardingWizard() {
                   {Math.round(loadingProgress)}%
                 </span>
               </div>
-              <div className="h-2.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden shadow-inner">
+              <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
                 <div 
-                  className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 dark:from-blue-600 dark:via-indigo-600 dark:to-purple-600 shadow-lg relative"
+                  className="h-full bg-primary relative"
                   style={{ width: `${loadingProgress}%` }}
-                >
-                  <div className="absolute inset-0 bg-white/30" />
-                </div>
+                />
               </div>
             </div>
 
             {/* Current Step Display */}
-            <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-800/50 dark:to-slate-700/50 border border-blue-100 dark:border-slate-700">
+            <div className="mb-6 p-4 rounded-lg bg-primary/5 border border-primary/20">
               <div className="flex items-center gap-3">
                 {(() => {
                   const loadingSteps = [

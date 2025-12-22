@@ -184,7 +184,7 @@ const Invoices = () => {
   }
 
   return (
-    <div className="p-4 lg:p-6">
+    <div className="container mx-auto p-6 space-y-6">
       <div className="flex flex-col space-y-4 sm:flex-row sm:justify-between sm:items-center sm:space-y-0 mb-6">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold">Invoices</h1>

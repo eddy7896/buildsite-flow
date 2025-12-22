@@ -187,13 +187,13 @@ const AgencyDashboard = () => {
         )}
 
         {/* Agency Status Alert */}
-        <Card className="border-green-200 bg-green-50">
+        <Card className="border-success/30 bg-success-light">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600" />
+              <CheckCircle className="h-5 w-5 text-success" />
               <div>
-                <div className="font-medium text-green-800">Agency Active</div>
-                <div className="text-sm text-green-600">
+                <div className="font-medium text-success-foreground">Agency Active</div>
+                <div className="text-sm text-success-foreground/80">
                   Your agency is operating normally with all systems functional
                 </div>
               </div>
@@ -271,15 +271,15 @@ const AgencyDashboard = () => {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">{metrics.totalUsers}</div>
+                    <div className="text-2xl font-semibold text-primary">{metrics.totalUsers}</div>
                     <div className="text-sm text-muted-foreground">Total Team Members</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">{metrics.activeUsers}</div>
+                    <div className="text-2xl font-semibold text-success">{metrics.activeUsers}</div>
                     <div className="text-sm text-muted-foreground">Active Members</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-orange-600">{metrics.attendanceRecords}</div>
+                    <div className="text-2xl font-semibold text-info">{metrics.attendanceRecords}</div>
                     <div className="text-sm text-muted-foreground">Attendance Records</div>
                   </div>
                 </div>
@@ -298,11 +298,11 @@ const AgencyDashboard = () => {
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <div className="text-3xl font-bold text-primary">{metrics.totalProjects}</div>
+                    <div className="text-3xl font-semibold text-primary">{metrics.totalProjects}</div>
                     <div className="text-sm text-muted-foreground">Total Projects</div>
                   </div>
                   <div>
-                    <div className="text-3xl font-bold text-green-600">{metrics.activeProjects}</div>
+                    <div className="text-3xl font-semibold text-success">{metrics.activeProjects}</div>
                     <div className="text-sm text-muted-foreground">Active Projects</div>
                   </div>
                 </div>

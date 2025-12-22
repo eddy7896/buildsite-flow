@@ -4,7 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AuthProvider } from "@/hooks/useAuth";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AgencyHeader } from "@/components/AgencyHeader";
@@ -27,7 +27,7 @@ const Pricing = React.lazy(() => import("./pages/Pricing"));
 const Auth = React.lazy(() => import("./pages/Auth"));
 const SignupSuccess = React.lazy(() => import("./pages/SignupSuccess"));
 const AgencyDashboard = React.lazy(() => import("./pages/AgencyDashboard"));
-const AgencyOnboardingWizard = React.lazy(() => import("./components/AgencyOnboardingWizard"));
+const AgencyOnboardingWizard = React.lazy(() => import("./components/onboarding/OnboardingWizard"));
 const AgencySetup = React.lazy(() => import("./pages/AgencySetup"));
 const AgencySetupProgress = React.lazy(() => import("./pages/AgencySetupProgress"));
 const SuperAdminDashboard = React.lazy(() => import("./pages/SuperAdminDashboard"));
@@ -76,8 +76,48 @@ const Notifications = React.lazy(() => import("./pages/Notifications"));
 const EmployeePerformance = React.lazy(() => import("./pages/EmployeePerformance"));
 const SystemHealth = React.lazy(() => import("./pages/SystemHealth"));
 const InventoryManagement = React.lazy(() => import("./pages/InventoryManagement"));
+const InventoryProducts = React.lazy(() => import("./pages/InventoryProducts"));
+const InventoryBOM = React.lazy(() => import("./pages/InventoryBOM"));
+const InventorySerialBatch = React.lazy(() => import("./pages/InventorySerialBatch"));
+const InventoryReports = React.lazy(() => import("./pages/InventoryReports"));
+const InventorySettings = React.lazy(() => import("./pages/InventorySettings"));
+const ReportingDashboard = React.lazy(() => import("./pages/ReportingDashboard"));
+const CustomReports = React.lazy(() => import("./pages/CustomReports"));
+const ScheduledReports = React.lazy(() => import("./pages/ScheduledReports"));
+const ReportExports = React.lazy(() => import("./pages/ReportExports"));
+const AnalyticsDashboard = React.lazy(() => import("./pages/AnalyticsDashboard"));
+const AssetSettings = React.lazy(() => import("./pages/AssetSettings"));
+const WorkflowSettings = React.lazy(() => import("./pages/WorkflowSettings"));
+const IntegrationSettings = React.lazy(() => import("./pages/IntegrationSettings"));
+const Workflows = React.lazy(() => import("./pages/Workflows"));
+const WorkflowInstances = React.lazy(() => import("./pages/WorkflowInstances"));
+const WorkflowBuilder = React.lazy(() => import("./pages/WorkflowBuilder"));
+const WorkflowApprovals = React.lazy(() => import("./pages/WorkflowApprovals"));
+const WorkflowAutomation = React.lazy(() => import("./pages/WorkflowAutomation"));
+const Integrations = React.lazy(() => import("./pages/Integrations"));
+const InventoryWarehouses = React.lazy(() => import("./pages/InventoryWarehouses"));
+const InventoryStockLevels = React.lazy(() => import("./pages/InventoryStockLevels"));
+const InventoryTransfers = React.lazy(() => import("./pages/InventoryTransfers"));
+const InventoryAdjustments = React.lazy(() => import("./pages/InventoryAdjustments"));
 const ProcurementManagement = React.lazy(() => import("./pages/ProcurementManagement"));
+const ProcurementVendors = React.lazy(() => import("./pages/ProcurementVendors"));
+const ProcurementPurchaseOrders = React.lazy(() => import("./pages/ProcurementPurchaseOrders"));
+const ProcurementRequisitions = React.lazy(() => import("./pages/ProcurementRequisitions"));
+const ProcurementGoodsReceipts = React.lazy(() => import("./pages/ProcurementGoodsReceipts"));
+const ProcurementRFQ = React.lazy(() => import("./pages/ProcurementRFQ"));
+const ProcurementVendorContracts = React.lazy(() => import("./pages/ProcurementVendorContracts"));
+const ProcurementVendorPerformance = React.lazy(() => import("./pages/ProcurementVendorPerformance"));
+const ProcurementReports = React.lazy(() => import("./pages/ProcurementReports"));
+const ProcurementSettings = React.lazy(() => import("./pages/ProcurementSettings"));
+const Assets = React.lazy(() => import("./pages/Assets"));
+const AssetCategories = React.lazy(() => import("./pages/AssetCategories"));
+const AssetLocations = React.lazy(() => import("./pages/AssetLocations"));
+const AssetMaintenance = React.lazy(() => import("./pages/AssetMaintenance"));
+const AssetDepreciation = React.lazy(() => import("./pages/AssetDepreciation"));
+const AssetDisposals = React.lazy(() => import("./pages/AssetDisposals"));
+const AssetReports = React.lazy(() => import("./pages/AssetReports"));
 const EmailTesting = React.lazy(() => import("./pages/EmailTesting"));
+const PageRequestCenter = React.lazy(() => import("./pages/PageRequestCenter"));
 
 // Lazy load component modules
 const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
@@ -104,18 +144,18 @@ const queryClient = new QueryClient();
 
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
   <SidebarProvider defaultOpen={false}>
-    <div className="min-h-screen flex w-full overflow-hidden">
       <AppSidebar />
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="min-h-14 sm:min-h-16 h-auto py-2 sm:py-3 flex items-center border-b bg-gradient-to-r from-card via-card to-card/95 px-3 sm:px-4 lg:px-6 sticky top-0 z-40 shadow-sm backdrop-blur-sm">
-          <SidebarTrigger className="mr-2 sm:mr-3 flex-shrink-0 h-8 w-8 sm:h-9 sm:w-9 rounded-lg hover:bg-muted/60 transition-colors" />
+    <SidebarInset className="flex flex-col min-w-0 overflow-hidden">
+      <header className="sticky top-0 z-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+        <div className="min-h-14 sm:min-h-16 h-auto py-2 sm:py-3 px-3 sm:px-4 lg:px-6 flex items-center gap-2 sm:gap-3">
+          <SidebarTrigger className="mr-2 sm:mr-3 flex-shrink-0 h-8 w-8 sm:h-9 sm:w-9 rounded-lg hover:bg-muted transition-colors" />
           <AgencyHeader />
+        </div>
         </header>
         <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto">
           {children}
         </div>
-      </main>
-    </div>
+    </SidebarInset>
   </SidebarProvider>
 );
 
@@ -244,6 +284,17 @@ const AppContent = () => {
                   <ProtectedRoute>
                     <DashboardLayout>
                       <SuspenseRoute><Settings /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/page-requests" 
+                element={
+                  <ProtectedRoute>
+                    <DashboardLayout>
+                      <SuspenseRoute><PageRequestCenter /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 } 
@@ -492,11 +543,431 @@ const AppContent = () => {
               />
               
               <Route 
+                path="/inventory/products"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><InventoryProducts /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/inventory/bom"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><InventoryBOM /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/inventory/serial-batch"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><InventorySerialBatch /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/inventory/reports"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><InventoryReports /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/inventory/settings"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><InventorySettings /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/procurement/settings"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProcurementSettings /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/reports/dashboard"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ReportingDashboard /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/reports/custom"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><CustomReports /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/reports/scheduled"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ScheduledReports /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/reports/exports"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ReportExports /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/reports/analytics"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><AnalyticsDashboard /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/inventory/warehouses"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><InventoryWarehouses /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/inventory/stock-levels"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><InventoryStockLevels /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/inventory/transfers"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><InventoryTransfers /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/inventory/adjustments"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><InventoryAdjustments /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/procurement/vendors"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProcurementVendors /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/procurement/purchase-orders"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProcurementPurchaseOrders /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/procurement/requisitions"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProcurementRequisitions /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/procurement/goods-receipts"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProcurementGoodsReceipts /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/procurement/rfq"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProcurementRFQ /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/procurement/vendor-contracts"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProcurementVendorContracts /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/procurement/vendor-performance"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProcurementVendorPerformance /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/procurement/reports"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ProcurementReports /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
                 path="/procurement"
                 element={
                   <ProtectedRoute requiredRole={["admin", "super_admin"]}>
                     <DashboardLayout>
                       <SuspenseRoute><ProcurementManagement /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/assets"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><Assets /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/assets/categories"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><AssetCategories /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/assets/locations"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><AssetLocations /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/assets/maintenance"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><AssetMaintenance /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/assets/depreciation"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><AssetDepreciation /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/assets/disposals"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><AssetDisposals /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/assets/reports"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><AssetReports /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/assets/settings"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><AssetSettings /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/workflows"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><Workflows /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/workflows/instances"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><WorkflowInstances /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/workflows/approvals"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><WorkflowApprovals /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/workflows/automation"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><WorkflowAutomation /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/workflows/settings"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><WorkflowSettings /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/workflows/builder"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><WorkflowBuilder /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route 
+                path="/integrations"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><Integrations /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                }
+              />
+              
+              <Route 
+                path="/integrations/settings"
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><IntegrationSettings /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
                 }

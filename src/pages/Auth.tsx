@@ -55,17 +55,17 @@ const Auth = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="relative">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center mx-auto shadow-2xl shadow-emerald-500/20">
-              <Building className="h-8 w-8 text-white" />
+            <div className="w-16 h-16 rounded-lg bg-primary flex items-center justify-center mx-auto">
+              <Building className="h-8 w-8 text-primary-foreground" />
             </div>
-            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-slate-800 rounded-full flex items-center justify-center border-2 border-slate-900">
-              <Loader2 className="h-3 w-3 animate-spin text-emerald-400" />
+            <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-card rounded-full flex items-center justify-center border-2 border-background">
+              <Loader2 className="h-3 w-3 animate-spin text-primary" />
             </div>
           </div>
-          <p className="mt-6 text-slate-400 font-medium">Loading BuildFlow...</p>
+          <p className="mt-6 text-muted-foreground font-medium">Loading BuildFlow...</p>
         </div>
       </div>
     );
@@ -154,46 +154,31 @@ const Auth = () => {
   ];
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen flex bg-background">
       {/* Left Panel - Branding & Features */}
-      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden">
-        {/* Animated gradient background */}
-        <div className="absolute inset-0">
-          <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-emerald-500/20 rounded-full filter blur-[120px]" />
-          <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-blue-600/15 rounded-full filter blur-[100px]" />
-          <div className="absolute top-1/2 left-1/3 w-[300px] h-[300px] bg-emerald-600/10 rounded-full filter blur-[80px]" />
-        </div>
-
-        {/* Grid pattern */}
-        <div 
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `radial-gradient(circle at 1px 1px, rgba(255,255,255,0.15) 1px, transparent 0)`,
-            backgroundSize: '32px 32px'
-          }}
-        />
+      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-muted/30">
 
         {/* Content */}
         <div className="relative z-10 flex flex-col justify-center px-16 py-12">
           {/* Logo & Tagline */}
           <div className="mb-16">
             <div className="flex items-center gap-3 mb-8">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-2xl shadow-emerald-500/30">
-                <Building className="h-7 w-7 text-white" />
+              <div className="w-14 h-14 rounded-lg bg-primary flex items-center justify-center">
+                <Building className="h-7 w-7 text-primary-foreground" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold text-white tracking-tight">
-                  Build<span className="text-emerald-400">Flow</span>
+                <h1 className="text-3xl font-semibold text-foreground tracking-tight">
+                  Build<span className="text-primary">Flow</span>
                 </h1>
-                <p className="text-slate-500 text-sm">Agency Management Platform</p>
+                <p className="text-muted-foreground text-sm">Agency Management Platform</p>
               </div>
             </div>
             
-            <h2 className="text-4xl font-bold text-white leading-tight mb-4">
+            <h2 className="text-4xl font-semibold text-foreground leading-tight mb-4">
               Run your agency with
-              <span className="block text-emerald-400">confidence & clarity</span>
+              <span className="block text-primary">confidence & clarity</span>
             </h2>
-            <p className="text-lg text-slate-400 max-w-lg">
+            <p className="text-lg text-muted-foreground max-w-lg">
               The all-in-one platform for construction and service agencies. 
               Manage projects, teams, finances, and clients from a single dashboard.
             </p>
@@ -204,15 +189,15 @@ const Auth = () => {
             {features.map((feature, idx) => (
               <div 
                 key={idx} 
-                className="group p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-emerald-500/20"
+                className="group p-4 rounded-lg bg-card border border-border hover:border-primary/30 transition-colors"
               >
                 <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500/20">
-                    <feature.icon className="h-5 w-5 text-emerald-400" />
+                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                    <feature.icon className="h-5 w-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-white text-sm mb-0.5">{feature.title}</h3>
-                    <p className="text-xs text-slate-500">{feature.desc}</p>
+                    <h3 className="font-semibold text-foreground text-sm mb-0.5">{feature.title}</h3>
+                    <p className="text-xs text-muted-foreground">{feature.desc}</p>
                   </div>
                 </div>
               </div>
@@ -220,22 +205,22 @@ const Auth = () => {
           </div>
 
           {/* Trust indicators */}
-          <div className="mt-16 pt-8 border-t border-white/[0.06]">
-            <p className="text-xs text-slate-600 uppercase tracking-wider mb-4">Trusted by agencies worldwide</p>
+          <div className="mt-16 pt-8 border-t border-border">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-4">Trusted by agencies worldwide</p>
             <div className="flex items-center gap-8">
               <div className="text-center">
-                <div className="text-2xl font-bold text-white">10,000+</div>
-                <div className="text-xs text-slate-500">Active Users</div>
+                <div className="text-2xl font-semibold text-foreground">10,000+</div>
+                <div className="text-xs text-muted-foreground">Active Users</div>
               </div>
-              <div className="w-px h-8 bg-white/[0.06]" />
+              <div className="w-px h-8 bg-border" />
               <div className="text-center">
-                <div className="text-2xl font-bold text-white">500+</div>
-                <div className="text-xs text-slate-500">Agencies</div>
+                <div className="text-2xl font-semibold text-foreground">500+</div>
+                <div className="text-xs text-muted-foreground">Agencies</div>
               </div>
-              <div className="w-px h-8 bg-white/[0.06]" />
+              <div className="w-px h-8 bg-border" />
               <div className="text-center">
-                <div className="text-2xl font-bold text-white">99.9%</div>
-                <div className="text-xs text-slate-500">Uptime</div>
+                <div className="text-2xl font-semibold text-foreground">99.9%</div>
+                <div className="text-xs text-muted-foreground">Uptime</div>
               </div>
             </div>
           </div>
@@ -247,19 +232,19 @@ const Auth = () => {
         <div className="w-full max-w-md mx-auto">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-10">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-2xl shadow-emerald-500/30 mb-4">
-              <Building className="h-7 w-7 text-white" />
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-primary mb-4">
+              <Building className="h-7 w-7 text-primary-foreground" />
             </div>
-            <h1 className="text-2xl font-bold text-white">
-              Build<span className="text-emerald-400">Flow</span>
+            <h1 className="text-2xl font-semibold text-foreground">
+              Build<span className="text-primary">Flow</span>
             </h1>
           </div>
 
           {/* Registration Success Message */}
           {showSuccessMessage && (
-            <Alert className="mb-6 border-emerald-500/30 bg-emerald-500/10">
-              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-              <AlertDescription className="text-emerald-200">
+            <Alert className="mb-6 border-success/30 bg-success-light">
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              <AlertDescription className="text-success-foreground">
                 <strong>Account created successfully!</strong> Please check your email to verify your account, then sign in below.
               </AlertDescription>
             </Alert>
@@ -279,17 +264,17 @@ const Auth = () => {
             />
           ) : (
           /* Sign In Card */
-          <Card className="border-slate-800/50 bg-slate-900/50 backdrop-blur-xl shadow-2xl">
+          <Card className="border shadow-lg">
             <CardContent className="p-8">
               <div className="text-center mb-8">
-                <h2 className="text-2xl font-bold text-white mb-2">Welcome back</h2>
-                <p className="text-slate-400">Sign in to your account to continue</p>
+                <h2 className="text-2xl font-semibold text-foreground mb-2">Welcome back</h2>
+                <p className="text-muted-foreground">Sign in to your account to continue</p>
               </div>
 
               {/* Error Message */}
               {error && (
-                <Alert className="mb-6 border-red-500/30 bg-red-500/10">
-                  <AlertDescription className="text-red-300 text-sm">
+                <Alert className="mb-6 border-error/30 bg-error-light">
+                  <AlertDescription className="text-error-foreground text-sm">
                     {error}
                   </AlertDescription>
                 </Alert>
@@ -298,11 +283,11 @@ const Auth = () => {
               {/* Sign In Form */}
               <form onSubmit={handleSignIn} className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="signin-email" className="text-slate-300 text-sm font-medium">
+                  <Label htmlFor="signin-email" className="text-sm font-medium">
                     Email Address
                   </Label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signin-email"
                       type="email"
@@ -313,25 +298,25 @@ const Auth = () => {
                         setError('');
                       }}
                       required
-                      className="pl-10 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20 h-11"
+                      className="pl-10 h-11"
                     />
                   </div>
                 </div>
                 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="signin-password" className="text-slate-300 text-sm font-medium">
+                    <Label htmlFor="signin-password" className="text-sm font-medium">
                       Password
                     </Label>
                     <Link 
                       to="/forgot-password" 
-                      className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                      className="text-xs text-primary hover:text-primary/80 transition-colors"
                     >
                       Forgot password?
                     </Link>
                   </div>
                   <div className="relative">
-                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       id="signin-password"
                       type={showPassword ? "text" : "password"}
@@ -342,12 +327,12 @@ const Auth = () => {
                         setError('');
                       }}
                       required
-                      className="pl-10 pr-10 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500 focus:border-emerald-500/50 focus:ring-emerald-500/20 h-11"
+                      className="pl-10 pr-10 h-11"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -360,16 +345,15 @@ const Auth = () => {
                     id="remember-me" 
                     checked={rememberMe}
                     onCheckedChange={(checked) => setRememberMe(checked as boolean)}
-                    className="border-slate-600 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
                   />
-                  <Label htmlFor="remember-me" className="text-sm text-slate-400 cursor-pointer">
+                  <Label htmlFor="remember-me" className="text-sm text-muted-foreground cursor-pointer">
                     Remember my email
                   </Label>
                 </div>
 
                 <Button 
                   type="submit" 
-                  className="w-full h-11 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-medium shadow-lg shadow-emerald-500/20" 
+                  className="w-full h-11" 
                   disabled={isLoading}
                 >
                   {isLoading ? (
@@ -389,10 +373,10 @@ const Auth = () => {
               {/* Divider */}
               <div className="relative my-8">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-700/50" />
+                  <div className="w-full border-t border-border" />
                 </div>
                 <div className="relative flex justify-center">
-                  <span className="bg-slate-900/50 px-4 text-xs text-slate-500 uppercase tracking-wider">
+                  <span className="bg-card px-4 text-xs text-muted-foreground uppercase tracking-wider">
                     New to BuildFlow?
                   </span>
                 </div>
@@ -402,7 +386,7 @@ const Auth = () => {
               <Link to="/agency-signup">
                 <Button 
                   variant="outline" 
-                  className="w-full h-11 border-slate-700/50 bg-transparent text-slate-300 hover:bg-slate-800/50 hover:text-white hover:border-slate-600"
+                  className="w-full h-11"
                 >
                   Create Your Agency Account
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -414,13 +398,13 @@ const Auth = () => {
 
           {/* Footer */}
           <div className="mt-8 text-center">
-            <p className="text-xs text-slate-600">
+            <p className="text-xs text-muted-foreground">
               By signing in, you agree to our{' '}
-              <Link to="/terms" className="text-slate-400 hover:text-emerald-400 transition-colors">
+              <Link to="/terms" className="text-primary hover:text-primary/80 transition-colors">
                 Terms of Service
               </Link>{' '}
               and{' '}
-              <Link to="/privacy" className="text-slate-400 hover:text-emerald-400 transition-colors">
+              <Link to="/privacy" className="text-primary hover:text-primary/80 transition-colors">
                 Privacy Policy
               </Link>
             </p>

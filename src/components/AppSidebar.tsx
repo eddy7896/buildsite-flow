@@ -32,6 +32,36 @@ import {
   Package,
   ShoppingCart,
   Mail,
+  Warehouse,
+  ArrowRightLeft,
+  Edit,
+  Hash,
+  PackageCheck,
+  FileSearch,
+  FolderTree,
+  MapPin,
+  Wrench,
+  TrendingDown,
+  Trash2,
+  GitBranch,
+  CheckCircle2,
+  Zap,
+  Plug,
+  Download,
+  Activity,
+  Layers,
+  ShoppingBag,
+  FileBarChart,
+  Boxes,
+  Truck,
+  Handshake,
+  Target,
+  Workflow,
+  Network,
+  Database,
+  Server,
+  Shield,
+  Cog,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -53,7 +83,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { getPagesForRole, type PageConfig } from '@/utils/rolePages';
 import { AppRole } from '@/utils/roleUtils';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
-import { canAccessRoute } from '@/utils/routePermissions';
+import { canAccessRouteSync } from '@/utils/routePermissions';
+import { getAccessiblePagePaths } from '@/utils/agencyPageAccess';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -73,7 +104,7 @@ const iconMap: Record<string, any> = {
   TrendingUp,
   AlertCircle: Clock,
   CalendarDays,
-  Shield: Monitor,
+  Shield,
   ChevronRight: Clock,
   Bell,
   Briefcase,
@@ -92,18 +123,52 @@ const iconMap: Record<string, any> = {
   Package,
   ShoppingCart,
   Mail,
+  Warehouse,
+  ArrowRightLeft,
+  Edit,
+  Hash,
+  PackageCheck,
+  FileSearch,
+  FolderTree,
+  MapPin,
+  Wrench,
+  TrendingDown,
+  Trash2,
+  GitBranch,
+  CheckCircle2,
+  Zap,
+  Plug,
+  Download,
+  Activity,
+  Layers,
+  ShoppingBag,
+  FileBarChart,
+  Boxes,
+  Truck,
+  Handshake,
+  Target,
+  Workflow,
+  Network,
+  Database,
+  Server,
+  Cog,
 };
 
 // Category configuration with icons and colors
 const categoryConfig: Record<string, { label: string; icon: any; color: string; order: number }> = {
   dashboard: { label: 'Overview', icon: BarChart3, color: 'text-blue-600', order: 1 },
-  system: { label: 'System', icon: Monitor, color: 'text-purple-600', order: 2 },
+  system: { label: 'System', icon: Shield, color: 'text-purple-600', order: 2 },
   management: { label: 'Management', icon: Users, color: 'text-green-600', order: 3 },
   hr: { label: 'Human Resources', icon: UserCheck, color: 'text-pink-600', order: 4 },
   finance: { label: 'Finance', icon: DollarSign, color: 'text-yellow-600', order: 5 },
   projects: { label: 'Projects', icon: Briefcase, color: 'text-indigo-600', order: 6 },
-  reports: { label: 'Reports & Analytics', icon: ChartLine, color: 'text-cyan-600', order: 7 },
-  personal: { label: 'Personal', icon: User, color: 'text-orange-600', order: 8 },
+  inventory: { label: 'Inventory', icon: Package, color: 'text-amber-600', order: 7 },
+  procurement: { label: 'Procurement', icon: ShoppingCart, color: 'text-teal-600', order: 8 },
+  assets: { label: 'Assets', icon: Building2, color: 'text-slate-600', order: 9 },
+  workflows: { label: 'Workflows', icon: Workflow, color: 'text-violet-600', order: 10 },
+  automation: { label: 'Automation', icon: Zap, color: 'text-rose-600', order: 11 },
+  reports: { label: 'Reports & Analytics', icon: ChartLine, color: 'text-cyan-600', order: 12 },
+  personal: { label: 'Personal', icon: User, color: 'text-orange-600', order: 13 },
 };
 
 export function AppSidebar() {
@@ -114,6 +179,11 @@ export function AppSidebar() {
   const currentPath = location.pathname;
   const isMobile = useIsMobile();
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
+  
+  // Get accessible pages for agency (for non-super-admin users)
+  // MUST be declared before any early returns to follow Rules of Hooks
+  const [accessiblePagePaths, setAccessiblePagePaths] = useState<string[]>([]);
+  const [pagesLoaded, setPagesLoaded] = useState(false);
 
   // Check setup status
   useEffect(() => {
@@ -159,21 +229,37 @@ export function AppSidebar() {
     }
   }, [currentPath, isMobile, setOpenMobile]);
 
+  // Load accessible pages for non-super-admin users
+  useEffect(() => {
+    if (userRole && userRole !== 'super_admin') {
+      getAccessiblePagePaths().then(paths => {
+        setAccessiblePagePaths(paths);
+        setPagesLoaded(true);
+      }).catch(() => {
+        setAccessiblePagePaths([]);
+        setPagesLoaded(true);
+      });
+    } else {
+      setPagesLoaded(true);
+      setAccessiblePagePaths([]); // Super admin has access to all
+    }
+  }, [userRole]);
+
   // Don't show any navigation items if still loading or no role
   if (loading || !userRole) {
     return (
       <Sidebar className="w-14" collapsible="icon">
         <SidebarContent className="flex flex-col">
-          <SidebarHeader className="p-3 sm:p-4 border-b border-sidebar-border bg-gradient-to-br from-primary/5 via-primary/3 to-transparent">
-            <div className="h-9 w-9 sm:h-10 sm:w-10 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-              <Building className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+          <SidebarHeader className="p-3 sm:p-4 border-b border-sidebar-border bg-sidebar-background">
+            <div className="h-9 w-9 sm:h-10 sm:w-10 bg-primary rounded-lg flex items-center justify-center">
+              <Building className="h-4 w-4 sm:h-5 sm:w-5 text-primary-foreground" />
             </div>
           </SidebarHeader>
         </SidebarContent>
       </Sidebar>
     );
   }
-  
+
   // Get pages for the current role from rolePages mapping
   const role = userRole as AppRole;
   const rolePages = getPagesForRole(role);
@@ -183,7 +269,24 @@ export function AppSidebar() {
     .filter(page => {
       if (!page.exists) return false;
       if (page.category === 'settings') return false;
-      if (userRole && !canAccessRoute(userRole, page.path)) return false;
+      
+      // For non-super-admin, check if page is assigned to agency
+      if (userRole && userRole !== 'super_admin') {
+        if (!pagesLoaded) return false; // Wait for pages to load
+        if (accessiblePagePaths.length === 0) return false; // No pages assigned
+        const hasAccess = accessiblePagePaths.some(path => {
+          // Exact match
+          if (path === page.path) return true;
+          // Parameterized route match
+          const pathPattern = path.replace(/:[^/]+/g, '[^/]+');
+          const regex = new RegExp(`^${pathPattern}$`);
+          return regex.test(page.path);
+        });
+        if (!hasAccess) return false;
+      }
+      
+      // Check role-based access
+      if (userRole && !canAccessRouteSync(userRole, page.path)) return false;
       return true;
     })
     .sort((a, b) => {
@@ -206,7 +309,14 @@ export function AppSidebar() {
   // Find settings page
   const settingsPage = rolePages.find(page => {
     if (page.path !== '/settings' || !page.exists) return false;
-    if (userRole && !canAccessRoute(userRole, '/settings')) return false;
+    
+    // Check page assignment for non-super-admin
+    if (userRole && userRole !== 'super_admin' && pagesLoaded) {
+      const hasAccess = accessiblePagePaths.includes('/settings');
+      if (!hasAccess) return false;
+    }
+    
+    if (userRole && !canAccessRouteSync(userRole, '/settings')) return false;
     return true;
   });
   
@@ -221,10 +331,10 @@ export function AppSidebar() {
 
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     cn(
-      "relative rounded-lg",
+      "relative rounded-lg transition-all duration-200",
       isActive 
-        ? "bg-gradient-to-r from-primary/15 to-primary/5 text-primary font-semibold shadow-sm shadow-primary/10 border-l-2 border-primary" 
-        : "hover:bg-muted/60 text-muted-foreground hover:text-foreground"
+        ? "bg-primary/10 text-primary font-semibold border-l-2 border-primary shadow-sm" 
+        : "hover:bg-muted/80 text-muted-foreground hover:text-foreground hover:translate-x-0.5"
     );
 
   const CategoryIcon = ({ category }: { category: string }) => {
@@ -238,8 +348,8 @@ export function AppSidebar() {
     <TooltipProvider delayDuration={300}>
       <Sidebar
         className={cn(
-          "border-r border-sidebar-border bg-gradient-to-b from-sidebar-background to-sidebar-background/95",
-          isMobile ? "w-full" : collapsed ? "w-20" : "w-64"
+          "border-r border-sidebar-border bg-sidebar-background transition-all duration-300",
+          isMobile ? "w-full" : collapsed ? "w-20" : "w-72"
         )}
         collapsible={isMobile ? "offcanvas" : "icon"}
         variant={isMobile ? "floating" : "sidebar"}
@@ -248,7 +358,7 @@ export function AppSidebar() {
         <SidebarContent className="flex flex-col overflow-hidden">
           {/* Professional Header with Branding */}
           <SidebarHeader className={cn(
-            "border-b border-sidebar-border bg-gradient-to-br from-primary/8 via-primary/5 to-transparent flex-shrink-0",
+            "border-b border-sidebar-border bg-sidebar-background flex-shrink-0",
             collapsed && !isMobile ? "p-2 flex justify-center" : "p-3 sm:p-4"
           )}>
             <div className={cn(
@@ -261,19 +371,18 @@ export function AppSidebar() {
                     src={agencySettings.logo_url}
                     alt={agencySettings.agency_name || 'Agency Logo'}
                     className={cn(
-                      "rounded-xl object-contain bg-white/50 backdrop-blur-sm border border-primary/10 shadow-lg",
+                      "rounded-lg object-contain bg-card border border-border",
                       collapsed && !isMobile ? "h-10 w-10" : "h-10 w-10 sm:h-12 sm:w-12"
                     )}
                   />
-                  <div className="absolute -inset-0.5 bg-gradient-to-br from-primary/20 to-transparent rounded-xl blur-sm -z-10" />
                 </div>
               ) : (
                 <div className={cn(
-                  "bg-gradient-to-br from-primary to-primary/70 rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 flex-shrink-0",
+                  "bg-primary rounded-lg flex items-center justify-center flex-shrink-0",
                   collapsed && !isMobile ? "h-10 w-10" : "h-10 w-10 sm:h-12 sm:w-12"
                 )}>
                   <Building className={cn(
-                    "text-white",
+                    "text-primary-foreground",
                     collapsed && !isMobile ? "h-5 w-5" : "h-5 w-5 sm:h-6 sm:w-6"
                   )} />
                 </div>
@@ -292,7 +401,7 @@ export function AppSidebar() {
           </SidebarHeader>
           
           {/* Main Navigation - Scrollable */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden py-3 sm:py-4" data-sidebar="content">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 sm:py-3 px-1" data-sidebar="content">
             {/* Setup Progress - Special Highlight */}
             {setupComplete === false && (
               <div className={cn(
@@ -302,22 +411,22 @@ export function AppSidebar() {
                 <NavLink 
                   to="/agency-setup-progress" 
                   className={({ isActive }) => cn(
-                    "flex items-center rounded-lg",
+                    "flex items-center rounded-lg transition-colors",
                     collapsed && !isMobile 
                       ? "justify-center px-0 py-2 w-full" 
                       : "gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5",
-                    "bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20",
-                    "hover:from-amber-500/15 hover:to-orange-500/15",
-                    isActive && "ring-2 ring-amber-500/30"
+                    "bg-warning-light border border-warning/30",
+                    "hover:bg-warning-light/80",
+                    isActive && "ring-2 ring-warning/30"
                   )}
                 >
                   <div className="relative flex-shrink-0">
                     <TrendingUp className={cn(
-                      "text-amber-600",
+                      "text-warning",
                       collapsed && !isMobile ? "h-5 w-5" : "h-3.5 w-3.5 sm:h-4 sm:w-4"
                     )} />
                     {!collapsed || isMobile ? (
-                      <div className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 sm:h-2 sm:w-2 bg-amber-500 rounded-full" />
+                      <div className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 sm:h-2 sm:w-2 bg-warning rounded-full" />
                     ) : null}
                   </div>
                   {(!collapsed || isMobile) && (
@@ -337,12 +446,13 @@ export function AppSidebar() {
 
               return (
                 <SidebarGroup key={category} className={cn(
-                  collapsed && !isMobile ? "px-0" : "px-1 sm:px-2"
+                  collapsed && !isMobile ? "px-0" : "px-1 sm:px-2",
+                  "mb-2 sm:mb-3"
                 )}>
                   {/* Only show category label when expanded */}
                   {(!collapsed || isMobile) && (
-                    <SidebarGroupLabel className="px-2 sm:px-3 py-1.5 sm:py-2 mb-1">
-                      <div className="flex items-center gap-1.5 sm:gap-2">
+                    <SidebarGroupLabel className="px-2 sm:px-3 py-2 sm:py-2.5 mb-2 sm:mb-2.5">
+                      <div className="flex items-center gap-2 sm:gap-2.5">
                         <CategoryIcon category={category} />
                         <span className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate">
                           {config.label}
@@ -354,8 +464,8 @@ export function AppSidebar() {
                     collapsed && !isMobile && "flex items-center justify-center"
                   )}>
                     <SidebarMenu className={cn(
-                      "space-y-0.5",
-                      collapsed && !isMobile && "space-y-1 w-full"
+                      "space-y-1 sm:space-y-1.5",
+                      collapsed && !isMobile && "space-y-1.5 w-full"
                     )}>
                       {pages.map((page) => {
                         const IconComponent = iconMap[page.icon] || User;
@@ -376,17 +486,18 @@ export function AppSidebar() {
                                     className={({ isActive }) => getNavCls({ isActive: active || isActive })}
                                   >
                                     <div className={cn(
-                                      "flex items-center min-w-0",
+                                      "flex items-center min-w-0 transition-all duration-200",
                                       collapsed && !isMobile 
-                                        ? "justify-center px-0 py-2.5 w-full" 
-                                        : "w-full gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5",
+                                        ? "justify-center px-0 py-2.5 sm:py-3 w-full" 
+                                        : "w-full gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-2 sm:py-2.5",
                                       active && !collapsed && "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 sm:before:w-1 before:bg-primary before:rounded-r-full"
                                     )}>
                                       <IconComponent className={cn(
-                                        "flex-shrink-0",
+                                        "flex-shrink-0 transition-colors",
                                         collapsed && !isMobile 
                                           ? "h-5 w-5" 
-                                          : "h-3.5 w-3.5 sm:h-4 sm:w-4"
+                                          : "h-4 w-4 sm:h-4 sm:w-4",
+                                        active ? "text-primary" : "text-muted-foreground"
                                       )} />
                                       {(!collapsed || isMobile) && (
                                         <span className="text-xs sm:text-sm font-medium flex-1 text-left truncate min-w-0">
@@ -394,7 +505,7 @@ export function AppSidebar() {
                                         </span>
                                       )}
                                       {active && (!collapsed || isMobile) && (
-                                        <div className="h-1 w-1 sm:h-1.5 sm:w-1.5 rounded-full bg-primary flex-shrink-0" />
+                                        <div className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-primary flex-shrink-0" />
                                       )}
                                     </div>
                                   </NavLink>
@@ -489,9 +600,9 @@ export function AppSidebar() {
           {(!collapsed || isMobile) && profile && (
             <>
               <SidebarSeparator className="mx-2 sm:mx-4" />
-              <SidebarFooter className="p-2 sm:p-3 border-t border-sidebar-border bg-muted/30 flex-shrink-0">
+              <SidebarFooter className="p-2 sm:p-3 border-t border-sidebar-border bg-muted/50 flex-shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3 px-1 sm:px-2 min-w-0">
-                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-white text-[10px] sm:text-xs font-bold shadow-md flex-shrink-0">
+                  <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] sm:text-xs font-semibold flex-shrink-0">
                     {(profile.full_name || 'U')
                       .split(' ')
                       .map((n) => n[0])
@@ -516,3 +627,5 @@ export function AppSidebar() {
     </TooltipProvider>
   );
 }
+
+

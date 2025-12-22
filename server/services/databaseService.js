@@ -16,7 +16,10 @@ const { parseDatabaseUrl } = require('../utils/poolManager');
  * @param {string} userId - Optional user ID for audit context
  * @returns {Promise<Object>} Query result
  */
-async function executeQuery(sql, params, agencyDatabase, userId) {
+async function executeQuery(sql, params, agencyDatabase, userId, retryCount = 0) {
+  const MAX_RETRIES = 2;
+  const RETRY_DELAY = 1000; // 1 second
+
   // Auto-repair schema if needed
   if (agencyDatabase) {
     await ensureAgencySchema(agencyDatabase);
@@ -27,32 +30,70 @@ async function executeQuery(sql, params, agencyDatabase, userId) {
 
   console.log('[API] Executing query:', trimmedSql.substring(0, 100));
 
-  // If userId is provided, set the context in a transaction
-  if (userId) {
-    const client = await targetPool.connect();
-    try {
-      await client.query('BEGIN');
+  try {
+    // If userId is provided, set the context in a transaction
+    if (userId) {
+      const client = await targetPool.connect();
+      try {
+        await client.query('BEGIN');
 
-      // Set the user context for audit logs
-      const escapedUserId = userId.replace(/'/g, "''");
-      await client.query(`SET LOCAL app.current_user_id = '${escapedUserId}'`);
+        // Set the user context for audit logs
+        const escapedUserId = userId.replace(/'/g, "''");
+        await client.query(`SET LOCAL app.current_user_id = '${escapedUserId}'`);
 
-      console.log('[API] Executing query with userId context:', trimmedSql.substring(0, 150));
-      console.log('[API] Query params:', params);
+        console.log('[API] Executing query with userId context:', trimmedSql.substring(0, 150));
+        console.log('[API] Query params:', params);
 
-      const result = await client.query(trimmedSql, params);
-      await client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      console.error('[API] Transaction error:', error);
-      throw error;
-    } finally {
-      client.release();
+        const result = await client.query(trimmedSql, params);
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {}); // Ignore rollback errors
+        console.error('[API] Transaction error:', error);
+        throw error;
+      } finally {
+        client.release();
+      }
+    } else {
+      // Execute query without transaction
+      return await targetPool.query(trimmedSql, params);
     }
-  } else {
-    // Execute query without transaction
-    return await targetPool.query(trimmedSql, params);
+  } catch (error) {
+    // Retry on connection timeout or connection errors
+    const isConnectionError = 
+      error.message?.includes('timeout') ||
+      error.message?.includes('Connection terminated') ||
+      error.message?.includes('ECONNREFUSED') ||
+      error.code === 'ETIMEDOUT' ||
+      error.code === 'ECONNREFUSED';
+
+    if (isConnectionError && retryCount < MAX_RETRIES) {
+      console.log(`[API] Connection error detected, retrying (${retryCount + 1}/${MAX_RETRIES})...`);
+      
+      // Clear the pool from cache if it's an agency pool to force recreation
+      if (agencyDatabase) {
+        const { agencyPools } = require('../config/database');
+        if (agencyPools.has(agencyDatabase)) {
+          const badPool = agencyPools.get(agencyDatabase);
+          try {
+            await badPool.end();
+          } catch (e) {
+            // Ignore errors when ending the pool
+          }
+          agencyPools.delete(agencyDatabase);
+          console.log(`[API] Cleared bad pool from cache: ${agencyDatabase}`);
+        }
+      }
+
+      // Wait before retrying
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * (retryCount + 1)));
+
+      // Retry the query
+      return executeQuery(sql, params, agencyDatabase, userId, retryCount + 1);
+    }
+
+    // If we've exhausted retries or it's not a connection error, throw
+    throw error;
   }
 }
 

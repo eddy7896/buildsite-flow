@@ -163,12 +163,10 @@ export function TicketFloatingButton() {
             <Button
               onClick={handleMinimize}
               className={cn(
-                "rounded-full h-10 w-10 p-0 shadow-lg transition-all duration-300",
-                "hover:scale-110 active:scale-95",
-                "bg-gradient-to-br from-blue-500 to-purple-600",
-                "hover:from-blue-600 hover:to-purple-700",
-                "border border-white/20",
-                "relative overflow-hidden"
+                "rounded-full h-10 w-10 p-0 shadow-lg transition-colors",
+                "bg-primary hover:bg-primary/90",
+                "text-primary-foreground",
+                "border border-border"
               )}
               aria-label="Expand ticket button"
             >
@@ -193,21 +191,16 @@ export function TicketFloatingButton() {
                 onClick={() => setIsOpen(true)}
                 size="sm"
                 className={cn(
-                  "rounded-full h-10 w-10 p-0 shadow-lg transition-all duration-300",
-                  "hover:scale-110 active:scale-95",
-                  "bg-gradient-to-br from-blue-500 to-purple-600",
-                  "hover:from-blue-600 hover:to-purple-700",
-                  "border border-white/20",
-                  "relative overflow-hidden"
+                  "rounded-full h-10 w-10 p-0 shadow-lg transition-colors",
+                  "bg-primary hover:bg-primary/90",
+                  "text-primary-foreground",
+                  "border border-border"
                 )}
                 aria-label="Report an issue or error"
               >
-                {/* Shine effect */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                
                 {/* Icon */}
-                <div className="relative z-10 flex items-center justify-center">
-                  <HelpCircle className="h-5 w-5 text-white" strokeWidth={2.5} />
+                <div className="flex items-center justify-center">
+                  <HelpCircle className="h-5 w-5" strokeWidth={2.5} />
                 </div>
 
                 {/* Error Badge */}
@@ -281,16 +274,16 @@ export function TicketFloatingButton() {
       {/* Ticket Creation Dialog - Improved Design */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="max-w-3xl max-h-[95vh] overflow-hidden flex flex-col p-0 gap-0">
-          {/* Header with gradient */}
-          <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-6">
+          {/* Header */}
+          <div className="bg-card border-b border-border p-6">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-3 text-2xl">
-                <div className="p-2 bg-white/20 rounded-lg">
-                  <MessageCircle className="h-6 w-6" />
+              <DialogTitle className="flex items-center gap-3 text-xl font-semibold">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <MessageCircle className="h-5 w-5 text-primary" />
                 </div>
                 Report an Issue
               </DialogTitle>
-              <DialogDescription className="text-blue-100 mt-2">
+              <DialogDescription className="text-muted-foreground mt-2">
                 Found a bug or error? Let us know! We'll investigate and get back to you.
               </DialogDescription>
             </DialogHeader>
@@ -300,7 +293,7 @@ export function TicketFloatingButton() {
           <div className="flex-1 overflow-y-auto p-6 space-y-5">
             {/* Error Summary Card */}
             {hasErrors && includeLogs && (
-              <div className="p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-2 border-yellow-200 dark:border-yellow-800 rounded-xl shadow-sm">
+              <div className="p-4 bg-warning-light border border-warning/30 rounded-lg">
                 <div className="flex items-start gap-3">
                   <div className="p-2 bg-yellow-100 dark:bg-yellow-900/40 rounded-lg">
                     <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
@@ -477,7 +470,7 @@ export function TicketFloatingButton() {
             <Button
               onClick={handleSubmit}
               disabled={isSubmitting || !formData.title.trim() || !formData.description.trim()}
-              className="min-w-[140px] bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+              className="min-w-[140px]"
             >
               {isSubmitting ? (
                 <>

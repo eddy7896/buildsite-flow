@@ -355,6 +355,152 @@ async function ensureRfqResponseItemsTable(client) {
 }
 
 /**
+ * Ensure vendor_contacts table exists
+ */
+async function ensureVendorContactsTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.vendor_contacts (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      agency_id UUID NOT NULL,
+      supplier_id UUID NOT NULL REFERENCES public.suppliers(id) ON DELETE CASCADE,
+      name VARCHAR(255) NOT NULL,
+      designation VARCHAR(255),
+      email VARCHAR(255),
+      phone VARCHAR(50),
+      alternate_phone VARCHAR(50),
+      is_primary BOOLEAN DEFAULT false,
+      notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+  `);
+
+  // Add indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_vendor_contacts_agency_id ON public.vendor_contacts(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_contacts_supplier_id ON public.vendor_contacts(supplier_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_contacts_is_primary ON public.vendor_contacts(is_primary);
+  `);
+}
+
+/**
+ * Ensure vendor_contracts table exists
+ */
+async function ensureVendorContractsTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.vendor_contracts (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      agency_id UUID NOT NULL,
+      supplier_id UUID NOT NULL REFERENCES public.suppliers(id) ON DELETE CASCADE,
+      contract_number VARCHAR(100) UNIQUE NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      contract_type VARCHAR(50), -- service, goods, maintenance, etc.
+      start_date DATE NOT NULL,
+      end_date DATE,
+      value DECIMAL(15,2),
+      currency VARCHAR(10) DEFAULT 'INR',
+      terms_conditions TEXT,
+      renewal_terms TEXT,
+      status VARCHAR(50) DEFAULT 'active', -- draft, active, expired, terminated
+      signed_by UUID REFERENCES public.users(id),
+      signed_date DATE,
+      document_url TEXT,
+      notes TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+  `);
+
+  // Add indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_vendor_contracts_agency_id ON public.vendor_contracts(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_contracts_supplier_id ON public.vendor_contracts(supplier_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_contracts_contract_number ON public.vendor_contracts(contract_number);
+    CREATE INDEX IF NOT EXISTS idx_vendor_contracts_status ON public.vendor_contracts(status);
+    CREATE INDEX IF NOT EXISTS idx_vendor_contracts_end_date ON public.vendor_contracts(end_date);
+  `);
+}
+
+/**
+ * Ensure vendor_performance table exists
+ */
+async function ensureVendorPerformanceTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.vendor_performance (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      agency_id UUID NOT NULL,
+      supplier_id UUID NOT NULL REFERENCES public.suppliers(id) ON DELETE CASCADE,
+      period_start DATE NOT NULL,
+      period_end DATE NOT NULL,
+      total_orders INTEGER DEFAULT 0,
+      total_order_value DECIMAL(15,2) DEFAULT 0,
+      on_time_delivery_rate DECIMAL(5,2) DEFAULT 0, -- percentage
+      quality_rating DECIMAL(3,2) DEFAULT 0, -- 0-5 rating
+      cost_rating DECIMAL(3,2) DEFAULT 0, -- 0-5 rating
+      communication_rating DECIMAL(3,2) DEFAULT 0, -- 0-5 rating
+      overall_rating DECIMAL(3,2) DEFAULT 0, -- 0-5 rating
+      late_deliveries INTEGER DEFAULT 0,
+      rejected_items INTEGER DEFAULT 0,
+      notes TEXT,
+      evaluated_by UUID REFERENCES public.users(id),
+      evaluated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+  `);
+
+  // Add indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_vendor_performance_agency_id ON public.vendor_performance(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_performance_supplier_id ON public.vendor_performance(supplier_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_performance_period ON public.vendor_performance(period_start, period_end);
+  `);
+}
+
+/**
+ * Ensure vendor_invoices table exists
+ */
+async function ensureVendorInvoicesTable(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.vendor_invoices (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      agency_id UUID NOT NULL,
+      supplier_id UUID NOT NULL REFERENCES public.suppliers(id) ON DELETE CASCADE,
+      invoice_number VARCHAR(100) UNIQUE NOT NULL,
+      po_id UUID REFERENCES public.purchase_orders(id),
+      invoice_date DATE NOT NULL,
+      due_date DATE,
+      subtotal DECIMAL(15,2) DEFAULT 0,
+      tax_amount DECIMAL(15,2) DEFAULT 0,
+      total_amount DECIMAL(15,2) DEFAULT 0,
+      currency VARCHAR(10) DEFAULT 'INR',
+      status VARCHAR(50) DEFAULT 'pending', -- pending, approved, paid, disputed, cancelled
+      payment_status VARCHAR(50) DEFAULT 'unpaid', -- unpaid, partial, paid
+      paid_amount DECIMAL(15,2) DEFAULT 0,
+      paid_date DATE,
+      payment_method VARCHAR(50),
+      notes TEXT,
+      document_url TEXT,
+      created_by UUID REFERENCES public.users(id),
+      approved_by UUID REFERENCES public.users(id),
+      approved_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+  `);
+
+  // Add indexes
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_vendor_invoices_agency_id ON public.vendor_invoices(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_invoices_supplier_id ON public.vendor_invoices(supplier_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_invoices_invoice_number ON public.vendor_invoices(invoice_number);
+    CREATE INDEX IF NOT EXISTS idx_vendor_invoices_po_id ON public.vendor_invoices(po_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_invoices_status ON public.vendor_invoices(status);
+    CREATE INDEX IF NOT EXISTS idx_vendor_invoices_payment_status ON public.vendor_invoices(payment_status);
+  `);
+}
+
+/**
  * Ensure all procurement management tables
  */
 async function ensureProcurementSchema(client) {
@@ -385,6 +531,10 @@ async function ensureProcurementSchema(client) {
     await ensureRfqItemsTable(client);
     await ensureRfqResponsesTable(client);
     await ensureRfqResponseItemsTable(client);
+    await ensureVendorContactsTable(client);
+    await ensureVendorContractsTable(client);
+    await ensureVendorPerformanceTable(client);
+    await ensureVendorInvoicesTable(client);
     
     console.log('[SQL] ✅ Procurement management schema ensured');
   } catch (error) {
@@ -405,4 +555,8 @@ module.exports = {
   ensureRfqItemsTable,
   ensureRfqResponsesTable,
   ensureRfqResponseItemsTable,
+  ensureVendorContactsTable,
+  ensureVendorContractsTable,
+  ensureVendorPerformanceTable,
+  ensureVendorInvoicesTable,
 };

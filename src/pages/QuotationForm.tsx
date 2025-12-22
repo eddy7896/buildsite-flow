@@ -822,7 +822,7 @@ const QuotationForm: React.FC = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 lg:p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -1257,7 +1257,7 @@ const QuotationForm: React.FC = () => {
 
             {/* Summary Footer */}
             {lineItems.length > 0 && (
-              <div className="border-t bg-gradient-to-r from-muted/50 to-muted/30 p-4">
+              <div className="border-t bg-muted/50 p-4">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                   <div className="flex items-center gap-2">
                     <Calculator className="h-4 w-4 text-muted-foreground" />

@@ -634,7 +634,7 @@ const Projects = () => {
   const displayEmployeeName = urlEmployeeName;
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Breadcrumb */}
       <DepartmentBreadcrumb currentPage="projects" />
       
@@ -1181,12 +1181,12 @@ const Projects = () => {
                       onDragLeave={onDragLeave}
                       onDrop={(e) => onDrop(e, stage.status)}
                     >
-                      <div className="pipeline-column bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 lg:p-5 h-[calc(100vh-300px)] min-h-[650px] sm:min-h-[700px] lg:min-h-[750px] max-h-[850px] border-2 border-gray-200 flex flex-col shadow-md hover:shadow-lg hover:border-blue-300">
+                      <div className="pipeline-column bg-card rounded-lg p-4 lg:p-5 h-[calc(100vh-300px)] min-h-[650px] sm:min-h-[700px] lg:min-h-[750px] max-h-[850px] border border-border flex flex-col shadow-sm hover:shadow-md hover:border-primary/30 transition-all">
                         {/* Stage Header */}
-                        <div className="flex items-center justify-between mb-4 pb-4 border-b-2 border-gray-300 flex-shrink-0">
+                        <div className="flex items-center justify-between mb-4 pb-4 border-b border-border flex-shrink-0">
                           <div className="flex items-center gap-2.5 lg:gap-3">
                             <span className="text-xl lg:text-2xl">{stage.icon}</span>
-                            <h3 className="font-bold text-sm lg:text-base text-gray-900">{stage.name}</h3>
+                            <h3 className="font-semibold text-sm lg:text-base text-foreground">{stage.name}</h3>
                           </div>
                           <Badge 
                             variant="secondary" 
