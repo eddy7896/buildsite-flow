@@ -25,8 +25,13 @@ COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY index.html ./
 
 # Copy source code
+# Use .dockerignore to exclude node_modules, but copy everything else
 COPY src ./src
 COPY public ./public
+
+# Add a build timestamp to bust cache if source changes
+ARG BUILD_DATE=unknown
+ENV BUILD_DATE=${BUILD_DATE}
 
 # Build the application for production (VITE_API_URL is available as env var)
 RUN npm run build
