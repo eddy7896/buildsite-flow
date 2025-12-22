@@ -8,7 +8,7 @@ ARG BUILDKIT_INLINE_CACHE=1
 # Stage 1: Builder
 FROM node:20-alpine AS frontend-builder
 
-ARG NODE_ENV
+ARG NODE_ENV=production
 ARG VITE_API_URL
 
 ENV NODE_ENV=${NODE_ENV}
@@ -17,17 +17,25 @@ ENV VITE_API_URL=${VITE_API_URL}
 WORKDIR /app
 
 # Copy package files first (better cache layer)
-COPY package.json package-lock.json* ./
+COPY package.json package-lock.json ./
 
 # Install dependencies with cache mount
+# Use npm install if package-lock.json doesn't exist, otherwise use npm ci
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci
+    if [ -f package-lock.json ]; then \
+        npm ci; \
+    else \
+        npm install; \
+    fi
 
-# Copy only source files needed for build (not everything)
+# Copy all config files needed for build
+COPY vite.config.ts tailwind.config.ts postcss.config.js components.json ./
+COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./
+COPY index.html ./
+
+# Copy source files
 COPY src ./src
 COPY public ./public
-COPY index.html ./
-COPY vite.config.ts tailwind.config.ts tsconfig*.json postcss.config.js components.json ./
 
 # Build the frontend
 RUN npm run build
