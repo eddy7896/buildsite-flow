@@ -48,10 +48,10 @@ chmod +x scripts/deploy-hostinger.sh
 
 ```bash
 # Check services
-docker compose -f docker-compose.hostinger.yml ps
+docker compose ps
 
 # Check logs
-docker compose -f docker-compose.hostinger.yml logs -f
+docker compose logs -f
 
 # Test health
 curl http://localhost:3000/api/health
@@ -61,16 +61,16 @@ curl http://localhost:3000/api/health
 
 ```bash
 # Restart all services
-docker compose -f docker-compose.hostinger.yml restart
+docker compose restart
 
 # Stop services
-docker compose -f docker-compose.hostinger.yml down
+docker compose down
 
 # Start services
-docker compose -f docker-compose.hostinger.yml up -d
+docker compose up -d
 
 # View logs
-docker compose -f docker-compose.hostinger.yml logs -f [service]
+docker compose logs -f [service]
 ```
 
 ## 📚 Full Documentation

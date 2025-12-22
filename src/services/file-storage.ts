@@ -75,9 +75,7 @@ export async function uploadFile(
   }
   
   // Fallback: Record metadata in database if API didn't return it
-  const cleanPath = filePath.startsWith(`${bucket}/`) 
-    ? filePath.replace(`${bucket}/`, '') 
-    : filePath;
+  // cleanPath is already declared above, reuse it
   const fileStorage = await insertRecord<FileStorage>('file_storage', {
     bucket_name: bucket,
     file_path: cleanPath,

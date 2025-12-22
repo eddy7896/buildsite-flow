@@ -1,23 +1,13 @@
-# Optimized Backend Dockerfile (Node.js + Express) - Production
-# Improvements: Proper multi-stage build, build cache mounts, exclude dev deps
-
-ARG NODE_ENV=production
-ARG BUILDKIT_INLINE_CACHE=1
-
-# Stage 1: Builder
+# Production Backend Dockerfile - Multi-stage build for Node.js + Express
+# Stage 1: Builder - installs all dependencies
 FROM node:20-alpine AS builder
-
-ARG NODE_ENV
-ENV NODE_ENV=${NODE_ENV}
 
 WORKDIR /app
 
-# Copy package files (package-lock.json is optional)
-COPY package.json ./
-COPY package-lock.json* ./
+# Copy package files first for better layer caching
+COPY package.json package-lock.json* ./
 
-# Install ALL dependencies (needed for potential build steps) with cache mount
-# Fallback to npm install if package-lock.json doesn't exist
+# Install ALL dependencies (needed for any build steps)
 RUN --mount=type=cache,target=/root/.npm \
     if [ -f package-lock.json ]; then \
         npm ci || npm install; \
@@ -25,35 +15,35 @@ RUN --mount=type=cache,target=/root/.npm \
         npm install; \
     fi
 
-# Copy application code
+# Copy all application code
 COPY . .
 
-# If you have build steps (TypeScript compilation, etc.), add them here:
-# RUN npm run build
+# Verify required files exist
+RUN test -f index.js || (echo "ERROR: index.js not found!" && ls -la && exit 1)
 
-# Stage 2: Production
+# Stage 2: Production - minimal image with only production dependencies
 FROM node:20-alpine
 
-ARG NODE_ENV
-ENV NODE_ENV=${NODE_ENV}
+# Set production environment
+ENV NODE_ENV=production
 
 WORKDIR /app
 
-# Copy package files (package-lock.json is optional)
+# Copy package files from builder
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/package-lock.json* ./
 
-# Install production dependencies only with cache mount
-# Fallback to npm install if package-lock.json doesn't exist
+# Install ONLY production dependencies
 RUN --mount=type=cache,target=/root/.npm \
     if [ -f package-lock.json ]; then \
         npm ci --only=production || npm install --only=production; \
     else \
         npm install --only=production; \
     fi && \
-    npm cache clean --force
+    npm cache clean --force && \
+    rm -rf /tmp/*
 
-# Copy ONLY runtime files from builder (exclude node_modules, tests, etc.)
+# Copy only runtime files from builder (exclude node_modules, tests, etc.)
 COPY --from=builder /app/index.js ./
 COPY --from=builder /app/routes ./routes
 COPY --from=builder /app/services ./services
@@ -62,21 +52,20 @@ COPY --from=builder /app/config ./config
 COPY --from=builder /app/utils ./utils
 COPY --from=builder /app/graphql ./graphql
 
-# Create non-root user for security
+# Create non-root user and directories
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
-    mkdir -p /app/storage /app/logs && \
+    mkdir -p /app/storage /app/logs /app/uploads && \
     chown -R nodejs:nodejs /app
 
 # Switch to non-root user
 USER nodejs
 
-# Expose port
 EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start application
+# Start the application
 CMD ["node", "index.js"]

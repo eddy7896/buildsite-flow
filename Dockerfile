@@ -1,66 +1,53 @@
-# Optimized Multi-stage build for Frontend (React + Vite)
-# Improvements: Better layer caching, build cache mounts, non-root user, healthcheck
+# Production Frontend Dockerfile - Multi-stage build for React + Vite
+# Stage 1: Build stage - installs all deps and builds the app
+FROM node:20-alpine AS builder
 
-ARG NODE_ENV=production
 ARG VITE_API_URL
-ARG BUILDKIT_INLINE_CACHE=1
-
-# Stage 1: Builder
-FROM node:20-alpine AS frontend-builder
-
-ARG NODE_ENV=production
-ARG VITE_API_URL
-
-ENV NODE_ENV=${NODE_ENV}
 ENV VITE_API_URL=${VITE_API_URL}
 
 WORKDIR /app
 
-# Copy package files first (better cache layer)
-COPY package.json ./
-COPY package-lock.json* ./
+# Copy package files first for better layer caching
+COPY package.json package-lock.json* ./
 
-# Install dependencies with cache mount
-# Use npm install if package-lock.json doesn't exist, otherwise use npm ci
+# Install ALL dependencies (including devDependencies needed for build)
+# Don't set NODE_ENV=production here - we need devDependencies for vite
 RUN --mount=type=cache,target=/root/.npm \
     if [ -f package-lock.json ]; then \
-        npm ci || npm install; \
+        npm ci --include=dev || npm install; \
     else \
         npm install; \
     fi
 
-# Verify vite is installed
-RUN test -f node_modules/.bin/vite || (echo "Vite not found!" && npm list vite && exit 1)
-
-# Copy all config files needed for build
+# Copy build configuration files
 COPY vite.config.ts tailwind.config.ts postcss.config.js components.json ./
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json ./
 COPY index.html ./
 
-# Copy source files
+# Copy source code
 COPY src ./src
 COPY public ./public
 
-# Build the frontend - use explicit path to ensure it works
-RUN ./node_modules/.bin/vite build
+# Build the application for production (VITE_API_URL is available as env var)
+RUN npm run build
 
-# Stage 2: Production
+# Stage 2: Production stage - minimal nginx image
 FROM nginx:alpine
 
-# Copy built files from builder
-COPY --from=frontend-builder /app/dist /usr/share/nginx/html
+# Copy built static files from builder
+COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Create non-root user for security
-RUN addgroup -g 1001 -S nginx && \
-    adduser -S nginx -u 1001 -G nginx && \
+# Create non-root user and set permissions (nginx user/group may already exist)
+RUN (addgroup -g 1001 -S nginx || true) && \
+    (adduser -S nginx -u 1001 -G nginx || id nginx > /dev/null 2>&1 || adduser -S nginx -u 1001 || true) && \
     chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/log/nginx /etc/nginx/conf.d && \
     touch /var/run/nginx.pid && \
-    chown -R nginx:nginx /var/run/nginx.pid
+    chown nginx:nginx /var/run/nginx.pid
 
-# Switch to non-root user
+# Switch to non-root user for security
 USER nginx
 
 EXPOSE 80

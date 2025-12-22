@@ -171,7 +171,7 @@ export const GSTDashboard: React.FC = () => {
 
   // Show authentication required message if user is not authenticated
   // Allow super_admin even if isAuthenticated is false (they might not have agency_id in profile)
-  const { userRole } = useAuth();
+  // userRole is already declared on line 57, no need to redeclare
   const hasAgencyContext = typeof window !== 'undefined' && localStorage.getItem('agency_database');
   const canAccess = user && (isAuthenticated || (userRole === 'super_admin' && hasAgencyContext));
   
