@@ -17,8 +17,38 @@ function buildCorsOptions() {
     .map((o) => o.trim())
     .filter(Boolean);
 
-  // In development, if no explicit origins are configured, allow all.
-  const allowAll = allowedOrigins.length === 0;
+  const isDevelopment = process.env.NODE_ENV !== 'production' || 
+                        process.env.VITE_APP_ENVIRONMENT === 'development';
+  
+  // Common development origins (Vite, React, etc.) - always allow localhost for local dev/testing
+  const commonDevOrigins = [
+    'http://localhost:5173',  // Vite default
+    'http://localhost:5174',  // Vite alternate
+    'http://localhost:3000',  // React default
+    'http://localhost:3001',  // React alternate
+    'http://localhost:8080',  // Vue/other
+    'http://localhost:8081',  // Vue alternate
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'http://127.0.0.1:3000',
+  ];
+
+  // Helper to check if origin is localhost
+  const isLocalhost = (origin) => {
+    if (!origin) return false;
+    try {
+      const url = new URL(origin);
+      return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname.startsWith('192.168.') || url.hostname.startsWith('10.');
+    } catch {
+      return false;
+    }
+  };
+
+  // In development, allow all if no explicit origins, or merge with common dev origins
+  const allowAll = isDevelopment && allowedOrigins.length === 0;
+  const finalAllowedOrigins = isDevelopment && allowedOrigins.length > 0
+    ? [...new Set([...allowedOrigins, ...commonDevOrigins])]
+    : allowedOrigins;
 
   /** @type {cors.CorsOptions} */
   const corsOptions = {
@@ -28,11 +58,17 @@ function buildCorsOptions() {
         return callback(null, true);
       }
 
-      if (allowAll || allowedOrigins.includes(origin)) {
+      // Always allow localhost origins (for local development and Docker testing)
+      if (isLocalhost(origin)) {
+        return callback(null, true);
+      }
+
+      if (allowAll || finalAllowedOrigins.includes(origin)) {
         return callback(null, true);
       }
 
       console.warn('[CORS] Blocked origin:', origin);
+      console.warn('[CORS] Allowed origins:', finalAllowedOrigins);
       return callback(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
