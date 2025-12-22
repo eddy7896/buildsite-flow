@@ -111,6 +111,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+        VITE_DATABASE_URL: ${VITE_DATABASE_URL:-}
     image: dezign-frontend:latest
     container_name: buildflow-frontend
     environment:
