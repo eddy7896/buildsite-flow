@@ -25,7 +25,7 @@ COPY package.json package-lock.json* ./
 
 # Install dependencies with cache mount
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --only=production=false
+    npm ci
 
 # Copy only source files needed for build (not everything)
 COPY src ./src
