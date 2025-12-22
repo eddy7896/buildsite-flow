@@ -1,3 +1,5 @@
+name: buildflow
+
 services:
   # PostgreSQL Database
   postgres:
@@ -45,6 +47,7 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
+    image: buildflow-backend:latest
     container_name: buildflow-backend
     environment:
       # Database
@@ -109,6 +112,7 @@ services:
       dockerfile: Dockerfile
       args:
         NODE_ENV: production
+    image: buildflow-frontend:latest
     container_name: buildflow-frontend
     environment:
       VITE_API_URL: http://localhost:3000/api
