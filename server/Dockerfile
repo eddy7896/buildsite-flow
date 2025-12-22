@@ -12,12 +12,18 @@ ENV NODE_ENV=${NODE_ENV}
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json* ./
+# Copy package files (package-lock.json is optional)
+COPY package.json ./
+COPY package-lock.json* ./
 
 # Install ALL dependencies (needed for potential build steps) with cache mount
+# Fallback to npm install if package-lock.json doesn't exist
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci
+    if [ -f package-lock.json ]; then \
+        npm ci || npm install; \
+    else \
+        npm install; \
+    fi
 
 # Copy application code
 COPY . .
@@ -33,12 +39,18 @@ ENV NODE_ENV=${NODE_ENV}
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json* ./
+# Copy package files (package-lock.json is optional)
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/package-lock.json* ./
 
 # Install production dependencies only with cache mount
+# Fallback to npm install if package-lock.json doesn't exist
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --only=production && \
+    if [ -f package-lock.json ]; then \
+        npm ci --only=production || npm install --only=production; \
+    else \
+        npm install --only=production; \
+    fi && \
     npm cache clean --force
 
 # Copy ONLY runtime files from builder (exclude node_modules, tests, etc.)

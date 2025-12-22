@@ -17,13 +17,14 @@ ENV VITE_API_URL=${VITE_API_URL}
 WORKDIR /app
 
 # Copy package files first (better cache layer)
-COPY package.json package-lock.json ./
+COPY package.json ./
+COPY package-lock.json* ./
 
 # Install dependencies with cache mount
 # Use npm install if package-lock.json doesn't exist, otherwise use npm ci
 RUN --mount=type=cache,target=/root/.npm \
     if [ -f package-lock.json ]; then \
-        npm ci; \
+        npm ci || npm install; \
     else \
         npm install; \
     fi
