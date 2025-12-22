@@ -12,9 +12,23 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 
-// Configure multer for file uploads
+// Storage configuration - use same storage path as files.js
+const STORAGE_BASE_PATH = process.env.FILE_STORAGE_PATH || path.join(__dirname, '../../storage');
+const MESSAGING_STORAGE_PATH = path.join(STORAGE_BASE_PATH, 'messaging');
+
+// Ensure messaging storage directory exists
+async function ensureMessagingStorageDir() {
+  try {
+    await fs.mkdir(MESSAGING_STORAGE_PATH, { recursive: true });
+  } catch (error) {
+    console.warn('[Messaging] Could not create messaging storage directory:', error.message);
+  }
+}
+ensureMessagingStorageDir();
+
+// Configure multer for file uploads (use memory storage, save to storage directory)
 const upload = multer({
-  dest: 'uploads/messaging/',
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: 50 * 1024 * 1024, // 50MB
   },
@@ -520,12 +534,26 @@ router.post('/attachments', authenticate, requireAgencyContext, upload.single('f
   const messageId = req.body.message_id;
 
   if (!messageId) {
-    // Clean up uploaded file if message_id is missing
-    await fs.unlink(req.file.path).catch(() => {});
     return res.status(400).json({
       success: false,
       error: { code: 'MISSING_MESSAGE_ID', message: 'message_id is required' },
       message: 'Message ID is required',
+    });
+  }
+
+  // Save file to storage directory
+  const fileName = `${Date.now()}-${req.file.originalname}`;
+  const filePath = path.join(MESSAGING_STORAGE_PATH, fileName);
+  const relativePath = path.join('messaging', fileName);
+
+  try {
+    await fs.writeFile(filePath, req.file.buffer);
+  } catch (error) {
+    console.error('[Messaging] Error saving file:', error);
+    return res.status(500).json({
+      success: false,
+      error: { code: 'FILE_SAVE_ERROR', message: 'Failed to save file' },
+      message: 'Failed to save file',
     });
   }
 
@@ -538,7 +566,7 @@ router.post('/attachments', authenticate, requireAgencyContext, upload.single('f
     messageId,
     {
       file_name: req.file.originalname,
-      file_path: req.file.path,
+      file_path: relativePath, // Store relative path
       file_size: req.file.size,
       mime_type: req.file.mimetype,
       file_type: fileType,
@@ -555,7 +583,7 @@ router.post('/attachments', authenticate, requireAgencyContext, upload.single('f
 
 /**
  * GET /api/messaging/attachments/:id
- * Get attachment by ID
+ * Get attachment metadata by ID
  */
 router.get('/attachments/:id', authenticate, requireAgencyContext, asyncHandler(async (req, res) => {
   const agencyDatabase = req.user.agencyDatabase;
@@ -575,6 +603,58 @@ router.get('/attachments/:id', authenticate, requireAgencyContext, asyncHandler(
     success: true,
     data: attachment,
   });
+}));
+
+/**
+ * GET /api/messaging/attachments/:id/download
+ * Download/serve attachment file
+ */
+router.get('/attachments/:id/download', authenticate, requireAgencyContext, asyncHandler(async (req, res) => {
+  const agencyDatabase = req.user.agencyDatabase;
+  const attachmentId = req.params.id;
+
+  const attachment = await messagingService.getAttachmentById(agencyDatabase, attachmentId);
+
+  if (!attachment) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'ATTACHMENT_NOT_FOUND', message: 'Attachment not found' },
+      message: 'Attachment not found',
+    });
+  }
+
+  // Construct full file path
+  const fullPath = path.join(STORAGE_BASE_PATH, attachment.file_path);
+  
+  // Security: Ensure path is within storage directory
+  const normalizedPath = path.normalize(fullPath);
+  const storageBase = path.normalize(STORAGE_BASE_PATH);
+  if (!normalizedPath.startsWith(storageBase)) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'ACCESS_DENIED', message: 'Access denied' },
+      message: 'Access denied',
+    });
+  }
+
+  // Check if file exists
+  try {
+    await fs.access(normalizedPath);
+  } catch (error) {
+    return res.status(404).json({
+      success: false,
+      error: { code: 'FILE_NOT_FOUND', message: 'File not found on disk' },
+      message: 'File not found',
+    });
+  }
+
+  // Set headers and send file
+  res.setHeader('Content-Type', attachment.mime_type || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="${attachment.file_name}"`);
+  res.setHeader('Content-Length', attachment.file_size);
+
+  const fileStream = require('fs').createReadStream(normalizedPath);
+  fileStream.pipe(res);
 }));
 
 /**

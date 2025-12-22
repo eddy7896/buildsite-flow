@@ -40,7 +40,9 @@ function validateEnv(): Record<EnvVar, string> {
 
   // Add optional variables with defaults
   for (const key of optionalEnvVars) {
-    env[key] = import.meta.env[key] || getDefaultValue(key);
+    // Handle undefined, null, or empty string - use default in all cases
+    const value = import.meta.env[key];
+    env[key] = (value && value.trim() !== '') ? value : getDefaultValue(key);
   }
 
   if (missing.length > 0) {

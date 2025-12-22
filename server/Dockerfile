@@ -55,7 +55,7 @@ COPY --from=builder /app/graphql ./graphql
 # Create non-root user and directories
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
-    mkdir -p /app/storage /app/logs /app/uploads && \
+    mkdir -p /app/storage /app/storage/documents /app/storage/messaging /app/logs && \
     chown -R nodejs:nodejs /app
 
 # Switch to non-root user

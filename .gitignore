@@ -12,6 +12,24 @@ dist
 dist-ssr
 *.local
 
+# Test files
+**/__tests__/
+**/*.test.*
+**/*.spec.*
+jest.config.*
+test-*.js
+test-*.ts
+
+# Temporary fix scripts (keep production scripts)
+*-fix.sh
+*-fix.ps1
+check-*.sh
+test-*.sh
+verify-*.sh
+remote-*.sh
+auto-*.ps1
+deploy-to-*.ps1
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
