@@ -1,10 +1,10 @@
 // Environment variable validation and type safety
 const requiredEnvVars = [
-  'VITE_DATABASE_URL',
   'VITE_API_URL',
 ] as const;
 
 const optionalEnvVars = [
+  'VITE_DATABASE_URL', // Not used by frontend (uses HTTP API), kept for compatibility
   'VITE_APP_NAME',
   'VITE_APP_VERSION',
   'VITE_APP_ENVIRONMENT',
@@ -54,6 +54,7 @@ function validateEnv(): Record<EnvVar, string> {
 
 function getDefaultValue(key: OptionalEnvVar): string {
   const defaults: Record<OptionalEnvVar, string> = {
+    VITE_DATABASE_URL: '', // Not used by frontend (uses HTTP API)
     VITE_APP_NAME: 'BuildFlow Agency Management',
     VITE_APP_VERSION: '1.0.0',
     VITE_APP_ENVIRONMENT: 'development',

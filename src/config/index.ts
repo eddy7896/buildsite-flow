@@ -9,7 +9,7 @@ export const config = {
     environment: env.VITE_APP_ENVIRONMENT,
   },
   database: {
-    url: env.VITE_DATABASE_URL,
+    url: env.VITE_DATABASE_URL || '', // Not used by frontend (uses HTTP API)
   },
   api: {
     url: env.VITE_API_URL,

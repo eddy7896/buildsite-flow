@@ -260,23 +260,24 @@ export class AuthService extends BaseApiService {
             e !== null && 
             'key' in e && 
             'newValue' in e && 
-            e.key === 'auth_token' && 
-            e.newValue !== undefined && 
-            e.newValue !== null) {
-          const token = e.newValue || localStorage.getItem('auth_token');
-          if (token) {
-            callback('SIGNED_IN', { user: { id: token } });
-          } else {
-            callback('SIGNED_OUT', null);
+            e.key === 'auth_token') {
+          const newValue = (e as StorageEvent).newValue;
+          if (newValue !== undefined && newValue !== null) {
+            const token = newValue || localStorage.getItem('auth_token');
+            if (token) {
+              callback('SIGNED_IN', { user: { id: token } });
+            } else {
+              callback('SIGNED_OUT', null);
+            }
+            return;
           }
+        }
+        // Fallback: check localStorage directly
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          callback('SIGNED_IN', { user: { id: token } });
         } else {
-          // Fallback: check localStorage directly
-          const token = localStorage.getItem('auth_token');
-          if (token) {
-            callback('SIGNED_IN', { user: { id: token } });
-          } else {
-            callback('SIGNED_OUT', null);
-          }
+          callback('SIGNED_OUT', null);
         }
       } catch (error) {
         // If any error occurs, fallback to checking localStorage directly
