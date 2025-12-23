@@ -349,28 +349,56 @@ router.post(
 router.get(
   '/recommendations/preview',
   asyncHandler(async (req, res) => {
-    const { industry, company_size, primary_focus, business_goals } = req.query;
+    try {
+      const { industry, company_size, primary_focus, business_goals } = req.query;
 
-    if (!industry || !company_size || !primary_focus) {
-      return res.status(400).json({
+      if (!industry || !company_size || !primary_focus) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'industry, company_size, and primary_focus are required' }
+        });
+      }
+
+      const criteria = {
+        industry,
+        companySize: company_size,
+        primaryFocus: primary_focus,
+        businessGoals: business_goals ? (Array.isArray(business_goals) ? business_goals : [business_goals]) : []
+      };
+
+      const recommendations = await previewRecommendations(criteria);
+
+      res.json({
+        success: true,
+        data: recommendations
+      });
+    } catch (error) {
+      console.error('[API] Recommendations preview error:', error);
+      console.error('[API] Recommendations preview error stack:', error.stack);
+      
+      // Return error response with CORS headers
+      res.status(500).json({
         success: false,
-        error: { message: 'industry, company_size, and primary_focus are required' }
+        error: {
+          message: error.message || 'Failed to fetch recommendations',
+          detail: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+        },
+        data: {
+          all: [],
+          categorized: {
+            required: [],
+            recommended: [],
+            optional: []
+          },
+          summary: {
+            total: 0,
+            required: 0,
+            recommended: 0,
+            optional: 0
+          }
+        }
       });
     }
-
-    const criteria = {
-      industry,
-      companySize: company_size,
-      primaryFocus: primary_focus,
-      businessGoals: business_goals ? (Array.isArray(business_goals) ? business_goals : [business_goals]) : []
-    };
-
-    const recommendations = await previewRecommendations(criteria);
-
-    res.json({
-      success: true,
-      data: recommendations
-    });
   })
 );
 

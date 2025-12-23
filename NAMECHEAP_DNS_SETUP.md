@@ -51,6 +51,7 @@ After nameservers propagate:
 3. Add/Update A records:
    - **A Record for @ (root):**
      - Type: A
+     
      - Name: @ (or leave blank)
      - Value: `72.61.243.152`
      - TTL: 3600

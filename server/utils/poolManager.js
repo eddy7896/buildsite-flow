@@ -158,14 +158,16 @@ class GlobalPoolManager {
       console.warn(`[PoolManager] Pool limit reached (${this.maxPools}). LRU eviction will occur.`);
     }
 
-    // Build connection string
-    const mainDbUrl = new URL(DATABASE_URL);
-    const dbHost = mainDbUrl.hostname;
-    const dbPort = mainDbUrl.port || 5432;
-    const dbUser = mainDbUrl.username || 'postgres';
-    const dbPassword = mainDbUrl.password || 'admin';
+    // Build connection string - use parseDatabaseUrl to handle special characters
+    const dbConfig = parseDatabaseUrl();
+    const dbHost = dbConfig.host;
+    const dbPort = dbConfig.port;
+    const dbUser = dbConfig.user;
+    const dbPassword = dbConfig.password;
 
-    const agencyDbUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${normalizedName}`;
+    // URL-encode password for connection string
+    const encodedPassword = encodeURIComponent(dbPassword);
+    const agencyDbUrl = `postgresql://${dbUser}:${encodedPassword}@${dbHost}:${dbPort}/${normalizedName}`;
     
     // Create pool with reduced connection limit
     pool = new Pool({
@@ -337,9 +339,67 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
+/**
+ * Parse DATABASE_URL and return connection components
+ * Handles URL encoding for passwords with special characters
+ * @returns {Object} { host, port, user, password }
+ */
+function parseDatabaseUrl() {
+  const dbUrl = DATABASE_URL;
+  if (!dbUrl) {
+    throw new Error('DATABASE_URL is not set');
+  }
+
+  try {
+    // Try to parse as URL first
+    let url;
+    try {
+      url = new URL(dbUrl);
+      // If successful, decode components
+      return {
+        host: url.hostname,
+        port: parseInt(url.port || '5432', 10),
+        user: decodeURIComponent(url.username || 'postgres'),
+        password: decodeURIComponent(url.password || 'admin'),
+      };
+    } catch (urlError) {
+      // If URL parsing fails (e.g., due to special characters in password),
+      // parse manually using regex
+      // Format: postgresql://user:password@host:port/database
+      const match = dbUrl.match(/^postgresql:\/\/([^:@]+)(?::([^@]+))?@([^:]+)(?::(\d+))?\/(.+)$/);
+      if (match) {
+        return {
+          host: match[3],
+          port: parseInt(match[4] || '5432', 10),
+          user: decodeURIComponent(match[1]),
+          password: match[2] ? decodeURIComponent(match[2]) : 'admin',
+        };
+      }
+      
+      // Try alternative format without database
+      const match2 = dbUrl.match(/^postgresql:\/\/([^:@]+)(?::([^@]+))?@([^:]+)(?::(\d+))?$/);
+      if (match2) {
+        return {
+          host: match2[3],
+          port: parseInt(match2[4] || '5432', 10),
+          user: decodeURIComponent(match2[1]),
+          password: match2[2] ? decodeURIComponent(match2[2]) : 'admin',
+        };
+      }
+      
+      throw new Error(`Invalid DATABASE_URL format: ${urlError.message}`);
+    }
+  } catch (error) {
+    console.error('[PoolManager] Error parsing DATABASE_URL:', error.message);
+    console.error('[PoolManager] DATABASE_URL:', dbUrl ? dbUrl.replace(/:[^:@]+@/, ':****@') : 'undefined');
+    throw new Error(`Failed to parse DATABASE_URL: ${error.message}`);
+  }
+}
+
 module.exports = {
   poolManager,
   getAgencyPool: (databaseName) => poolManager.getAgencyPool(databaseName),
   getMainPool: () => poolManager.getMainPool(),
   getPoolStats: () => poolManager.getStats(),
+  parseDatabaseUrl,
 };

@@ -35,9 +35,13 @@ router.get('/check-domain', asyncHandler(async (req, res) => {
     });
   } catch (error) {
     console.error('[API] Domain check error:', error);
-    res.status(500).json({
+    console.error('[API] Domain check error stack:', error.stack);
+    
+    // Return 200 with error flag instead of 500 to avoid CORS issues
+    res.json({
       available: false,
-      error: 'Error checking domain availability',
+      error: error.message || 'Error checking domain availability',
+      domain: domain.toLowerCase().trim(),
     });
   }
 }));

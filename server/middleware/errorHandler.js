@@ -23,6 +23,18 @@ function asyncHandler(fn) {
  */
 function errorHandler(err, req, res, next) {
   console.error('[API] Error:', err);
+  if (err.stack) {
+    console.error('[API] Stack:', err.stack);
+  }
+
+  // Ensure CORS headers are set even on errors
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'false');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Agency-Database, X-Requested-With, X-API-Key');
+  }
 
   const statusCode = err.statusCode || 500;
   const errorResponse = {
@@ -30,6 +42,12 @@ function errorHandler(err, req, res, next) {
     detail: err.detail,
     code: err.code,
   };
+
+  // Don't expose internal error details in production
+  if (process.env.NODE_ENV === 'production' && statusCode === 500) {
+    errorResponse.error = 'Internal server error';
+    errorResponse.detail = undefined;
+  }
 
   res.status(statusCode).json(errorResponse);
 }

@@ -259,7 +259,8 @@ export class AuthService extends BaseApiService {
             typeof e === 'object' && 
             e !== null && 
             'key' in e && 
-            'newValue' in e && 
+            'newValue' in e &&
+            typeof (e as any).newValue !== 'undefined' &&
             e.key === 'auth_token') {
           const newValue = (e as StorageEvent).newValue;
           if (newValue !== undefined && newValue !== null) {

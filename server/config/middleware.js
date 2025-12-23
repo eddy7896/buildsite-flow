@@ -33,12 +33,69 @@ function buildCorsOptions() {
     'http://127.0.0.1:3000',
   ];
 
-  // Helper to check if origin is localhost
+  // Helper to check if origin is localhost or private IP
   const isLocalhost = (origin) => {
     if (!origin) return false;
     try {
       const url = new URL(origin);
-      return url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname.startsWith('192.168.') || url.hostname.startsWith('10.');
+      const hostname = url.hostname.toLowerCase();
+      return hostname === 'localhost' || 
+             hostname === '127.0.0.1' || 
+             hostname.startsWith('192.168.') || 
+             hostname.startsWith('10.') ||
+             hostname.startsWith('172.16.') ||
+             hostname.startsWith('172.17.') ||
+             hostname.startsWith('172.18.') ||
+             hostname.startsWith('172.19.') ||
+             hostname.startsWith('172.20.') ||
+             hostname.startsWith('172.21.') ||
+             hostname.startsWith('172.22.') ||
+             hostname.startsWith('172.23.') ||
+             hostname.startsWith('172.24.') ||
+             hostname.startsWith('172.25.') ||
+             hostname.startsWith('172.26.') ||
+             hostname.startsWith('172.27.') ||
+             hostname.startsWith('172.28.') ||
+             hostname.startsWith('172.29.') ||
+             hostname.startsWith('172.30.') ||
+             hostname.startsWith('172.31.');
+    } catch {
+      return false;
+    }
+  };
+
+  // Helper to check if origin matches any allowed origin (with or without port/protocol)
+  const matchesAllowedOrigin = (origin, allowedList) => {
+    if (!origin) return false;
+    try {
+      const originUrl = new URL(origin);
+      const originHost = originUrl.hostname.toLowerCase();
+      const originPort = originUrl.port || (originUrl.protocol === 'https:' ? '443' : '80');
+      
+      for (const allowed of allowedList) {
+        try {
+          const allowedUrl = new URL(allowed);
+          const allowedHost = allowedUrl.hostname.toLowerCase();
+          const allowedPort = allowedUrl.port || (allowedUrl.protocol === 'https:' ? '443' : '80');
+          
+          // Match hostname and port
+          if (originHost === allowedHost && originPort === allowedPort) {
+            return true;
+          }
+          // Also match without port (default ports)
+          if (originHost === allowedHost && 
+              ((originPort === '80' && !allowedUrl.port) || 
+               (originPort === '443' && !allowedUrl.port))) {
+            return true;
+          }
+        } catch {
+          // If allowed is not a full URL, try string matching
+          if (origin.includes(allowed) || allowed.includes(origin)) {
+            return true;
+          }
+        }
+      }
+      return false;
     } catch {
       return false;
     }
@@ -63,7 +120,13 @@ function buildCorsOptions() {
         return callback(null, true);
       }
 
+      // Check exact match first
       if (allowAll || finalAllowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      // Check if origin matches any allowed origin (flexible matching)
+      if (matchesAllowedOrigin(origin, finalAllowedOrigins)) {
         return callback(null, true);
       }
 
@@ -94,6 +157,18 @@ function buildCorsOptions() {
 function configureMiddleware(app) {
   // CORS middleware
   app.use(cors(buildCorsOptions()));
+
+  // Handle preflight OPTIONS requests explicitly
+  app.options('*', (req, res) => {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Agency-Database, X-Requested-With, X-API-Key');
+      res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+    }
+    res.sendStatus(204);
+  });
 
   // JSON body parser with 50MB limit for base64 encoded images
   app.use(express.json({ limit: JSON_LIMIT }));

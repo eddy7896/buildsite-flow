@@ -5,7 +5,7 @@ services:
     container_name: postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
       POSTGRES_DB: buildflow_db
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
@@ -49,8 +49,8 @@ services:
     container_name: backend
     environment:
       # Database
-      VITE_DATABASE_URL: postgresql://postgres:admin@postgres:5432/buildflow_db
-      DATABASE_URL: postgresql://postgres:admin@postgres:5432/buildflow_db
+      VITE_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-admin}@postgres:5432/buildflow_db
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-admin}@postgres:5432/buildflow_db
       
       # Redis
       REDIS_HOST: redis
@@ -59,7 +59,7 @@ services:
       REDIS_DB: 0
       
       # API Configuration
-      VITE_API_URL: http://localhost:3000/api
+      VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
       NODE_ENV: production
       PORT: 3000
       
