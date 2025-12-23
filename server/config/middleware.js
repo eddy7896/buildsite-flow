@@ -17,6 +17,10 @@ function buildCorsOptions() {
     .map((o) => o.trim())
     .filter(Boolean);
 
+  // Debug logging
+  console.log('[CORS] Raw CORS_ORIGINS from env:', rawOrigins);
+  console.log('[CORS] Parsed allowed origins:', allowedOrigins);
+
   const isDevelopment = process.env.NODE_ENV !== 'production' || 
                         process.env.VITE_APP_ENVIRONMENT === 'development';
   
@@ -120,8 +124,17 @@ function buildCorsOptions() {
         return callback(null, true);
       }
 
-      // Check exact match first
-      if (allowAll || finalAllowedOrigins.includes(origin)) {
+      // Normalize origin for comparison (remove trailing slash, lowercase)
+      const normalizedOrigin = origin.toLowerCase().replace(/\/$/, '');
+
+      // Check exact match first (normalized)
+      if (allowAll) {
+        return callback(null, true);
+      }
+
+      // Check exact match in allowed origins (normalized)
+      const normalizedAllowed = finalAllowedOrigins.map(o => o.toLowerCase().replace(/\/$/, ''));
+      if (normalizedAllowed.includes(normalizedOrigin)) {
         return callback(null, true);
       }
 
@@ -130,8 +143,45 @@ function buildCorsOptions() {
         return callback(null, true);
       }
 
-      console.warn('[CORS] Blocked origin:', origin);
-      console.warn('[CORS] Allowed origins:', finalAllowedOrigins);
+      // Additional check: match by hostname (ignore protocol/port differences for same domain)
+      try {
+        const originUrl = new URL(origin);
+        const originHost = originUrl.hostname.toLowerCase();
+        const originBaseHost = originHost.replace(/^www\./, '');
+        
+        for (const allowed of finalAllowedOrigins) {
+          try {
+            const allowedUrl = new URL(allowed);
+            const allowedHost = allowedUrl.hostname.toLowerCase();
+            const allowedBaseHost = allowedHost.replace(/^www\./, '');
+            
+            // Match if hostnames are the same (e.g., www.dezignbuild.site matches dezignbuild.site)
+            if (originHost === allowedHost || 
+                originBaseHost === allowedBaseHost ||
+                originHost === allowedBaseHost ||
+                originBaseHost === allowedHost) {
+              console.log('[CORS] ✅ Allowed origin (hostname match):', origin, 'matched', allowed);
+              return callback(null, true);
+            }
+          } catch {
+            // If allowed is not a full URL, try string matching
+            const allowedLower = allowed.toLowerCase();
+            if (originHost.includes(allowedLower) || allowedLower.includes(originHost) ||
+                originBaseHost.includes(allowedLower) || allowedLower.includes(originBaseHost)) {
+              console.log('[CORS] ✅ Allowed origin (string match):', origin, 'matched', allowed);
+              return callback(null, true);
+            }
+          }
+        }
+      } catch (e) {
+        // If origin is not a valid URL, log and continue to error
+        console.warn('[CORS] Invalid origin URL:', origin, e.message);
+      }
+
+      console.warn('[CORS] ❌ Blocked origin:', origin);
+      console.warn('[CORS] Normalized origin:', normalizedOrigin);
+      console.warn('[CORS] Allowed origins count:', finalAllowedOrigins.length);
+      console.warn('[CORS] First 3 allowed origins:', finalAllowedOrigins.slice(0, 3));
       return callback(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
