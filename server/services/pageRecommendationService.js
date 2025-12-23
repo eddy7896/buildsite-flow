@@ -50,7 +50,8 @@ function calculateScore(rule, criteria) {
   }
 
   // Priority multiplier: score × (priority / 10)
-  const priorityMultiplier = rule.priority / 10;
+  const priority = rule.priority || 5; // Default to 5 if not set
+  const priorityMultiplier = priority / 10;
   score = score * priorityMultiplier;
 
   return Math.round(score * 100) / 100; // Round to 2 decimal places
@@ -69,6 +70,41 @@ async function getRecommendedPages(criteria) {
   const client = await pool.connect();
   try {
     const { industry, companySize, primaryFocus, businessGoals } = criteria;
+
+    // First, check if tables exist
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'page_catalog'
+      ) as catalog_exists,
+      EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'page_recommendation_rules'
+      ) as rules_exists
+    `);
+
+    const { catalog_exists, rules_exists } = tableCheck.rows[0];
+
+    if (!catalog_exists) {
+      console.warn('[Page Recommendations] page_catalog table does not exist');
+      // Return empty recommendations if tables don't exist
+      return {
+        all: [],
+        categorized: {
+          required: [],
+          recommended: [],
+          optional: []
+        },
+        summary: {
+          total: 0,
+          required: 0,
+          recommended: 0,
+          optional: 0
+        }
+      };
+    }
 
     // Get all active pages with their recommendation rules
     const result = await client.query(`
@@ -102,6 +138,20 @@ async function getRecommendedPages(criteria) {
       const pageId = row.id;
       
       if (!pageMap.has(pageId)) {
+        // Safely parse metadata JSONB field
+        let metadata = {};
+        if (row.metadata) {
+          if (typeof row.metadata === 'string') {
+            try {
+              metadata = JSON.parse(row.metadata);
+            } catch {
+              metadata = {};
+            }
+          } else if (typeof row.metadata === 'object') {
+            metadata = row.metadata;
+          }
+        }
+
         pageMap.set(pageId, {
           id: row.id,
           path: row.path,
@@ -110,8 +160,8 @@ async function getRecommendedPages(criteria) {
           icon: row.icon,
           category: row.category,
           base_cost: parseFloat(row.base_cost) || 0,
-          requires_approval: row.requires_approval,
-          metadata: row.metadata || {},
+          requires_approval: row.requires_approval || false,
+          metadata: metadata,
           rules: [],
           score: 0,
           reasoning: []
@@ -122,14 +172,50 @@ async function getRecommendedPages(criteria) {
 
       // Add rule if it exists
       if (row.rule_id) {
+        // Safely parse JSONB/array fields
+        let industry = row.industry;
+        let company_size = row.company_size;
+        let primary_focus = row.primary_focus;
+        let business_goals = row.business_goals;
+
+        // Handle JSONB/array fields - they might come as strings or arrays
+        if (typeof industry === 'string') {
+          try {
+            industry = JSON.parse(industry);
+          } catch {
+            industry = industry ? [industry] : null;
+          }
+        }
+        if (typeof company_size === 'string') {
+          try {
+            company_size = JSON.parse(company_size);
+          } catch {
+            company_size = company_size ? [company_size] : null;
+          }
+        }
+        if (typeof primary_focus === 'string') {
+          try {
+            primary_focus = JSON.parse(primary_focus);
+          } catch {
+            primary_focus = primary_focus ? [primary_focus] : null;
+          }
+        }
+        if (typeof business_goals === 'string') {
+          try {
+            business_goals = JSON.parse(business_goals);
+          } catch {
+            business_goals = business_goals ? [business_goals] : null;
+          }
+        }
+
         const rule = {
           id: row.rule_id,
-          industry: row.industry,
-          company_size: row.company_size,
-          primary_focus: row.primary_focus,
-          business_goals: row.business_goals,
-          priority: row.priority,
-          is_required: row.is_required
+          industry: industry,
+          company_size: company_size,
+          primary_focus: primary_focus,
+          business_goals: business_goals,
+          priority: row.priority || 5,
+          is_required: row.is_required || false
         };
         page.rules.push(rule);
 
@@ -141,20 +227,20 @@ async function getRecommendedPages(criteria) {
           page.score = ruleScore;
         }
 
-        // Build reasoning
+        // Build reasoning (safely handle array fields)
         if (rule.is_required) {
           page.reasoning.push('Required for your agency type');
         }
-        if (rule.industry && rule.industry.includes(industry)) {
+        if (rule.industry && Array.isArray(rule.industry) && rule.industry.includes(industry)) {
           page.reasoning.push(`Recommended for ${industry} industry`);
         }
-        if (rule.company_size && rule.company_size.includes(companySize)) {
+        if (rule.company_size && Array.isArray(rule.company_size) && rule.company_size.includes(companySize)) {
           page.reasoning.push(`Recommended for ${companySize} companies`);
         }
-        if (rule.primary_focus && rule.primary_focus.includes(primaryFocus)) {
+        if (rule.primary_focus && Array.isArray(rule.primary_focus) && rule.primary_focus.includes(primaryFocus)) {
           page.reasoning.push(`Matches your primary focus: ${primaryFocus}`);
         }
-        if (rule.business_goals && businessGoals) {
+        if (rule.business_goals && Array.isArray(rule.business_goals) && businessGoals && Array.isArray(businessGoals)) {
           const matchingGoals = businessGoals.filter(goal => rule.business_goals.includes(goal));
           if (matchingGoals.length > 0) {
             page.reasoning.push(`Supports your goals: ${matchingGoals.join(', ')}`);
@@ -206,6 +292,10 @@ async function getRecommendedPages(criteria) {
         optional: categorized.optional.length
       }
     };
+  } catch (error) {
+    console.error('[Page Recommendations] Error in getRecommendedPages:', error);
+    console.error('[Page Recommendations] Error stack:', error.stack);
+    throw error; // Re-throw to be handled by route handler
   } finally {
     client.release();
   }

@@ -220,3 +220,38 @@ export function getConsoleLogger(): ConsoleLogger {
 if (typeof window !== 'undefined') {
   getConsoleLogger();
 }
+
+/**
+ * Environment-aware logging helpers for application code.
+ * Use these instead of raw console.log / console.warn for non-critical messages.
+ * - In development: logs go through the normal console (and are captured for tickets).
+ * - In production: debug/info/warn logs are suppressed to keep the console clean.
+ */
+
+export const logDebug = (...args: unknown[]): void => {
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.log(...args);
+  }
+};
+
+export const logInfo = (...args: unknown[]): void => {
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.info(...args);
+  }
+};
+
+export const logWarn = (...args: unknown[]): void => {
+  if (import.meta.env.DEV) {
+    // eslint-disable-next-line no-console
+    console.warn(...args);
+  }
+};
+
+// For errors, we still allow logging in production, but callers should also
+// surface a user-facing message (toast, notification, etc.) where appropriate.
+export const logError = (...args: unknown[]): void => {
+  // eslint-disable-next-line no-console
+  console.error(...args);
+};

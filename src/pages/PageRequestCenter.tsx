@@ -31,12 +31,12 @@ export default function PageRequestCenter() {
   const [requestReason, setRequestReason] = useState('');
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
 
-  const assignedPageIds = new Set(assignedPages.map(p => p.page_id));
+  const assignedPageIds = new Set((assignedPages || []).map(p => p.page_id));
   const pendingRequestPageIds = new Set(
-    requests.filter(r => r.status === 'pending').map(r => r.page_id)
+    (requests || []).filter(r => r.status === 'pending').map(r => r.page_id)
   );
 
-  const availablePages = pages.filter(page => {
+  const availablePages = (pages || []).filter(page => {
     const matchesSearch = !searchQuery ||
       page.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       page.path.toLowerCase().includes(searchQuery.toLowerCase());
@@ -100,7 +100,7 @@ export default function PageRequestCenter() {
           <Card>
             <CardContent className="pt-6">
               <div className="text-2xl font-bold">
-                {requests.filter(r => r.status === 'pending').length}
+                {(requests || []).filter(r => r.status === 'pending').length}
               </div>
               <div className="text-sm text-muted-foreground">Pending Requests</div>
             </CardContent>
@@ -248,7 +248,7 @@ export default function PageRequestCenter() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {requests.map((request) => (
+                  {(requests || []).map((request) => (
                     <TableRow key={request.id}>
                       <TableCell>
                         <div className="font-medium">{request.title}</div>

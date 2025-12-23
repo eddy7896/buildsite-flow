@@ -6,6 +6,7 @@
 import { Download, File, Image, FileText, Video, Music } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Attachment } from '@/services/api/messaging';
+import { getApiBaseUrl } from '@/config/api';
 
 interface FileAttachmentProps {
   attachment: Attachment;
@@ -35,9 +36,10 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({ attachment, onDo
       onDownload(attachment);
     } else {
       // Default download behavior
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const { getApiBaseUrl } = await import('@/config/api');
+      const baseUrl = getApiBaseUrl();
       const token = localStorage.getItem('auth_token') || '';
-      window.open(`${baseUrl.replace('/api', '')}/api/files/messaging/${attachment.file_path}?token=${token}`, '_blank');
+      window.open(`${baseUrl}/api/files/messaging/${attachment.file_path}?token=${token}`, '_blank');
     }
   };
 
@@ -45,7 +47,7 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({ attachment, onDo
     <div className="flex items-start gap-3 p-3 border rounded-lg bg-muted/50">
       {isImage && attachment.thumbnail_path ? (
         <img
-          src={`${(import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace('/api', '')}/api/files/messaging/${attachment.thumbnail_path}`}
+          src={`${getApiBaseUrl()}/api/files/messaging/${attachment.thumbnail_path}`}
           alt={attachment.file_name}
           className="w-16 h-16 object-cover rounded"
         />

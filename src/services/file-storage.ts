@@ -1,6 +1,7 @@
 // File Storage Service for PostgreSQL
 import { insertRecord, selectRecords, deleteRecord } from './api/postgresql-service';
 import type { FileStorage } from '@/integrations/postgresql/types';
+import { getApiRoot } from '@/config/api';
 
 const STORAGE_BASE_PATH = import.meta.env.VITE_FILE_STORAGE_PATH || '/var/lib/buildflow/storage';
 
@@ -36,7 +37,7 @@ export async function uploadFile(
   }
   
   // Upload file to server via API
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+  const baseUrl = getApiRoot();
   const token = localStorage.getItem('auth_token') || '';
   
   const formData = new FormData();
@@ -100,7 +101,7 @@ export async function downloadFile(
   filePath: string
 ): Promise<Buffer> {
   // Fetch from API endpoint
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+  const baseUrl = getApiRoot();
   const token = localStorage.getItem('auth_token') || '';
   
   const encodedPath = encodeURIComponent(filePath);

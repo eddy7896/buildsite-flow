@@ -145,8 +145,8 @@ export function MessageCenter() {
       if (id) {
         try {
           const token = localStorage.getItem('auth_token') || '';
-          const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-          // VITE_API_URL already includes /api, so we use it directly
+          const { getApiRoot } = await import('@/config/api');
+          const baseUrl = getApiRoot();
           await fetch(`${baseUrl}/schema/ensure-messaging`, {
             method: 'POST',
             headers: {

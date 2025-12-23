@@ -1,5 +1,5 @@
 import { BaseApiService, type ApiResponse, type ApiOptions } from './base';
-import { MOCK_USERS, ROUTES, ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/constants';
+import { ROUTES, ERROR_MESSAGES, SUCCESS_MESSAGES } from '@/constants';
 import { useAuthStore } from '@/stores/authStore';
 import { useAppStore } from '@/stores/appStore';
 import type { AppRole } from '@/utils/roleUtils';
@@ -66,14 +66,7 @@ export class AuthService extends BaseApiService {
   }
 
   static async signIn(data: SignInData, options: ApiOptions = {}): Promise<ApiResponse<any>> {
-    // Check for mock users first
-    const mockUser = MOCK_USERS.find(u => u.email === data.email && u.password === data.password);
-    
-    if (mockUser) {
-      return this.handleMockUserSignIn(mockUser);
-    }
-
-    // Real database authentication
+    // Real database authentication only - no mock users in production
     return this.execute(async () => {
       const result = await loginUser({
         email: data.email,
@@ -127,16 +120,7 @@ export class AuthService extends BaseApiService {
   }
 
   static async fetchUserRole(userId: string): Promise<ApiResponse<AppRole>> {
-    // Check for mock user first
-    const mockUser = MOCK_USERS.find(u => u.userId === userId);
-    if (mockUser) {
-      return {
-        data: mockUser.role,
-        error: null,
-        success: true
-      };
-    }
-
+    // Real database query only - no mock users in production
     const response = await this.query<UserRole>('user_roles', {
       select: 'role',
       filters: { user_id: userId },
@@ -161,72 +145,6 @@ export class AuthService extends BaseApiService {
     };
   }
 
-  private static handleMockUserSignIn(mockUser: typeof MOCK_USERS[number]): ApiResponse<any> {
-    try {
-      // Create mock token
-      const mockToken = btoa(JSON.stringify({
-        userId: mockUser.userId,
-        email: mockUser.email,
-        exp: Math.floor(Date.now() / 1000) + 86400
-      }));
-
-      // Store token
-      localStorage.setItem('auth_token', mockToken);
-
-      // Create mock session data
-      const mockSession = {
-        user: {
-          id: mockUser.userId,
-          email: mockUser.email,
-          user_metadata: { full_name: mockUser.fullName }
-        }
-      };
-
-      // Get agency_id from localStorage if available, otherwise null
-      const agencyId = typeof window !== 'undefined' 
-        ? localStorage.getItem('agency_id') || null 
-        : null;
-
-      const mockProfile = {
-        user_id: mockUser.userId,
-        full_name: mockUser.fullName,
-        phone: null,
-        department: null,
-        position: null,
-        hire_date: null,
-        avatar_url: null,
-        is_active: true,
-        agency_id: agencyId
-      };
-
-      // Update auth store
-      const { setSession, setProfile, setUserRole } = useAuthStore.getState();
-      setSession(mockSession as any);
-      setProfile(mockProfile);
-      setUserRole(mockUser.role);
-
-      // Show success notification
-      const { addNotification } = useAppStore.getState();
-      addNotification({
-        type: 'success',
-        title: 'Welcome back!',
-        message: `Signed in as ${mockUser.fullName}`,
-        priority: 'medium'
-      });
-
-      return {
-        data: mockSession,
-        error: null,
-        success: true
-      };
-    } catch (error) {
-      return {
-        data: null,
-        error: ERROR_MESSAGES.SERVER_ERROR,
-        success: false
-      };
-    }
-  }
 
   static async getCurrentSession(): Promise<ApiResponse<any>> {
     return this.execute(async () => {

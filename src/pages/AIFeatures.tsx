@@ -68,22 +68,20 @@ export default function AIFeatures() {
 
   const fetchAIMetrics = async () => {
     try {
-      // Mock AI metrics - in production, these would come from AI service analytics
-      const mockMetrics: AIMetrics = {
-        predictionsGenerated: 247,
-        documentsProcessed: 89,
-        insightsProvided: 156,
-        automationsSaved: 45,
-        accuracyScore: 94.2,
-        timeSaved: 128 // hours
-      };
-
-      setMetrics(mockMetrics);
+      // TODO: Connect to real AI service analytics API when available
+      // For now, show empty state with proper error handling
+      setMetrics(null);
+      toast({
+        title: "Info",
+        description: "AI metrics service is not yet available. This feature will be enabled soon.",
+        variant: "default"
+      });
     } catch (error) {
       console.error('Error fetching AI metrics:', error);
+      setMetrics(null);
       toast({
         title: "Error",
-        description: "Failed to load AI metrics",
+        description: "Failed to load AI metrics. Please try again later.",
         variant: "destructive"
       });
     }
@@ -91,97 +89,23 @@ export default function AIFeatures() {
 
   const fetchPredictions = async () => {
     try {
-      // Mock predictions data
-      const mockPredictions: Prediction[] = [
-        {
-          id: '1',
-          type: 'revenue',
-          title: 'Q1 Revenue Forecast',
-          prediction: 'Projected revenue increase of 18% based on current project pipeline and historical data',
-          confidence: 87,
-          timeline: 'Next 3 months',
-          impact: 'high',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: '2',
-          type: 'project_completion',
-          title: 'Project Delivery Risk',
-          prediction: 'Project Alpha has 73% chance of delay due to resource constraints',
-          confidence: 73,
-          timeline: 'Next 2 weeks',
-          impact: 'medium',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: '3',
-          type: 'resource_demand',
-          title: 'Staffing Requirements',
-          prediction: 'Need to hire 2 additional developers by March to meet project demands',
-          confidence: 91,
-          timeline: 'Next 6 weeks',
-          impact: 'high',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: '4',
-          type: 'risk_assessment',
-          title: 'Client Retention Alert',
-          prediction: 'Client XYZ showing early warning signs of churn based on engagement patterns',
-          confidence: 68,
-          timeline: 'Next 4 weeks',
-          impact: 'medium',
-          created_at: new Date().toISOString()
-        }
-      ];
-
-      setPredictions(mockPredictions);
+      // TODO: Connect to real AI predictions API when available
+      // For now, show empty state
+      setPredictions([]);
     } catch (error) {
       console.error('Error fetching predictions:', error);
+      setPredictions([]);
     }
   };
 
   const fetchProcessedDocuments = async () => {
     try {
-      // Mock processed documents data
-      const mockDocs: ProcessedDocument[] = [
-        {
-          id: '1',
-          filename: 'Invoice_Q4_2024.pdf',
-          type: 'invoice',
-          status: 'completed',
-          extractedData: {
-            amount: 15420.50,
-            client: 'Acme Corp',
-            dueDate: '2025-02-15'
-          },
-          processed_at: new Date().toISOString()
-        },
-        {
-          id: '2',
-          filename: 'Contract_NewClient.docx',
-          type: 'contract',
-          status: 'completed',
-          extractedData: {
-            parties: ['BuildFlow Agency', 'TechStart Inc'],
-            value: 85000,
-            duration: '12 months'
-          },
-          processed_at: new Date().toISOString()
-        },
-        {
-          id: '3',
-          filename: 'Expense_Report_Jan.pdf',
-          type: 'receipt',
-          status: 'processing',
-          extractedData: null,
-          processed_at: new Date().toISOString()
-        }
-      ];
-
-      setProcessedDocs(mockDocs);
+      // TODO: Connect to real document processing API when available
+      // For now, show empty state
+      setProcessedDocs([]);
     } catch (error) {
       console.error('Error fetching processed documents:', error);
+      setProcessedDocs([]);
     }
   };
 
@@ -389,7 +313,7 @@ export default function AIFeatures() {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            {predictions.map((prediction) => (
+            {(predictions || []).map((prediction) => (
               <Card key={prediction.id} className="hover:shadow-md">
                 <CardHeader>
                   <div className="flex items-center justify-between">

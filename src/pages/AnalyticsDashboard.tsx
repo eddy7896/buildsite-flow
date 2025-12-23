@@ -26,6 +26,7 @@ import {
   Filter,
   ArrowUpRight,
   ArrowDownRight,
+  AlertCircle,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -95,38 +96,13 @@ export default function AnalyticsDashboard() {
       });
       setMetrics(data);
     } catch (error: any) {
-      // Fallback to mock data if API fails
-      setMetrics({
-        total_revenue: 1250000,
-        total_expenses: 850000,
-        net_profit: 400000,
-        revenue_growth: 15.5,
-        expense_growth: 8.2,
-        profit_margin: 32.0,
-        inventory_value: 450000,
-        inventory_turnover: 2.8,
-        procurement_spend: 320000,
-        asset_value: 2100000,
-        active_projects: 12,
-        employee_count: 45,
-        top_performers: [
-          { name: 'Sales Department', metric: 'Revenue', value: 450000, change: 18.5 },
-          { name: 'Project Alpha', metric: 'Profit', value: 125000, change: 22.3 },
-          { name: 'Inventory', metric: 'Turnover', value: 2.8, change: 12.0 },
-        ],
-        trends: [
-          { period: 'Jan', revenue: 100000, expenses: 70000, profit: 30000 },
-          { period: 'Feb', revenue: 110000, expenses: 72000, profit: 38000 },
-          { period: 'Mar', revenue: 120000, expenses: 75000, profit: 45000 },
-          { period: 'Apr', revenue: 130000, expenses: 78000, profit: 52000 },
-          { period: 'May', revenue: 125000, expenses: 80000, profit: 45000 },
-          { period: 'Jun', revenue: 140000, expenses: 85000, profit: 55000 },
-        ],
-      });
+      // Show error instead of fallback data in production
+      console.error('Failed to load analytics:', error);
+      setMetrics(null);
       toast({
-        title: 'Warning',
-        description: 'Using fallback data. API connection failed.',
-        variant: 'default',
+        title: 'Error',
+        description: error?.message || 'Failed to load analytics data. Please try again later.',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -213,6 +189,24 @@ export default function AnalyticsDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {!metrics && !loading && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-8">
+              <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">Unable to Load Analytics</h3>
+              <p className="text-muted-foreground mb-4">
+                Failed to load analytics data. Please check your connection and try again.
+              </p>
+              <Button onClick={loadAnalytics}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Retry
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {metrics && (
         <>

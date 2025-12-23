@@ -254,7 +254,8 @@ export function DocumentManager() {
       const filePath = pathParts.slice(1).join('/') || document.file_path;
 
       // Use API endpoint to download file
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const { getApiRoot } = await import('@/config/api');
+      const baseUrl = getApiRoot();
       const token = localStorage.getItem('auth_token') || '';
       
       const response = await fetch(`${baseUrl}/files/${bucket}/${encodeURIComponent(filePath)}`, {
@@ -301,7 +302,8 @@ export function DocumentManager() {
       const filePath = pathParts.slice(1).join('/') || document.file_path;
 
       // Use API endpoint to get file URL
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      const { getApiRoot } = await import('@/config/api');
+      const baseUrl = getApiRoot();
       const token = localStorage.getItem('auth_token') || '';
       const fileUrl = `${baseUrl}/files/${bucket}/${encodeURIComponent(filePath)}`;
 
@@ -400,13 +402,13 @@ export function DocumentManager() {
     return '📄';
   };
 
-  const filteredDocuments = documents.filter(doc =>
+  const filteredDocuments = (documents || []).filter(doc =>
     doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    doc.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
+    (doc.tags || []).some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const currentFolderData = folders.find(f => f.id === currentFolder);
-  const subFolders = folders.filter(f => f.parent_folder_id === currentFolder);
+  const currentFolderData = (folders || []).find(f => f.id === currentFolder);
+  const subFolders = (folders || []).filter(f => f.parent_folder_id === currentFolder);
 
   if (loading) {
     return <div className="flex items-center justify-center p-8">Loading documents...</div>;
@@ -489,7 +491,7 @@ export function DocumentManager() {
         <div>
           <h3 className="text-lg font-medium mb-3">Folders</h3>
           <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4' : 'space-y-2'}>
-            {subFolders.map((folder) => (
+            {(subFolders || []).map((folder) => (
               <Card
                 key={folder.id}
                 className="cursor-pointer hover:shadow-md transition-shadow"
@@ -536,7 +538,7 @@ export function DocumentManager() {
           </Card>
         ) : (
           <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'space-y-2'}>
-            {filteredDocuments.map((document) => (
+            {(filteredDocuments || []).map((document) => (
               <Card key={document.id} className="group">
                 <CardContent className="p-4">
                   <div className="flex items-start space-x-3">
@@ -602,16 +604,16 @@ export function DocumentManager() {
                           <Lock className="h-3 w-3 text-gray-500" />
                         )}
                       </div>
-                      {document.tags.length > 0 && (
+                      {(document.tags || []).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
-                          {document.tags.slice(0, 3).map((tag, index) => (
+                          {(document.tags || []).slice(0, 3).map((tag, index) => (
                             <Badge key={index} variant="secondary" className="text-xs">
                               {tag}
                             </Badge>
                           ))}
-                          {document.tags.length > 3 && (
+                          {(document.tags || []).length > 3 && (
                             <Badge variant="outline" className="text-xs">
-                              +{document.tags.length - 3}
+                              +{(document.tags || []).length - 3}
                             </Badge>
                           )}
                         </div>

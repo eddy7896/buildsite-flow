@@ -375,12 +375,19 @@ router.get(
     } catch (error) {
       console.error('[API] Recommendations preview error:', error);
       console.error('[API] Recommendations preview error stack:', error.stack);
+      console.error('[API] Error details:', {
+        message: error.message,
+        code: error.code,
+        detail: error.detail,
+        query: req.query
+      });
       
-      // Return error response with CORS headers
-      res.status(500).json({
+      // Return error response with CORS headers and fallback data
+      const errorResponse = {
         success: false,
         error: {
           message: error.message || 'Failed to fetch recommendations',
+          code: error.code || 'INTERNAL_ERROR',
           detail: process.env.NODE_ENV !== 'production' ? error.stack : undefined
         },
         data: {
@@ -397,7 +404,15 @@ router.get(
             optional: 0
           }
         }
-      });
+      };
+
+      // If it's a database error, provide more context
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        errorResponse.error.message = 'Page catalog tables not found. Please run database migrations.';
+        errorResponse.error.code = 'MISSING_TABLES';
+      }
+
+      res.status(500).json(errorResponse);
     }
   })
 );

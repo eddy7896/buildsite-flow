@@ -160,7 +160,7 @@ export default function InventoryManagement() {
       if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
         toast({
           title: 'Connection Error',
-          description: 'Unable to connect to the server. Please ensure the backend is running on http://localhost:3000',
+          description: 'Unable to connect to the server. Please check your connection and try again.',
           variant: 'destructive',
         });
       } else {

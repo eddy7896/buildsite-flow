@@ -149,7 +149,7 @@ export const GSTDashboard: React.FC = () => {
     }
   };
 
-  const filteredTransactions = transactions.filter(t => {
+  const filteredTransactions = (transactions || []).filter(t => {
     const matchesSearch = !searchTerm || 
       t.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       t.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -278,7 +278,7 @@ export const GSTDashboard: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Pending Returns</p>
                 <p className="text-2xl font-bold">
-                  {returns.filter(r => r.status === 'pending').length}
+                  {(returns || []).filter(r => r.status === 'pending').length}
                 </p>
               </div>
               <Clock className="h-8 w-8 text-muted-foreground" />
@@ -292,7 +292,7 @@ export const GSTDashboard: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Transactions</p>
                 <p className="text-2xl font-bold">
-                  {transactions.length}
+                  {(transactions || []).length}
                 </p>
               </div>
               <FileText className="h-8 w-8 text-muted-foreground" />
@@ -318,7 +318,7 @@ export const GSTDashboard: React.FC = () => {
               </Button>
             </CardHeader>
             <CardContent>
-              {returns.length === 0 ? (
+              {(returns || []).length === 0 ? (
                 <div className="text-center py-12">
                   <Calendar className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="font-semibold mb-2">No Returns Found</h3>
@@ -332,7 +332,7 @@ export const GSTDashboard: React.FC = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {returns.map((returnItem) => (
+                  {(returns || []).map((returnItem) => (
                     <div key={returnItem.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div className="flex items-center gap-3">
                         {getStatusIcon(returnItem.status)}
@@ -485,11 +485,11 @@ export const GSTDashboard: React.FC = () => {
                     <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                     <h3 className="font-semibold mb-2">No Transactions Found</h3>
                     <p className="text-muted-foreground mb-4">
-                      {transactions.length === 0 
+                      {(transactions || []).length === 0 
                         ? 'Start by adding your first GST transaction'
                         : 'No transactions match your search criteria'}
                     </p>
-                    {transactions.length === 0 && (
+                    {(transactions || []).length === 0 && (
                       <Button onClick={() => {
                         setEditingTransaction(null);
                         setShowTransactionDialog(true);
@@ -501,7 +501,7 @@ export const GSTDashboard: React.FC = () => {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {filteredTransactions.map((transaction) => (
+                    {(filteredTransactions || []).map((transaction) => (
                       <div key={transaction.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
                         <div className="flex-1">
                           <div className="flex items-center gap-3">

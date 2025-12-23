@@ -114,7 +114,7 @@ export async function getWarehouses(): Promise<Warehouse[]> {
 
     if (!response.ok) {
       if (response.status === 0 || response.status >= 500) {
-        throw new Error('Unable to reach the API server. Please ensure the backend is running on http://localhost:3000');
+        throw new Error('Unable to reach the API server. Please check your connection and try again.');
       }
       const error = await response.json().catch(() => ({ error: 'Failed to fetch warehouses' }));
       throw new Error(error.error || 'Failed to fetch warehouses');
@@ -124,7 +124,7 @@ export async function getWarehouses(): Promise<Warehouse[]> {
     return result.data || [];
   } catch (error: any) {
     if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-      throw new Error('Unable to reach the API server. Please ensure the backend is running on http://localhost:3000');
+      throw new Error('Unable to reach the API server. Please check your connection and try again.');
     }
     throw error;
   }
@@ -188,7 +188,7 @@ export async function getProducts(filters?: {
 
     if (!response.ok) {
       if (response.status === 0 || response.status >= 500) {
-        throw new Error('Unable to reach the API server. Please ensure the backend is running on http://localhost:3000');
+        throw new Error('Unable to reach the API server. Please check your connection and try again.');
       }
       const error = await response.json().catch(() => ({ error: 'Failed to fetch products' }));
       throw new Error(error.error || 'Failed to fetch products');
@@ -198,7 +198,7 @@ export async function getProducts(filters?: {
     return result.data || [];
   } catch (error: any) {
     if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-      throw new Error('Unable to reach the API server. Please ensure the backend is running on http://localhost:3000');
+      throw new Error('Unable to reach the API server. Please check your connection and try again.');
     }
     throw error;
   }

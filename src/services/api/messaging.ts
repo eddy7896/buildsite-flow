@@ -491,7 +491,7 @@ export const attachmentApi = {
     formData.append('message_id', messageId);
 
     const token = getAuthToken();
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+    const baseUrl = API_URL;
     const response = await fetch(`${baseUrl}/messaging/attachments`, {
       method: 'POST',
       headers: {

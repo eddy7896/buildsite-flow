@@ -169,11 +169,6 @@ const CreateJournalEntry = () => {
   };
 
   const validateEntry = (): boolean => {
-    // #region agent log
-    if (typeof window !== 'undefined') {
-      fetch('http://127.0.0.1:7243/ingest/22c86675-c795-4ff4-bb93-66691570a89c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CreateJournalEntry.tsx:172',message:'validateEntry called',data:{hasDescription:!!formData.description.trim(),hasDate:!!formData.entry_date,linesCount:formData.lines.length,lines:formData.lines.map(l=>({hasAccount:!!l.account_id,debit:l.debit_amount,credit:l.credit_amount}))},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
-    }
-    // #endregion
     
     if (!formData.description.trim()) {
       toast({
@@ -376,12 +371,6 @@ const CreateJournalEntry = () => {
     return sum + amount;
   }, 0);
   const isBalanced = Math.abs(totalDebits - totalCredits) < 0.01;
-  
-  // #region agent log
-  if (typeof window !== 'undefined') {
-    fetch('http://127.0.0.1:7243/ingest/22c86675-c795-4ff4-bb93-66691570a89c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'CreateJournalEntry.tsx:350',message:'Balance calculation',data:{totalDebits,totalCredits,isBalanced,linesCount:formData.lines.length,lines:formData.lines.map(l=>({debit:l.debit_amount,credit:l.credit_amount}))},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
-  }
-  // #endregion
 
   if (accountsLoading) {
     return (

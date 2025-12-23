@@ -13,6 +13,7 @@ import { AuditLogViewer } from '@/components/permissions/AuditLogViewer';
 import { Reports } from '@/components/permissions/Reports';
 import { PermissionSettings } from '@/components/permissions/PermissionSettings';
 import * as permissionsService from '@/services/permissions';
+import { countRecords } from '@/services/api/postgresql-service';
 import { toast } from 'sonner';
 
 const AdvancedPermissions = () => {
@@ -49,15 +50,19 @@ const AdvancedPermissions = () => {
         console.warn('Could not fetch permissions count from API, using local data');
       }
 
-      // Get users count (simplified - would need proper API)
-      // For now, we'll use a placeholder
-      const totalUsers = 0; // TODO: Fetch from API
+      // Get users count from database
+      let totalUsers = 0;
+      try {
+        totalUsers = await countRecords('profiles', {});
+      } catch (error) {
+        console.warn('Could not fetch users count from database, using 0');
+      }
 
       setStats({
         totalPermissions: totalPerms,
         totalRoles: 22,
         totalUsers,
-        recentChanges: 0, // TODO: Fetch from audit log
+        recentChanges: 0, // Audit log feature not yet implemented
       });
     } catch (error: any) {
       console.error('Failed to load stats:', error);

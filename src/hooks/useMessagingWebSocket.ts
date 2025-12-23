@@ -7,6 +7,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
 import { useAuth } from './useAuth';
+import { logDebug, logWarn, logError } from '@/utils/consoleLogger';
 
 interface UseMessagingWebSocketOptions {
   enabled?: boolean;
@@ -84,7 +85,7 @@ export function useMessagingWebSocket(options: UseMessagingWebSocketOptions = {}
     };
   }, [onMessage, onMessageUpdate, onMessageDelete, onReactionUpdate, onReadReceipt, onChannelUpdate, onThreadUpdate, onNewThread, onTypingStart, onTypingStop, onUserOnline, onUserOffline]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!user?.id || !enabled) {
       return;
     }
@@ -99,14 +100,14 @@ export function useMessagingWebSocket(options: UseMessagingWebSocketOptions = {}
     // Get auth token from localStorage
     const token = localStorage.getItem('auth_token') || '';
     if (!token) {
-      console.warn('[WebSocket] No auth token found');
+      logWarn('[WebSocket] No auth token found');
       isConnectingRef.current = false;
       return;
     }
 
     // WebSocket connects to base server URL (without /api)
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-    const apiUrl = baseUrl.endsWith('/api') ? baseUrl.slice(0, -4) : baseUrl;
+    const { getApiBaseUrl } = await import('@/config/api');
+    const apiUrl = getApiBaseUrl();
 
     // Disconnect existing connection if any
     if (socketRef.current) {
@@ -145,7 +146,7 @@ export function useMessagingWebSocket(options: UseMessagingWebSocketOptions = {}
 
     // Connection events
     socket.on('connect', () => {
-      console.log('[WebSocket] Connected');
+      logDebug('[WebSocket] Connected');
       setIsConnected(true);
       setConnectionError(null);
       reconnectAttemptsRef.current = 0;
@@ -153,7 +154,7 @@ export function useMessagingWebSocket(options: UseMessagingWebSocketOptions = {}
     });
 
     socket.on('disconnect', (reason) => {
-      console.log('[WebSocket] Disconnected:', reason);
+      logDebug('[WebSocket] Disconnected:', reason);
       setIsConnected(false);
       isConnectingRef.current = false;
       
@@ -172,7 +173,7 @@ export function useMessagingWebSocket(options: UseMessagingWebSocketOptions = {}
     });
 
     socket.on('connect_error', (error) => {
-      console.error('[WebSocket] Connection error:', error);
+      logError('[WebSocket] Connection error:', error);
       setConnectionError(`Connection failed: ${error.message}. Retrying...`);
       setIsConnected(false);
       isConnectingRef.current = false;
@@ -180,42 +181,42 @@ export function useMessagingWebSocket(options: UseMessagingWebSocketOptions = {}
 
     // Messaging events - use refs to access latest callbacks
     socket.on('message:new', (message) => {
-      console.log('[WebSocket] New message:', message);
+      logDebug('[WebSocket] New message:', message);
       callbacksRef.current.onMessage?.(message);
     });
 
     socket.on('message:update', (message) => {
-      console.log('[WebSocket] Message updated:', message);
+      logDebug('[WebSocket] Message updated:', message);
       callbacksRef.current.onMessageUpdate?.(message);
     });
 
     socket.on('message:delete', (data) => {
-      console.log('[WebSocket] Message deleted:', data);
+      logDebug('[WebSocket] Message deleted:', data);
       callbacksRef.current.onMessageDelete?.(data);
     });
 
     socket.on('reaction:update', (reaction) => {
-      console.log('[WebSocket] Reaction updated:', reaction);
+      logDebug('[WebSocket] Reaction updated:', reaction);
       callbacksRef.current.onReactionUpdate?.(reaction);
     });
 
     socket.on('read:receipt', (receipt) => {
-      console.log('[WebSocket] Read receipt:', receipt);
+      logDebug('[WebSocket] Read receipt:', receipt);
       callbacksRef.current.onReadReceipt?.(receipt);
     });
 
     socket.on('channel:update', (channel) => {
-      console.log('[WebSocket] Channel updated:', channel);
+      logDebug('[WebSocket] Channel updated:', channel);
       callbacksRef.current.onChannelUpdate?.(channel);
     });
 
     socket.on('thread:update', (thread) => {
-      console.log('[WebSocket] Thread updated:', thread);
+      logDebug('[WebSocket] Thread updated:', thread);
       callbacksRef.current.onThreadUpdate?.(thread);
     });
 
     socket.on('thread:new', (thread) => {
-      console.log('[WebSocket] New thread:', thread);
+      logDebug('[WebSocket] New thread:', thread);
       callbacksRef.current.onNewThread?.(thread);
     });
 
