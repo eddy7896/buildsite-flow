@@ -71,8 +71,11 @@ router.post('/query', asyncHandler(async (req, res) => {
         const postgresClient = await postgresPool.connect();
         
         try {
-          // Create database
-          await postgresClient.query(`CREATE DATABASE "${agencyDatabase}"`);
+          // Create database securely
+          const { validateDatabaseName, quoteIdentifier } = require('../utils/securityUtils');
+          const validatedDbName = validateDatabaseName(agencyDatabase);
+          const quotedDbName = quoteIdentifier(validatedDbName);
+          await postgresClient.query(`CREATE DATABASE ${quotedDbName}`);
           console.log(`[API] ✅ Database created: ${agencyDatabase}`);
           
           // Connect to new database and create schema

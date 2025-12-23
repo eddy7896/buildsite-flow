@@ -54,10 +54,13 @@ async function ensureAgencyDatabase(agencyDatabase) {
       );
 
       if (dbCheck.rows.length === 0) {
-        // Database doesn't exist, create it
-        console.log(`[API] Database ${agencyDatabase} does not exist, creating...`);
+        // Database doesn't exist, create it securely
+        const { validateDatabaseName, quoteIdentifier } = require('./securityUtils');
+        const validatedDbName = validateDatabaseName(agencyDatabase);
+        const quotedDbName = quoteIdentifier(validatedDbName);
+        console.log(`[API] Database ${validatedDbName} does not exist, creating...`);
         try {
-          await postgresClient.query(`CREATE DATABASE "${agencyDatabase}"`);
+          await postgresClient.query(`CREATE DATABASE ${quotedDbName}`);
           console.log(`[API] ✅ Database created: ${agencyDatabase}`);
         } catch (createError) {
           // If database was created by another process, that's fine

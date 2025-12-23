@@ -8,8 +8,7 @@ const router = express.Router();
 const { asyncHandler } = require('../middleware/errorHandler');
 const { authenticate, requireAgencyContext } = require('../middleware/authMiddleware');
 const passwordPolicyService = require('../services/passwordPolicyService');
-const { Pool } = require('pg');
-const { parseDatabaseUrl } = require('../utils/poolManager');
+const { getAgencyPool } = require('../utils/poolManager');
 const bcrypt = require('bcrypt');
 
 /**
@@ -117,10 +116,8 @@ router.post('/change', authenticate, requireAgencyContext, asyncHandler(async (r
     });
   }
 
-  // Connect to agency database
-  const { host, port, user, password: dbPassword } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${dbPassword}@${host}:${port}/${agencyDatabase}`;
-  const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+  // Connect to agency database using pool manager
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -194,7 +191,7 @@ router.post('/change', authenticate, requireAgencyContext, asyncHandler(async (r
     });
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }));
 
@@ -207,10 +204,8 @@ router.get('/status', authenticate, requireAgencyContext, asyncHandler(async (re
   const userId = req.user.id;
   const agencyDatabase = req.user.agencyDatabase;
 
-  // Connect to agency database
-  const { host, port, user, password: dbPassword } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${dbPassword}@${host}:${port}/${agencyDatabase}`;
-  const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+  // Connect to agency database using pool manager
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -252,7 +247,7 @@ router.get('/status', authenticate, requireAgencyContext, asyncHandler(async (re
     });
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }));
 

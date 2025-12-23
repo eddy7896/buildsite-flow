@@ -4,14 +4,13 @@
  */
 
 const bcrypt = require('bcrypt');
-const { Pool } = require('pg');
-const { parseDatabaseUrl } = require('../utils/poolManager');
+const { getAgencyPool } = require('../utils/poolManager');
 
 /**
- * Default password policy
+ * Default password policy (Enterprise-grade)
  */
 const DEFAULT_POLICY = {
-  minLength: 8,
+  minLength: 12, // Increased from 8 to 12 for better security
   requireUppercase: true,
   requireLowercase: true,
   requireNumbers: true,
@@ -22,6 +21,7 @@ const DEFAULT_POLICY = {
   lockoutAttempts: 5, // Lock after 5 failed attempts
   lockoutDuration: 30, // minutes
   requireChangeOnFirstLogin: false,
+  preventCommonPasswords: true, // Enhanced common password checking
 };
 
 /**
@@ -53,10 +53,25 @@ function validatePassword(password, policy = DEFAULT_POLICY) {
     errors.push('Password must contain at least one special character');
   }
 
-  // Check for common weak passwords
-  const commonPasswords = ['password', '12345678', 'qwerty', 'admin', 'letmein'];
-  if (commonPasswords.some(weak => password.toLowerCase().includes(weak))) {
-    errors.push('Password is too common or weak');
+  // Enhanced check for common weak passwords
+  if (policy.preventCommonPasswords) {
+    const commonPasswords = [
+      'password', '12345678', '123456789', '1234567890', 'qwerty', 'qwerty123',
+      'admin', 'letmein', 'welcome', 'monkey', '1234567', 'sunshine', 'princess',
+      'dragon', 'passw0rd', 'master', 'hello', 'freedom', 'whatever', 'qazwsx',
+      'trustno1', 'jordan23', 'harley', 'shadow', 'superman', 'michael', 'football',
+      'iloveyou', '123123', 'baseball', 'welcome123', 'password1', 'admin123'
+    ];
+    
+    const lowerPassword = password.toLowerCase();
+    if (commonPasswords.some(weak => lowerPassword.includes(weak.toLowerCase()))) {
+      errors.push('Password is too common or weak. Please choose a more unique password.');
+    }
+    
+    // Check for sequential characters (e.g., "12345", "abcde")
+    if (/(.)\1{3,}/.test(password) || /(012|123|234|345|456|567|678|789|890|abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz)/i.test(password)) {
+      errors.push('Password contains sequential or repeated characters');
+    }
   }
 
   return {
@@ -127,9 +142,7 @@ function canChangePassword(passwordChangedAt, minAge) {
  * @returns {Promise<Object>} Password policy
  */
 async function getPasswordPolicy(agencyDatabase) {
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-  const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -178,7 +191,7 @@ async function getPasswordPolicy(agencyDatabase) {
     return DEFAULT_POLICY;
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }
 
@@ -189,9 +202,7 @@ async function getPasswordPolicy(agencyDatabase) {
  * @returns {Promise<Object>} Updated policy
  */
 async function updatePasswordPolicy(agencyDatabase, policy) {
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-  const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -241,7 +252,7 @@ async function updatePasswordPolicy(agencyDatabase, policy) {
     return result.rows[0];
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }
 
@@ -253,9 +264,7 @@ async function updatePasswordPolicy(agencyDatabase, policy) {
  * @returns {Promise<string[]>} Array of password hashes
  */
 async function getPasswordHistory(agencyDatabase, userId, count = 5) {
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-  const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -282,7 +291,7 @@ async function getPasswordHistory(agencyDatabase, userId, count = 5) {
     return result.rows.map(row => row.password_hash);
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }
 
@@ -295,9 +304,7 @@ async function getPasswordHistory(agencyDatabase, userId, count = 5) {
  * @returns {Promise<void>}
  */
 async function addPasswordToHistory(agencyDatabase, userId, passwordHash, maxHistory = 5) {
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-  const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -332,7 +339,7 @@ async function addPasswordToHistory(agencyDatabase, userId, passwordHash, maxHis
     );
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }
 
@@ -343,9 +350,7 @@ async function addPasswordToHistory(agencyDatabase, userId, passwordHash, maxHis
  * @returns {Promise<Object>} Lockout status { isLocked, lockoutUntil, failedAttempts }
  */
 async function getLockoutStatus(agencyDatabase, userId) {
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-  const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -400,7 +405,7 @@ async function getLockoutStatus(agencyDatabase, userId) {
     };
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }
 
@@ -415,9 +420,7 @@ async function getLockoutStatus(agencyDatabase, userId) {
  * @returns {Promise<void>}
  */
 async function recordLoginAttempt(agencyDatabase, userId, email, success, ipAddress = null, userAgent = null) {
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-  const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -449,7 +452,7 @@ async function recordLoginAttempt(agencyDatabase, userId, email, success, ipAddr
     );
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }
 
@@ -460,9 +463,7 @@ async function recordLoginAttempt(agencyDatabase, userId, email, success, ipAddr
  * @returns {Promise<void>}
  */
 async function resetFailedAttempts(agencyDatabase, userId) {
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-  const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -472,7 +473,7 @@ async function resetFailedAttempts(agencyDatabase, userId) {
     // This function can be used to explicitly clear if needed
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }
 

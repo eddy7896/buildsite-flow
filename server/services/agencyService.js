@@ -46,10 +46,9 @@ async function checkSetupStatus(agencyDatabase) {
     return false;
   }
 
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-  const { Pool: AgencyPool } = require('pg');
-  const agencyPool = new AgencyPool({ connectionString: agencyDbUrl, max: 1 });
+  // Use pool manager for existing agency databases
+  const { getAgencyPool } = require('../utils/poolManager');
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -59,7 +58,7 @@ async function checkSetupStatus(agencyDatabase) {
     return setupCheck.rows[0]?.setup_complete || false;
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }
 
@@ -82,10 +81,9 @@ async function getSetupProgress(agencyDatabase) {
     return defaultResponse;
   }
 
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-  const { Pool: AgencyPool } = require('pg');
-  const agencyPool = new AgencyPool({ connectionString: agencyDbUrl, max: 1 });
+  // Use pool manager for existing agency databases
+  const { getAgencyPool } = require('../utils/poolManager');
+  const agencyPool = getAgencyPool(agencyDatabase);
   const agencyClient = await agencyPool.connect();
 
   try {
@@ -260,13 +258,13 @@ async function getSetupProgress(agencyDatabase) {
       // Return default response silently - setup progress is non-critical
       return defaultResponse;
     } finally {
-    try {
-      agencyClient.release();
-      await agencyPool.end();
+      try {
+        agencyClient.release();
+        // Don't close pool - it's managed by pool manager
       } catch (cleanupError) {
         // Silently ignore cleanup errors
       }
-  }
+    }
 }
 
 /**
@@ -358,6 +356,13 @@ async function createAgency(agencyData) {
   const userRoleId = crypto.randomUUID();
   const agencySettingsId = crypto.randomUUID();
 
+  // Validate and hash password with policy enforcement
+  const passwordPolicyService = require('./passwordPolicyService');
+  const validation = passwordPolicyService.validatePassword(adminPassword, passwordPolicyService.DEFAULT_POLICY);
+  if (!validation.valid) {
+    throw new Error(`Password does not meet security requirements: ${validation.errors.join(', ')}`);
+  }
+  
   // Hash password
   const passwordHash = await bcrypt.hash(adminPassword, 10);
 
@@ -475,28 +480,34 @@ async function createAgency(agencyData) {
     const postgresCheck = await postgresClient.query('SELECT current_database()');
     console.log(`[API] ✅ Connected to: ${postgresCheck.rows[0].current_database}`);
 
+    // Validate database name before using it in queries
+    const { validateDatabaseName, quoteIdentifier } = require('../utils/securityUtils');
+    const validatedDbName = validateDatabaseName(dbName);
+    const quotedDbName = quoteIdentifier(validatedDbName);
+    
     // Check if database already exists
     const dbExistsCheck = await postgresClient.query(`
       SELECT EXISTS(
         SELECT FROM pg_database WHERE datname = $1
       )
-    `, [dbName]);
+    `, [validatedDbName]);
     
     if (dbExistsCheck.rows[0].exists) {
-      console.log(`[API] ⚠️ Database ${dbName} already exists, dropping it first...`);
+      console.log(`[API] ⚠️ Database ${validatedDbName} already exists, dropping it first...`);
       // Terminate all connections to the database
       await postgresClient.query(`
         SELECT pg_terminate_backend(pid)
         FROM pg_stat_activity
         WHERE datname = $1 AND pid <> pg_backend_pid()
-      `, [dbName]);
-      await postgresClient.query(`DROP DATABASE IF EXISTS ${dbName}`);
-      console.log(`[API] ✅ Dropped existing database: ${dbName}`);
+      `, [validatedDbName]);
+      // Use quoted identifier for DROP DATABASE
+      await postgresClient.query(`DROP DATABASE IF EXISTS ${quotedDbName}`);
+      console.log(`[API] ✅ Dropped existing database: ${validatedDbName}`);
     }
 
-    // Create the agency database
-    console.log(`[API] Creating isolated database: ${dbName}`);
-    await postgresClient.query(`CREATE DATABASE ${dbName}`);
+    // Create the agency database using quoted identifier
+    console.log(`[API] Creating isolated database: ${validatedDbName}`);
+    await postgresClient.query(`CREATE DATABASE ${quotedDbName}`);
     
     // Verify database was created
     const dbCreatedCheck = await postgresClient.query(`
@@ -515,14 +526,10 @@ async function createAgency(agencyData) {
     await postgresPool.end();
 
     // Connect to the new agency database (isolated)
-    console.log(`[API] Connecting to isolated agency database: ${dbName}`);
-    const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${dbName}`;
-    agencyPool = new Pool({ 
-      connectionString: agencyDbUrl, 
-      max: 10,
-      // Ensure isolation - each agency database is completely separate
-      application_name: `agency_${dbName}`
-    });
+    // Use pool manager for the newly created database
+    console.log(`[API] Connecting to isolated agency database: ${validatedDbName}`);
+    const { getAgencyPool } = require('../utils/poolManager');
+    agencyPool = getAgencyPool(validatedDbName);
     agencyDbClient = await agencyPool.connect();
     
     // Verify we're connected to the correct isolated database
@@ -699,17 +706,20 @@ async function createAgency(agencyData) {
     console.log(`[API] ✅ Initial agency_settings created in agency database`);
 
     // Validate UUID format
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(adminUserId)) {
-      throw new Error('Admin user ID is not a valid UUID format');
-    }
+    const { validateUUID, setSessionVariable } = require('../utils/securityUtils');
+    validateUUID(adminUserId);
 
-    // Set user context
-    const escapedUserId = adminUserId.replace(/'/g, "''");
-    await agencyDbClient.query(`SET LOCAL app.current_user_id = '${escapedUserId}'`);
+    // Start transaction for user creation (SET LOCAL requires transaction)
+    let userCreationTransactionStarted = false;
+    try {
+      await agencyDbClient.query('BEGIN');
+      userCreationTransactionStarted = true;
+      
+      // Set user context securely (must be in transaction)
+      await setSessionVariable(agencyDbClient, 'app.current_user_id', adminUserId);
 
-    // Verify users table is accessible before inserting
-    const usersTableAccess = await agencyDbClient.query(`
+      // Verify users table is accessible before inserting
+      const usersTableAccess = await agencyDbClient.query(`
       SELECT COUNT(*) as count FROM information_schema.columns 
       WHERE table_schema = 'public' 
       AND table_name = 'users'
@@ -724,10 +734,14 @@ async function createAgency(agencyData) {
     console.log(`[API] Creating admin user: ${adminEmail}`);
     await agencyDbClient.query(
       `INSERT INTO public.users (
-        id, email, password_hash, email_confirmed, is_active, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
+        id, email, password_hash, email_confirmed, is_active, password_changed_at, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), NOW())`,
       [adminUserId, adminEmail, passwordHash, true, true]
     );
+    
+    // Add password to history
+    const passwordPolicyService = require('./passwordPolicyService');
+    await passwordPolicyService.addPasswordToHistory(validatedDbName, adminUserId, passwordHash, 5);
     
     // Verify user was created
     const userCheck = await agencyDbClient.query(
@@ -825,6 +839,22 @@ async function createAgency(agencyData) {
       ON CONFLICT (user_id, role, agency_id) DO NOTHING`,
       [userRoleId, adminUserId, 'super_admin']
     );
+
+      // Commit transaction (all user creation operations complete)
+      await agencyDbClient.query('COMMIT');
+      userCreationTransactionStarted = false;
+      console.log(`[API] ✅ Transaction committed - admin user setup complete`);
+    } catch (userCreationError) {
+      // Rollback transaction on error
+      if (userCreationTransactionStarted) {
+        try {
+          await agencyDbClient.query('ROLLBACK');
+        } catch (rollbackError) {
+          console.error('[API] Error during user creation rollback:', rollbackError.message);
+        }
+      }
+      throw userCreationError;
+    }
 
     // Update main database with agency info
     let transactionStarted = false;
@@ -1180,11 +1210,7 @@ async function createAgency(agencyData) {
         agencyDbClient.release();
       } catch {}
     }
-    if (agencyPool) {
-      try {
-        await agencyPool.end();
-      } catch {}
-    }
+    // Don't close agencyPool - it's managed by pool manager
     if (postgresClient) {
       try {
         postgresClient.release();
@@ -1253,7 +1279,7 @@ async function repairAgencyDatabase(agencyDatabase) {
     };
   } finally {
     agencyClient.release();
-    await agencyPool.end();
+    // Don't close pool - it's managed by pool manager
   }
 }
 
@@ -1883,7 +1909,7 @@ async function completeAgencySetup(agencyDatabase, setupData) {
   } finally {
     try {
       agencyClient.release();
-      await agencyPool.end();
+      // Don't close pool - it's managed by pool manager
     } catch (cleanupError) {
       console.error('[Setup] Error cleaning up connections:', cleanupError);
     }

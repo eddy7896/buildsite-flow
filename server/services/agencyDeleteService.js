@@ -99,12 +99,12 @@ async function deleteAgency(agencyId) {
         // Wait a moment for connections to close
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Drop the database
-        // Note: PostgreSQL doesn't support parameterized queries for DROP DATABASE
-        // We need to escape the identifier manually
-        const escapedDbName = `"${databaseName.replace(/"/g, '""')}"`;
-        console.log(`[Delete] Dropping database: ${databaseName}`);
-        await postgresClient.query(`DROP DATABASE IF EXISTS ${escapedDbName}`);
+        // Drop the database securely
+        const { validateDatabaseName, quoteIdentifier } = require('../utils/securityUtils');
+        const validatedDbName = validateDatabaseName(databaseName);
+        const quotedDbName = quoteIdentifier(validatedDbName);
+        console.log(`[Delete] Dropping database: ${validatedDbName}`);
+        await postgresClient.query(`DROP DATABASE IF EXISTS ${quotedDbName}`);
         console.log(`[Delete] ✅ Database ${databaseName} dropped successfully`);
       }
     } catch (error) {

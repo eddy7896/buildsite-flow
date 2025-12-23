@@ -37,9 +37,10 @@ async function executeQuery(sql, params, agencyDatabase, userId, retryCount = 0)
       try {
         await client.query('BEGIN');
 
-        // Set the user context for audit logs
-        const escapedUserId = userId.replace(/'/g, "''");
-        await client.query(`SET LOCAL app.current_user_id = '${escapedUserId}'`);
+        // Set the user context for audit logs using secure method
+        const { validateUUID, setSessionVariable } = require('../utils/securityUtils');
+        validateUUID(userId);
+        await setSessionVariable(client, 'app.current_user_id', userId);
 
         console.log('[API] Executing query with userId context:', trimmedSql.substring(0, 150));
         console.log('[API] Query params:', params);
@@ -117,10 +118,11 @@ async function executeTransaction(queries, agencyDatabase, userId) {
   try {
     await client.query('BEGIN');
 
-    // Set user context if provided
+    // Set user context if provided using secure method
     if (userId) {
-      const escapedUserId = userId.replace(/'/g, "''");
-      await client.query(`SET LOCAL app.current_user_id = '${escapedUserId}'`);
+      const { validateUUID, setSessionVariable } = require('../utils/securityUtils');
+      validateUUID(userId);
+      await setSessionVariable(client, 'app.current_user_id', userId);
     }
 
     const results = [];

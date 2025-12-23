@@ -1,84 +1,35 @@
 /**
  * Database Connection Configuration
- * Manages PostgreSQL connection pools for main and agency databases
+ * 
+ * This module now uses the GlobalPoolManager for connection management.
+ * The old implementation is deprecated in favor of the centralized pool manager.
+ * 
+ * @deprecated Use poolManager from utils/poolManager.js instead
+ * This file is kept for backward compatibility
  */
 
-const { Pool } = require('pg');
-const { DATABASE_URL, POOL_CONFIG } = require('./constants');
+const { getAgencyPool, getMainPool } = require('../utils/poolManager');
 
-// Create main PostgreSQL connection pool
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ...POOL_CONFIG,
-});
+// Export main pool (from pool manager)
+const pool = getMainPool();
 
-// Cache for per-agency database pools
-const agencyPools = new Map();
-
-/**
- * Get or create a database pool for a specific agency
- * @param {string} databaseName - The agency database name
- * @returns {Pool} - PostgreSQL connection pool
- */
-function getAgencyPool(databaseName) {
-  if (!databaseName || typeof databaseName !== 'string') {
-    return pool;
-  }
-
-  const normalizedName = databaseName.trim();
-  if (!normalizedName) {
-    return pool;
-  }
-
-  // Return cached pool if it exists
-  if (agencyPools.has(normalizedName)) {
-    return agencyPools.get(normalizedName);
-  }
-
-  // Create new agency pool
-  const mainDbUrl = new URL(DATABASE_URL);
-  const dbHost = mainDbUrl.hostname;
-  const dbPort = mainDbUrl.port || 5432;
-  const dbUser = mainDbUrl.username || 'postgres';
-  const dbPassword = mainDbUrl.password || 'admin';
-
-  const agencyDbUrl = `postgresql://${dbUser}:${dbPassword}@${dbHost}:${dbPort}/${normalizedName}`;
-  const agencyPool = new Pool({
-    connectionString: agencyDbUrl,
-    ...POOL_CONFIG,
-  });
-
-  // Add error handlers for agency pools
-  agencyPool.on('error', (err) => {
-    console.error(`❌ PostgreSQL connection error for agency pool ${normalizedName}:`, err.message);
-    // Remove the pool from cache if it's in a bad state
-    if (err.code === 'ECONNREFUSED' || err.message.includes('timeout')) {
-      console.log(`[DB] Removing bad pool from cache: ${normalizedName}`);
-      agencyPools.delete(normalizedName);
-    }
-  });
-
-  agencyPool.on('connect', () => {
-    console.log(`✅ Connected to agency database: ${normalizedName}`);
-  });
-
-  agencyPools.set(normalizedName, agencyPool);
-  console.log(`[DB] Created new agency pool for database: ${normalizedName}`);
-
-  return agencyPool;
+// Export getAgencyPool (from pool manager)
+// This maintains backward compatibility
+function getAgencyPoolCompat(databaseName) {
+  return getAgencyPool(databaseName);
 }
 
-// Database connection event handlers
-pool.on('connect', () => {
-  console.log('✅ Connected to PostgreSQL database');
-});
-
-pool.on('error', (err) => {
-  console.error('❌ PostgreSQL connection error:', err);
-});
+// Legacy export for backward compatibility
+const agencyPools = {
+  // This is a dummy object for backward compatibility
+  // Actual pools are managed by GlobalPoolManager
+  size: () => 0,
+  has: () => false,
+  get: () => null,
+};
 
 module.exports = {
   pool,
-  getAgencyPool,
+  getAgencyPool: getAgencyPoolCompat,
   agencyPools,
 };

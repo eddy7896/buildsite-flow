@@ -1,9 +1,8 @@
 /**
  * Auth & RBAC middleware for protected API routes
  *
- * Tokens in this project are simple base64-encoded JSON payloads created
- * in authService.generateToken. They are NOT signed JWTs, so we treat them
- * as an application-level session token and still validate expiry.
+ * Tokens are signed JWTs created in authService.generateToken.
+ * Tokens are verified using JWT signature validation for security.
  *
  * Token payload shape (see authService.generateToken):
  * {
@@ -11,8 +10,8 @@
  *   email: string;
  *   agencyId: string;
  *   agencyDatabase: string;
- *   exp: number; // unix seconds
- *   iat: number; // unix seconds
+ *   exp: number; // unix seconds (added by JWT)
+ *   iat: number; // unix seconds (added by JWT)
  * }
  */
 
@@ -23,74 +22,52 @@ const errorLogCache = new Map();
 const ERROR_LOG_THROTTLE_MS = 5000; // Only log same error once per 5 seconds
 
 /**
- * Check if token looks like valid base64
- */
-function isValidBase64(str) {
-  if (!str || typeof str !== 'string' || str.length < 10) {
-    return false;
-  }
-  // Base64 should only contain A-Z, a-z, 0-9, +, /, and = for padding
-  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-  return base64Regex.test(str);
-}
-
-/**
- * Decode the base64 token payload and validate expiry.
- * Returns the payload or null if invalid/expired.
+ * Verify and decode JWT token
+ * Returns the payload or null if invalid/expired/tampered
  */
 function decodeToken(token) {
   try {
-    // Validate token format before attempting decode
-    if (!token || typeof token !== 'string') {
-      return null;
-    }
-
-    // Check if token looks like valid base64 (prevent spam from corrupted tokens)
-    if (!isValidBase64(token)) {
-      // Only log if we haven't logged this recently (prevent spam)
-      const errorKey = 'invalid_base64_format';
-      const lastLog = errorLogCache.get(errorKey);
-      const now = Date.now();
-      
-      if (!lastLog || (now - lastLog) > ERROR_LOG_THROTTLE_MS) {
-        console.warn('[Auth] Invalid token format (not base64)');
-        errorLogCache.set(errorKey, now);
-      }
-      return null;
-    }
-
-    // Attempt to decode
-    const json = Buffer.from(token, 'base64').toString('utf8');
+    const jwt = require('jsonwebtoken');
+    const jwtSecret = process.env.VITE_JWT_SECRET || process.env.JWT_SECRET;
     
-    // Check if decoded string is valid JSON
-    if (!json || json.trim().length === 0) {
+    if (!jwtSecret) {
+      console.error('[Auth] JWT_SECRET not configured');
       return null;
     }
 
-    const payload = JSON.parse(json);
-
-    if (!payload.exp || typeof payload.exp !== 'number') {
+    // Validate token format before attempting verification
+    if (!token || typeof token !== 'string' || token.length < 10) {
       return null;
     }
 
-    const nowMs = Date.now();
-    if (payload.exp * 1000 <= nowMs) {
+    // Verify JWT signature and decode payload
+    // This will throw if token is tampered, expired, or invalid
+    const payload = jwt.verify(token, jwtSecret, {
+      issuer: 'buildflow',
+      audience: 'buildflow-api',
+      algorithms: ['HS256'],
+    });
+
+    // Validate required fields
+    if (!payload.userId || !payload.email) {
       return null;
     }
 
     return payload;
   } catch (error) {
-    // Only log JSON parse errors, not base64 decode errors (those are handled above)
-    if (error instanceof SyntaxError && error.message.includes('JSON')) {
-      const errorKey = `json_parse_error_${error.message.substring(0, 50)}`;
-      const lastLog = errorLogCache.get(errorKey);
-      const now = Date.now();
-      
-      if (!lastLog || (now - lastLog) > ERROR_LOG_THROTTLE_MS) {
-        console.warn('[Auth] Failed to parse token JSON:', error.message);
-        errorLogCache.set(errorKey, now);
+    // Rate limit error logging to prevent spam
+    const errorKey = `jwt_error_${error.name || 'unknown'}`;
+    const lastLog = errorLogCache.get(errorKey);
+    const now = Date.now();
+    
+    if (!lastLog || (now - lastLog) > ERROR_LOG_THROTTLE_MS) {
+      // Only log specific error types to avoid spam
+      if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+        console.warn(`[Auth] JWT verification failed: ${error.name} - ${error.message}`);
       }
+      errorLogCache.set(errorKey, now);
     }
+    
     return null;
   }
 }
@@ -126,7 +103,7 @@ async function authenticate(req, res, next) {
       });
     }
 
-    // Quick validation: token should be reasonable length for base64
+    // Quick validation: token should be reasonable length for JWT
     if (token.length > 10000) {
       return res.status(401).json({
         success: false,

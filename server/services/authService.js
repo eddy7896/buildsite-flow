@@ -46,9 +46,9 @@ async function findUserAcrossAgencies(email, password) {
       }
 
       try {
-        const agencyDbUrl = `postgresql://${user}:${dbPassword}@${host}:${port}/${agency.database_name}`;
-        const { Pool } = require('pg');
-        const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+        // Use pool manager for agency database
+        const { getAgencyPool } = require('../utils/poolManager');
+        const agencyPool = getAgencyPool(agency.database_name);
         const agencyClient = await agencyPool.connect();
 
         try {
@@ -142,7 +142,7 @@ async function findUserAcrossAgencies(email, password) {
           }
         } finally {
           agencyClient.release();
-          await agencyPool.end();
+          // Don't close pool - it's managed by pool manager
         }
       } catch (error) {
         // Skip databases that don't exist or have connection issues
@@ -172,21 +172,33 @@ async function findUserAcrossAgencies(email, password) {
 }
 
 /**
- * Generate authentication token
+ * Generate secure JWT authentication token
  * @param {Object} user - User object
  * @param {Object} agency - Agency object
- * @returns {string} Base64 encoded token
+ * @returns {string} Signed JWT token
  */
 function generateToken(user, agency) {
+  const jwt = require('jsonwebtoken');
+  const jwtSecret = process.env.VITE_JWT_SECRET || process.env.JWT_SECRET;
+  
+  if (!jwtSecret) {
+    throw new Error('JWT_SECRET environment variable is required');
+  }
+
   const tokenPayload = {
     userId: user.id,
     email: user.email,
     agencyId: agency.id,
     agencyDatabase: agency.database_name,
-    exp: Math.floor((Date.now() + 24 * 60 * 60 * 1000) / 1000),
-    iat: Math.floor(Date.now() / 1000),
   };
-  return Buffer.from(JSON.stringify(tokenPayload)).toString('base64');
+
+  // Generate signed JWT token
+  return jwt.sign(tokenPayload, jwtSecret, {
+    expiresIn: '24h',
+    issuer: 'buildflow',
+    audience: 'buildflow-api',
+    algorithm: 'HS256',
+  });
 }
 
 /**
