@@ -24,41 +24,42 @@ const CACHE_TTL = 5000; // 5 seconds
  * Requires admin role
  */
 router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
-  // Return cached data if available and fresh
-  const now = Date.now();
-  if (healthCache && (now - healthCacheTime) < CACHE_TTL) {
-    return res.json({
-      success: true,
-      data: { ...healthCache, cached: true },
-    });
-  }
+  try {
+    // Return cached data if available and fresh
+    const now = Date.now();
+    if (healthCache && (now - healthCacheTime) < CACHE_TTL) {
+      return res.json({
+        success: true,
+        data: { ...healthCache, cached: true },
+      });
+    }
 
-  const health = {
-    timestamp: new Date().toISOString(),
-    status: 'ok',
-    services: {},
-    system: {},
-    performance: {},
-    database: {},
-    trends: {},
-  };
+    const health = {
+      timestamp: new Date().toISOString(),
+      status: 'ok',
+      services: {},
+      system: {},
+      performance: {},
+      database: {},
+      trends: {},
+    };
 
-  // Run all health checks in parallel for better performance
-  const [
-    dbHealth,
-    redisHealth,
-    systemResources,
-    performanceMetrics,
-    dbDetailedMetrics,
-    diskUsage,
-  ] = await Promise.allSettled([
-    getDatabaseHealth(),
-    getRedisHealth(),
-    getSystemResources(),
-    getPerformanceMetrics(),
-    getDetailedDatabaseMetrics(),
-    getDiskUsage(),
-  ]);
+    // Run all health checks in parallel for better performance
+    const [
+      dbHealth,
+      redisHealth,
+      systemResources,
+      performanceMetrics,
+      dbDetailedMetrics,
+      diskUsage,
+    ] = await Promise.allSettled([
+      getDatabaseHealth(),
+      getRedisHealth(),
+      getSystemResources(),
+      getPerformanceMetrics(),
+      getDetailedDatabaseMetrics(),
+      getDiskUsage(),
+    ]);
 
   // Process Database Health
   if (dbHealth.status === 'fulfilled') {
@@ -119,6 +120,7 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
     health.trends = trends;
   } catch (error) {
     console.error('Error fetching trends:', error);
+    health.trends = { available: false, error: error.message };
   }
 
   // Store health metrics in database (async, don't wait)
@@ -126,14 +128,27 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
     console.error('Error storing health metrics:', err);
   });
 
-  // Update cache
-  healthCache = health;
-  healthCacheTime = now;
+    // Update cache
+    healthCache = health;
+    healthCacheTime = now;
 
-  res.json({
-    success: true,
-    data: health,
-  });
+    res.json({
+      success: true,
+      data: health,
+    });
+  } catch (error) {
+    console.error('[System Health] Error in health check:', error);
+    // Return partial health data even on error
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch system health',
+      data: {
+        timestamp: new Date().toISOString(),
+        status: 'error',
+        error: error.message,
+      },
+    });
+  }
 }));
 
 /**
@@ -428,6 +443,19 @@ async function getHealthTrends() {
 
     if (!tableExists.rows[0].exists) {
       return { available: false };
+    }
+
+    // Check if the view exists before querying
+    const viewExists = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.views 
+        WHERE table_schema = 'public' 
+        AND table_name = 'system_health_trends_hourly'
+      )
+    `);
+
+    if (!viewExists.rows[0].exists) {
+      return { available: false, message: 'Trends view not available' };
     }
 
     // Get last 24 hours of hourly trends

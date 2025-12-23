@@ -16,23 +16,85 @@ const typingUsers = new Map(); // threadId -> Set of userIds
  */
 function initializeWebSocket(server) {
   // Get frontend URL from environment (Vite dev server typically runs on 5173)
-  // Allow all origins in development for easier testing
-  const allowedOrigins = [
+  // Parse CORS origins from environment variable (same as main CORS config)
+  const rawOrigins = process.env.CORS_ORIGINS || '';
+  const envAllowedOrigins = rawOrigins
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  
+  // Common development origins
+  const commonDevOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'http://127.0.0.1:3000',
+  ];
+  
+  // Combine all allowed origins
+  const allowedOrigins = [
+    ...commonDevOrigins,
+    ...envAllowedOrigins,
     process.env.VITE_FRONTEND_URL,
-    process.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5173'
+    process.env.VITE_API_URL?.replace('/api', ''),
   ].filter(Boolean);
+  
+  // Helper to check if origin matches any allowed origin
+  const isOriginAllowed = (origin) => {
+    if (!origin) return true; // Allow requests with no origin
+    
+    try {
+      const originUrl = new URL(origin);
+      const originHost = originUrl.hostname.toLowerCase();
+      const originPort = originUrl.port || (originUrl.protocol === 'https:' ? '443' : '80');
+      
+      for (const allowed of allowedOrigins) {
+        try {
+          const allowedUrl = new URL(allowed);
+          const allowedHost = allowedUrl.hostname.toLowerCase();
+          const allowedPort = allowedUrl.port || (allowedUrl.protocol === 'https:' ? '443' : '80');
+          
+          // Match hostname and port
+          if (originHost === allowedHost && originPort === allowedPort) {
+            return true;
+          }
+          // Also match without port (default ports)
+          if (originHost === allowedHost && 
+              ((originPort === '80' && !allowedUrl.port) || 
+               (originPort === '443' && !allowedUrl.port))) {
+            return true;
+          }
+          // Match www and non-www variants
+          const originBaseHost = originHost.replace(/^www\./, '');
+          const allowedBaseHost = allowedHost.replace(/^www\./, '');
+          if (originBaseHost === allowedBaseHost) {
+            return true;
+          }
+        } catch {
+          // If allowed is not a full URL, try string matching
+          if (origin.includes(allowed) || allowed.includes(origin)) {
+            return true;
+          }
+        }
+      }
+    } catch {
+      // If origin is not a valid URL, check string match
+      return allowedOrigins.some(allowed => origin.includes(allowed) || allowed.includes(origin));
+    }
+    
+    return false;
+  };
   
   const io = new Server(server, {
     cors: {
       origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+        if (isOriginAllowed(origin)) {
           callback(null, true);
         } else {
+          console.warn('[WebSocket] CORS blocked origin:', origin);
+          console.warn('[WebSocket] Allowed origins:', allowedOrigins);
           callback(new Error('Not allowed by CORS'));
         }
       },
@@ -40,7 +102,8 @@ function initializeWebSocket(server) {
       credentials: true
     },
     path: '/socket.io',
-    allowEIO3: true // Allow Engine.IO v3 clients
+    allowEIO3: true, // Allow Engine.IO v3 clients
+    transports: ['websocket', 'polling'], // Support both transports
   });
 
   // Authentication middleware for Socket.io
