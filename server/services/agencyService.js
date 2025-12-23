@@ -356,13 +356,6 @@ async function createAgency(agencyData) {
   const userRoleId = crypto.randomUUID();
   const agencySettingsId = crypto.randomUUID();
 
-  // Validate and hash password with policy enforcement
-  const passwordPolicyService = require('./passwordPolicyService');
-  const validation = passwordPolicyService.validatePassword(adminPassword, passwordPolicyService.DEFAULT_POLICY);
-  if (!validation.valid) {
-    throw new Error(`Password does not meet security requirements: ${validation.errors.join(', ')}`);
-  }
-  
   // Hash password
   const passwordHash = await bcrypt.hash(adminPassword, 10);
 
@@ -734,14 +727,10 @@ async function createAgency(agencyData) {
     console.log(`[API] Creating admin user: ${adminEmail}`);
     await agencyDbClient.query(
       `INSERT INTO public.users (
-        id, email, password_hash, email_confirmed, is_active, password_changed_at, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW(), NOW())`,
+        id, email, password_hash, email_confirmed, is_active, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, NOW(), NOW())`,
       [adminUserId, adminEmail, passwordHash, true, true]
     );
-    
-    // Add password to history
-    const passwordPolicyService = require('./passwordPolicyService');
-    await passwordPolicyService.addPasswordToHistory(validatedDbName, adminUserId, passwordHash, 5);
     
     // Verify user was created
     const userCheck = await agencyDbClient.query(
