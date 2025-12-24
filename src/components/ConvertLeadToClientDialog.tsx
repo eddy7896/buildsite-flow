@@ -11,6 +11,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { generateUUID } from '@/lib/uuid';
 import { getAgencyId } from '@/utils/agencyUtils';
 import { useNavigate } from 'react-router-dom';
+import { projectService } from '@/services/api/project-service';
+import { insertRecord } from '@/services/api/postgresql-service';
 
 interface Lead {
   id: string;
@@ -43,6 +45,13 @@ const ConvertLeadToClientDialog: React.FC<ConvertLeadToClientDialogProps> = ({
   const [loading, setLoading] = useState(false);
   const [createProject, setCreateProject] = useState(false);
   const [createQuotation, setCreateQuotation] = useState(false);
+  const [projectData, setProjectData] = useState({
+    name: '',
+    description: '',
+    budget: null as number | null,
+    start_date: '',
+    priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
+  });
   const [formData, setFormData] = useState({
     name: '',
     company_name: '',
@@ -69,6 +78,15 @@ const ConvertLeadToClientDialog: React.FC<ConvertLeadToClientDialogProps> = ({
         contact_phone: lead.phone || '',
         status: 'active',
         notes: lead.notes || '',
+      });
+      
+      // Pre-fill project data from lead
+      setProjectData({
+        name: `${lead.company_name} - Project`,
+        description: `Project created from lead ${lead.lead_number}`,
+        budget: lead.estimated_value || null,
+        start_date: new Date().toISOString().split('T')[0],
+        priority: 'medium',
       });
     }
   }, [lead, isOpen]);
@@ -132,23 +150,54 @@ const ConvertLeadToClientDialog: React.FC<ConvertLeadToClientDialogProps> = ({
 
       // Create project if requested
       if (createProject && client) {
-        const projectNumber = `PROJ-${year}-${timestamp}`;
-        await db
-          .from('projects')
-          .insert([{
-            id: generateUUID(),
-            name: `${lead.company_name} - Project`,
-            description: `Project created from lead ${lead.lead_number}`,
+        try {
+          const project = await projectService.createProject({
+            name: projectData.name || `${lead.company_name} - Project`,
+            description: projectData.description || `Project created from lead ${lead.lead_number}`,
             status: 'planning',
-            budget: lead.estimated_value || null,
+            priority: projectData.priority,
+            budget: projectData.budget || lead.estimated_value || null,
+            start_date: projectData.start_date || new Date().toISOString().split('T')[0],
             client_id: client.id,
             progress: 0,
-            assigned_team: null,
-            created_by: userId,
-            agency_id: agencyId,
-            created_at: new Date().toISOString(),
-            // Note: updated_at is automatically set by the database
-          }]);
+            assigned_team: [],
+            departments: [],
+            tags: [],
+            categories: [],
+            currency: 'USD',
+          }, profile, userId);
+
+          // Create CRM activity for project creation
+          try {
+            await insertRecord('crm_activities', {
+              id: generateUUID(),
+              agency_id: agencyId,
+              type: 'project_created',
+              title: `Project Created: ${project.name}`,
+              description: `Project created from lead ${lead.lead_number}`,
+              related_entity_type: 'project',
+              related_entity_id: project.id,
+              lead_id: lead.id,
+              created_by: userId,
+              created_at: new Date().toISOString(),
+            }, userId, agencyId);
+          } catch (activityError) {
+            console.warn('Failed to create CRM activity for project:', activityError);
+            // Don't fail the whole operation if activity creation fails
+          }
+
+          toast({
+            title: 'Success',
+            description: `Project "${project.name}" created successfully`,
+          });
+        } catch (projectError: any) {
+          console.error('Error creating project:', projectError);
+          toast({
+            title: 'Warning',
+            description: 'Client created but project creation failed: ' + (projectError.message || 'Unknown error'),
+            variant: 'destructive',
+          });
+        }
       }
 
       // Create quotation if requested
@@ -300,7 +349,7 @@ const ConvertLeadToClientDialog: React.FC<ConvertLeadToClientDialogProps> = ({
 
           <div className="space-y-4 border-t pt-4">
             <h4 className="font-semibold">Additional Actions</h4>
-            <div className="space-y-2">
+            <div className="space-y-4">
               <label className="flex items-center space-x-2">
                 <input
                   type="checkbox"
@@ -310,6 +359,74 @@ const ConvertLeadToClientDialog: React.FC<ConvertLeadToClientDialogProps> = ({
                 />
                 <span>Create a project for this client</span>
               </label>
+              
+              {createProject && (
+                <div className="ml-6 space-y-3 p-4 bg-muted rounded-lg">
+                  <div className="space-y-2">
+                    <Label htmlFor="project_name">Project Name *</Label>
+                    <Input
+                      id="project_name"
+                      value={projectData.name}
+                      onChange={(e) => setProjectData(prev => ({ ...prev, name: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="project_description">Description</Label>
+                    <Textarea
+                      id="project_description"
+                      value={projectData.description}
+                      onChange={(e) => setProjectData(prev => ({ ...prev, description: e.target.value }))}
+                      rows={2}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="project_budget">Budget</Label>
+                      <Input
+                        id="project_budget"
+                        type="number"
+                        step="0.01"
+                        value={projectData.budget || ''}
+                        onChange={(e) => setProjectData(prev => ({ 
+                          ...prev, 
+                          budget: e.target.value ? parseFloat(e.target.value) : null 
+                        }))}
+                        placeholder={lead.estimated_value ? lead.estimated_value.toString() : '0.00'}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="project_start_date">Start Date</Label>
+                      <Input
+                        id="project_start_date"
+                        type="date"
+                        value={projectData.start_date}
+                        onChange={(e) => setProjectData(prev => ({ ...prev, start_date: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="project_priority">Priority</Label>
+                    <Select 
+                      value={projectData.priority} 
+                      onValueChange={(value: 'low' | 'medium' | 'high' | 'critical') => 
+                        setProjectData(prev => ({ ...prev, priority: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="critical">Critical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
               <label className="flex items-center space-x-2">
                 <input
                   type="checkbox"
@@ -327,7 +444,11 @@ const ConvertLeadToClientDialog: React.FC<ConvertLeadToClientDialogProps> = ({
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleConvert} disabled={loading || !formData.name}>
+          <Button 
+            type="button" 
+            onClick={handleConvert} 
+            disabled={loading || !formData.name || (createProject && !projectData.name)}
+          >
             {loading ? 'Converting...' : 'Convert to Client'}
           </Button>
         </DialogFooter>

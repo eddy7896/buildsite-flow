@@ -7,10 +7,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { selectRecords, selectOne } from '@/services/api/postgresql-service';
+import { selectRecords, selectOne, insertRecord } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
 import { getAgencyId } from '@/utils/agencyUtils';
 import { Plus, Trash2, ArrowLeft, Loader2 } from 'lucide-react';
+import { logError } from '@/utils/consoleLogger';
 
 interface JournalEntryLine {
   id?: string;
@@ -71,29 +72,29 @@ const CreateJournalEntry = () => {
         });
       } catch (err1: any) {
         // Strategy 2: Try with only agency_id (ignore is_active)
-        try {
-          accountsData = await selectRecords('chart_of_accounts', {
-            where: { agency_id: agencyId },
-            orderBy: 'account_code ASC',
-          });
-          // Filter is_active in memory
-          accountsData = (accountsData || []).filter((acc: any) => acc.is_active !== false);
-        } catch (err2: any) {
-          // Strategy 3: Try without agency_id (fallback for schema without agency_id)
-          if (err2?.code === '42703' || String(err2?.message || '').includes('agency_id') || String(err2?.message || '').includes('column')) {
             try {
               accountsData = await selectRecords('chart_of_accounts', {
-                where: { is_active: true },
+                where: { agency_id: agencyId },
                 orderBy: 'account_code ASC',
               });
-            } catch (err3: any) {
-              console.error('All attempts failed. Last error:', err3);
-              throw err3;
+              // Filter is_active in memory
+              accountsData = (accountsData || []).filter((acc: any) => acc.is_active !== false);
+            } catch (err2: any) {
+              // Strategy 3: Try without agency_id (fallback for schema without agency_id)
+              if (err2?.code === '42703' || String(err2?.message || '').includes('agency_id') || String(err2?.message || '').includes('column')) {
+                try {
+                  accountsData = await selectRecords('chart_of_accounts', {
+                    where: { is_active: true },
+                    orderBy: 'account_code ASC',
+                  });
+                } catch (err3: any) {
+                  logError('All attempts failed while fetching accounts. Last error:', err3);
+                  throw err3;
+                }
+              } else {
+                throw err2;
+              }
             }
-          } else {
-            throw err2;
-          }
-        }
       }
       
       const finalAccounts = Array.isArray(accountsData) ? accountsData : [];
@@ -110,7 +111,7 @@ const CreateJournalEntry = () => {
         });
       }
     } catch (error: any) {
-      console.error('Error fetching accounts:', error);
+      logError('Error fetching accounts:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to load accounts. Please try again.',
@@ -287,7 +288,6 @@ const CreateJournalEntry = () => {
         return sum + amount;
       }, 0);
 
-      const { selectOne, insertRecord } = await import('@/services/api/postgresql-service');
       const userProfile = user?.id ? await selectOne('profiles', { user_id: user.id }) : null;
       const agencyId = await getAgencyId(userProfile, user?.id);
       
@@ -350,7 +350,7 @@ const CreateJournalEntry = () => {
         navigate('/ledger');
       }
     } catch (error: any) {
-      console.error('Error saving journal entry:', error);
+      logError('Error saving journal entry:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to save journal entry',

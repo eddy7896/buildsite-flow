@@ -200,7 +200,7 @@ export class AuthService extends BaseApiService {
         }
       } catch (error) {
         // If any error occurs, fallback to checking localStorage directly
-        console.warn('Error handling storage event:', error);
+        logWarn('Error handling storage event:', error);
         const token = localStorage.getItem('auth_token');
         if (token) {
           callback('SIGNED_IN', { user: { id: token } });

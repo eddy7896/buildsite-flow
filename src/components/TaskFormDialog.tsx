@@ -21,6 +21,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { projectService, Task } from '@/services/api/project-service';
 import { selectRecords } from '@/services/api/postgresql-service';
 import { getEmployeesForAssignmentAuto } from '@/services/api/employee-selector-service';
+import { getProjectsForSelectionAuto } from '@/services/api/project-selector-service';
 
 interface TaskFormDialogProps {
   task?: Task;
@@ -130,8 +131,16 @@ export function TaskFormDialog({ task, onTaskSaved, trigger, projectId, open: co
 
   const fetchProjects = async () => {
     try {
-      const data = await projectService.getProjects({}, profile, user?.id);
-      setProjects(data.map(p => ({ id: p.id, name: p.name })));
+      // Use standardized project fetching service
+      const projectsData = await getProjectsForSelectionAuto(profile, user?.id, {
+        includeInactive: false
+      });
+      
+      // Transform to component format
+      setProjects(projectsData.map(p => ({ 
+        id: p.id, 
+        name: p.name 
+      })));
     } catch (error: any) {
       console.error('Error fetching projects:', error);
       toast({

@@ -10,6 +10,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { db } from '@/lib/database';
 import { ArrowLeft, User, Shield, Key, Mail, Phone, Building } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { logError } from '@/utils/consoleLogger';
+import { upsertRecord } from '@/services/api/postgresql-service';
 
 interface Employee {
   id: string;
@@ -49,8 +51,8 @@ const AssignUserRoles = () => {
         .limit(1)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching agency settings:', error);
+      if (error && (error as any).code !== 'PGRST116') {
+        logError('Error fetching agency settings:', error);
         return;
       }
 
@@ -194,26 +196,23 @@ const AssignUserRoles = () => {
             .eq('id', employee.id);
         }
 
-        // Assign role
-        const { error: roleError } = await db
-          .from('user_roles')
-          .upsert({
+        // Assign role using upsertRecord
+        try {
+          await upsertRecord('user_roles', {
             user_id: userId,
             role: selectedRole as "admin" | "hr" | "finance_manager" | "employee",
-          });
-
-        if (roleError) {
-          console.error('Error assigning role:', roleError);
-          results.push({
-            employee: employee.full_name,
-            success: false,
-            error: roleError.message
-          });
-        } else {
+          }, 'user_id');
           results.push({
             employee: employee.full_name,
             success: true,
             credentials: generatedCredentials
+          });
+        } catch (roleError: any) {
+          logError('Error assigning role:', roleError);
+          results.push({
+            employee: employee.full_name,
+            success: false,
+            error: roleError.message
           });
         }
       }

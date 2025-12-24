@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { selectRecords, deleteRecord } from '@/services/api/postgresql-service';
+import { selectRecords, deleteRecord, selectOne, updateRecord } from '@/services/api/postgresql-service';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { db } from '@/lib/database';
@@ -266,7 +266,6 @@ const Payroll = () => {
   const handleEditPayroll = async (payroll: any) => {
     try {
       // Fetch full payroll record from database
-      const { selectOne } = await import('@/services/api/postgresql-service');
       const fullRecord = await selectOne('payroll', { id: payroll.id });
       if (fullRecord) {
         // Map database field names to frontend field names
@@ -429,7 +428,6 @@ const Payroll = () => {
   const handleDownloadPaySlip = async (record: PayrollRecord) => {
     try {
       // Fetch full payroll record
-      const { selectOne } = await import('@/services/api/postgresql-service');
       const fullRecord = await selectOne('payroll', { id: record.id });
       
       if (!fullRecord) {

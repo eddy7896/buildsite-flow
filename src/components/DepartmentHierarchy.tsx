@@ -485,7 +485,7 @@ export const DepartmentHierarchyView: React.FC<DepartmentHierarchyViewProps> = (
       if (assignmentsError) throw assignmentsError;
 
       if (!assignmentsData || assignmentsData.length === 0) {
-        setDepartmentMembers(prev => ({ ...prev, [departmentId]: [] }));
+        setDepartmentMembers((prev: Record<string, { id: string; full_name: string; position_title?: string; role_in_department: string; }[]>) => ({ ...prev, [departmentId]: [] }));
         return;
       }
 
@@ -506,9 +506,9 @@ export const DepartmentHierarchyView: React.FC<DepartmentHierarchyViewProps> = (
         role_in_department: ta.role_in_department,
       }));
 
-      setDepartmentMembers(prev => ({ ...prev, [departmentId]: members }));
+      setDepartmentMembers((prev: Record<string, { id: string; full_name: string; position_title?: string; role_in_department: string; }[]>) => ({ ...prev, [departmentId]: members }));
     } catch (error: any) {
-      console.error("Error fetching members:", error);
+      logError("Error fetching members:", error);
       toast({
         title: "Error",
         description: "Failed to fetch department members",
@@ -645,7 +645,7 @@ export const DepartmentHierarchyView: React.FC<DepartmentHierarchyViewProps> = (
         onRefresh();
       }
     } catch (error: any) {
-      console.error("Error saving connections:", error);
+      logError("Error saving connections:", error);
       toast({
         title: "Error",
         description: error?.message || "Failed to save connections",

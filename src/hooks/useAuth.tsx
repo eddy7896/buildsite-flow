@@ -3,6 +3,7 @@ import { toast } from '@/hooks/use-toast';
 import { AppRole } from '@/utils/roleUtils';
 import { selectRecords, selectOne } from '@/services/api/postgresql-service';
 import { loginUser, registerUser } from '@/services/api/auth-postgresql';
+import { logWarn, logError } from '@/utils/consoleLogger';
 
 interface User {
   id: string;
@@ -75,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       // Validate token format first
       if (!isValidTokenFormat(token)) {
-        console.warn('[Auth] Invalid token format detected, clearing corrupted token');
+        logWarn('[Auth] Invalid token format detected, clearing corrupted token');
         localStorage.removeItem('auth_token');
         localStorage.removeItem('agency_database');
         localStorage.removeItem('agency_id');
@@ -127,7 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.removeItem('auth_token');
         }
       } catch (error) {
-        console.warn('[Auth] Failed to decode token, clearing corrupted token:', error);
+        logWarn('[Auth] Failed to decode token, clearing corrupted token:', error);
         // Clear all auth-related localStorage items
         localStorage.removeItem('auth_token');
         localStorage.removeItem('agency_database');
@@ -145,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfile(data as Profile);
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      logError('Error fetching profile:', error);
     }
   };
 
@@ -197,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUserRole(highestRole);
     } catch (error) {
-      console.error('Error fetching user role:', error);
+      logError('Error fetching user role:', error);
     }
   };
 

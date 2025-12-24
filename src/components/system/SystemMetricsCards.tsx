@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Building2, Users, DollarSign, Activity, TrendingUp, Clock, AlertCircle } from 'lucide-react';
-import type { SystemMetrics } from '@/hooks/useSystemAnalytics';
+import type { SystemMetrics } from '@/types/system';
 
 interface SystemMetricsCardsProps {
   metrics: SystemMetrics;

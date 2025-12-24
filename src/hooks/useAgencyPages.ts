@@ -10,7 +10,7 @@ import { useToast } from './use-toast';
 import type { AgencyPageAssignment, AgencyPageRequest } from '@/types/pageCatalog';
 
 export function useAgencyPages(agencyId?: string) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [pages, setPages] = useState<AgencyPageAssignment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -18,9 +18,9 @@ export function useAgencyPages(agencyId?: string) {
 
   const fetchAgencyPages = useCallback(async () => {
     if (!user) return;
-    if (!agencyId && !user.agencyId) return;
+    if (!agencyId && !profile?.agency_id) return;
 
-    const targetAgencyId = agencyId || user.agencyId;
+    const targetAgencyId = agencyId || profile?.agency_id;
     if (!targetAgencyId) return;
 
     setLoading(true);
@@ -54,7 +54,7 @@ export function useAgencyPages(agencyId?: string) {
         }
       }
     } catch (error) {
-      console.error('Error fetching agency pages:', error);
+      logError('Error fetching agency pages:', error);
       toast({
         title: 'Error',
         description: 'Failed to fetch agency pages',
@@ -71,9 +71,9 @@ export function useAgencyPages(agencyId?: string) {
 
   const assignPages = useCallback(async (pageIds: string[], costOverrides?: Record<string, number>) => {
     if (!user) return;
-    if (!agencyId && !user.agencyId) return;
+    if (!agencyId && !profile?.agency_id) return;
 
-    const targetAgencyId = agencyId || user.agencyId;
+    const targetAgencyId = agencyId || profile?.agency_id;
     if (!targetAgencyId) return;
 
     try {
@@ -152,7 +152,7 @@ export function useAgencyPageRequests() {
         setRequests(data.data);
       }
     } catch (error) {
-      console.error('Error fetching page requests:', error);
+      logError('Error fetching page requests:', error);
       toast({
         title: 'Error',
         description: 'Failed to fetch page requests',

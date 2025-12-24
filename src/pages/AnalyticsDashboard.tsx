@@ -97,7 +97,7 @@ export default function AnalyticsDashboard() {
       setMetrics(data);
     } catch (error: any) {
       // Show error instead of fallback data in production
-      console.error('Failed to load analytics:', error);
+      logError('Failed to load analytics:', error);
       setMetrics(null);
       toast({
         title: 'Error',

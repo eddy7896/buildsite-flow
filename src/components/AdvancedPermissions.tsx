@@ -47,7 +47,7 @@ const AdvancedPermissions = () => {
         totalPerms = permResult.pagination?.total || permissions.length;
       } catch (error) {
         // API might not be available yet, use local permissions
-        console.warn('Could not fetch permissions count from API, using local data');
+        logWarn('Could not fetch permissions count from API, using local data');
       }
 
       // Get users count from database
@@ -55,7 +55,7 @@ const AdvancedPermissions = () => {
       try {
         totalUsers = await countRecords('profiles', {});
       } catch (error) {
-        console.warn('Could not fetch users count from database, using 0');
+        logWarn('Could not fetch users count from database, using 0');
       }
 
       setStats({
@@ -65,7 +65,7 @@ const AdvancedPermissions = () => {
         recentChanges: 0, // Audit log feature not yet implemented
       });
     } catch (error: any) {
-      console.error('Failed to load stats:', error);
+      logError('Failed to load stats:', error);
       // Set default stats on error
       setStats({
         totalPermissions: permissions.length,

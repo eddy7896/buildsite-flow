@@ -17,6 +17,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/database';
 import { toast } from 'sonner';
 import { getAgencyId } from '@/utils/agencyUtils';
+import { logError } from '@/utils/consoleLogger';
+import { getApiRoot } from '@/config/api';
 
 interface DocumentFolder {
   id: string;
@@ -98,7 +100,7 @@ export function DocumentManager() {
       if (error) throw error;
       setFolders((data as DocumentFolder[]) || []);
     } catch (error: any) {
-      console.error('Error fetching folders:', error);
+      logError('Error fetching folders:', error);
       toast.error(error?.message || 'Failed to load folders');
     }
   };
@@ -130,7 +132,7 @@ export function DocumentManager() {
       }));
       setDocuments(normalizedDocs);
     } catch (error: any) {
-      console.error('Error fetching documents:', error);
+      logError('Error fetching documents:', error);
       toast.error(error?.message || 'Failed to load documents');
     }
   };
@@ -173,7 +175,7 @@ export function DocumentManager() {
       setFolderForm({ name: '', description: '' });
       await fetchFolders();
     } catch (error: any) {
-      console.error('Error creating folder:', error);
+      logError('Error creating folder:', error);
       toast.error(error?.message || 'Failed to create folder');
     }
   };
@@ -240,7 +242,7 @@ export function DocumentManager() {
         event.target.value = '';
       }
     } catch (error: any) {
-      console.error('Error uploading file:', error);
+      logError('Error uploading file:', error);
       toast.error(error?.message || 'Failed to upload file');
     }
   };
@@ -254,7 +256,6 @@ export function DocumentManager() {
       const filePath = pathParts.slice(1).join('/') || document.file_path;
 
       // Use API endpoint to download file
-      const { getApiRoot } = await import('@/config/api');
       const baseUrl = getApiRoot();
       const token = localStorage.getItem('auth_token') || '';
       
@@ -288,7 +289,7 @@ export function DocumentManager() {
 
       toast.success('File downloaded successfully');
     } catch (error: any) {
-      console.error('Error downloading file:', error);
+      logError('Error downloading file:', error);
       toast.error(error?.message || 'Failed to download file');
     }
   };
@@ -302,7 +303,6 @@ export function DocumentManager() {
       const filePath = pathParts.slice(1).join('/') || document.file_path;
 
       // Use API endpoint to get file URL
-      const { getApiRoot } = await import('@/config/api');
       const baseUrl = getApiRoot();
       const token = localStorage.getItem('auth_token') || '';
       const fileUrl = `${baseUrl}/files/${bucket}/${encodeURIComponent(filePath)}`;
@@ -310,15 +310,17 @@ export function DocumentManager() {
       // For files that can be viewed in browser (images, PDFs, etc.)
       // Create a temporary link with auth token in query param
       // Note: In production, use proper auth headers or signed URLs
-      const link = document.createElement('a');
-      link.href = fileUrl;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      if (typeof window !== 'undefined' && window.document) {
+        const link = window.document.createElement('a');
+        link.href = fileUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        window.document.body.appendChild(link);
+        link.click();
+        window.document.body.removeChild(link);
+      }
     } catch (error: any) {
-      console.error('Error opening file:', error);
+      logError('Error opening file:', error);
       toast.error(error?.message || 'Failed to open file');
     }
   };
@@ -354,7 +356,7 @@ export function DocumentManager() {
       toast.success('Document deleted successfully');
       fetchDocuments();
     } catch (error: any) {
-      console.error('Error deleting document:', error);
+      logError('Error deleting document:', error);
       toast.error(error?.message || 'Failed to delete document');
     }
   };
@@ -380,7 +382,7 @@ export function DocumentManager() {
       await fetchFolders();
       await fetchDocuments();
     } catch (error: any) {
-      console.error('Error deleting folder:', error);
+      logError('Error deleting folder:', error);
       toast.error(error?.message || 'Failed to delete folder');
     }
   };

@@ -31,6 +31,9 @@ import { generateUUID } from '@/lib/uuid';
 import { getAgencyId } from '@/utils/agencyUtils';
 import { getRoleDisplayName, ROLE_CATEGORIES, canAccessEmployeeData, canManageRole, AppRole } from '@/utils/roleUtils';
 import { RoleGuard } from "@/components/RoleGuard";
+import { getProjectsForSelectionAuto } from "@/services/api/project-selector-service";
+import { projectService } from "@/services/api/project-service";
+import { Progress } from "@/components/ui/progress";
 
 interface UnifiedEmployee {
   id: string;
@@ -93,6 +96,10 @@ const EmployeeManagement = () => {
   const [showUserDeleteDialog, setShowUserDeleteDialog] = useState(false);
   const [editForm, setEditForm] = useState<Partial<UnifiedEmployee>>({});
   const [saving, setSaving] = useState(false);
+  
+  // Integration data for employee view
+  const [employeeProjects, setEmployeeProjects] = useState<any[]>([]);
+  const [loadingEmployeeProjects, setLoadingEmployeeProjects] = useState(false);
 
   const managerDepartment = profile?.department || undefined;
 
@@ -368,9 +375,41 @@ const EmployeeManagement = () => {
     departments: new Set(employees.map(e => e.department).filter(Boolean)).size,
   };
 
-  const handleViewEmployee = (employee: UnifiedEmployee) => {
+  const handleViewEmployee = async (employee: UnifiedEmployee) => {
     setSelectedEmployee(employee);
     setShowViewDialog(true);
+    // Load employee projects
+    await loadEmployeeProjects(employee.user_id);
+  };
+
+  const loadEmployeeProjects = async (employeeId: string) => {
+    setLoadingEmployeeProjects(true);
+    try {
+      // Fetch all projects and filter by employee assignment
+      const allProjects = await projectService.getProjects({}, profile, user?.id);
+      
+      // Filter projects where employee is assigned (in assigned_team array or as manager)
+      const employeeProjects = allProjects.filter((project: any) => {
+        // Check if employee is in assigned_team
+        const inTeam = project.assigned_team && Array.isArray(project.assigned_team) && 
+          project.assigned_team.some((member: any) => {
+            const memberId = typeof member === 'string' ? member : member.user_id || member.id || String(member);
+            return memberId === employeeId;
+          });
+        
+        // Check if employee is project manager or account manager
+        const isManager = project.project_manager_id === employeeId || project.account_manager_id === employeeId;
+        
+        return inTeam || isManager;
+      });
+      
+      setEmployeeProjects(employeeProjects);
+    } catch (error) {
+      console.error('Error loading employee projects:', error);
+      setEmployeeProjects([]);
+    } finally {
+      setLoadingEmployeeProjects(false);
+    }
   };
 
   const handleEditEmployee = (employee: UnifiedEmployee) => {
@@ -1391,13 +1430,20 @@ const EmployeeManagement = () => {
 
       {/* View Employee Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Employee Details</DialogTitle>
             <DialogDescription>Complete information about this employee</DialogDescription>
           </DialogHeader>
           {selectedEmployee && (
-            <div className="space-y-6">
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="projects">Projects ({employeeProjects.length})</TabsTrigger>
+                <TabsTrigger value="actions">Quick Actions</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="overview" className="space-y-6 mt-4">
               <div className="flex items-center space-x-4">
                 <Avatar className="h-20 w-20 border-2 border-primary/20">
                   <AvatarImage 
@@ -1498,94 +1544,170 @@ const EmployeeManagement = () => {
                 )}
               </div>
 
-              {/* Quick Actions */}
-              {selectedEmployee && (
-                <div className="border-t pt-4">
-                  <label className="text-sm font-medium text-muted-foreground mb-3 block">
-                    Quick Actions
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {selectedEmployee.department_id && (
+              </TabsContent>
+
+              <TabsContent value="projects" className="mt-4">
+                {loadingEmployeeProjects ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
+                    <p className="text-sm text-muted-foreground">Loading projects...</p>
+                  </div>
+                ) : employeeProjects.length > 0 ? (
+                  <div className="space-y-3">
+                    {employeeProjects.map((project: any) => (
+                      <Card key={project.id}>
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h4 className="font-semibold">{project.name}</h4>
+                                {project.project_code && (
+                                  <Badge variant="outline">{project.project_code}</Badge>
+                                )}
+                                <Badge variant={
+                                  project.status === 'completed' ? 'default' :
+                                  project.status === 'in_progress' ? 'secondary' :
+                                  'outline'
+                                }>
+                                  {project.status}
+                                </Badge>
+                                {(project.project_manager_id === selectedEmployee.user_id) && (
+                                  <Badge variant="secondary">Project Manager</Badge>
+                                )}
+                                {(project.account_manager_id === selectedEmployee.user_id) && (
+                                  <Badge variant="secondary">Account Manager</Badge>
+                                )}
+                              </div>
+                              {project.client && (
+                                <p className="text-sm text-muted-foreground mb-2">
+                                  Client: {project.client.company_name || project.client.name}
+                                </p>
+                              )}
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
+                                {project.start_date && (
+                                  <span>Start: {new Date(project.start_date).toLocaleDateString()}</span>
+                                )}
+                                {project.budget && (
+                                  <span>Budget: {new Intl.NumberFormat('en-US', {
+                                    style: 'currency',
+                                    currency: project.currency || 'USD'
+                                  }).format(project.budget)}</span>
+                                )}
+                                <span>Progress: {project.progress}%</span>
+                              </div>
+                              {project.progress > 0 && (
+                                <Progress value={project.progress} className="h-2" />
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setShowViewDialog(false);
+                                navigate(`/project-management/${project.id}`);
+                              }}
+                            >
+                              View <ExternalLink className="h-3 w-3 ml-1" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Briefcase className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
+                    <p className="text-sm text-muted-foreground">No projects assigned to this employee</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="actions" className="mt-4">
+                {selectedEmployee && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      {selectedEmployee.department_id && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setShowViewDialog(false);
+                            navigateToDepartment(selectedEmployee.department_id!, selectedEmployee.department || undefined);
+                          }}
+                          className="w-full"
+                        >
+                          <Building2 className="h-4 w-4 mr-2" />
+                          View Department
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
                           setShowViewDialog(false);
-                          navigateToDepartment(selectedEmployee.department_id!, selectedEmployee.department || undefined);
+                          navigateToProjects({ 
+                            employeeId: selectedEmployee.user_id, 
+                            employeeName: selectedEmployee.full_name,
+                            departmentId: selectedEmployee.department_id,
+                            departmentName: selectedEmployee.department || undefined
+                          });
                         }}
                         className="w-full"
                       >
-                        <Building2 className="h-4 w-4 mr-2" />
-                        View Department
+                        <Briefcase className="h-4 w-4 mr-2" />
+                        View All Projects
                       </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setShowViewDialog(false);
-                        navigateToProjects({ 
-                          employeeId: selectedEmployee.user_id, 
-                          employeeName: selectedEmployee.full_name,
-                          departmentId: selectedEmployee.department_id,
-                          departmentName: selectedEmployee.department || undefined
-                        });
-                      }}
-                      className="w-full"
-                    >
-                      <Briefcase className="h-4 w-4 mr-2" />
-                      View Projects
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setShowViewDialog(false);
-                        navigateToAttendance({ 
-                          employeeId: selectedEmployee.user_id, 
-                          employeeName: selectedEmployee.full_name,
-                          departmentId: selectedEmployee.department_id,
-                          departmentName: selectedEmployee.department || undefined
-                        });
-                      }}
-                      className="w-full"
-                    >
-                      <Clock className="h-4 w-4 mr-2" />
-                      View Attendance
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setShowViewDialog(false);
-                        navigateToPayroll({ 
-                          employeeId: selectedEmployee.user_id, 
-                          employeeName: selectedEmployee.full_name,
-                          departmentId: selectedEmployee.department_id,
-                          departmentName: selectedEmployee.department || undefined
-                        });
-                      }}
-                      className="w-full"
-                    >
-                      <Calculator className="h-4 w-4 mr-2" />
-                      View Payroll
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setShowViewDialog(false);
-                        navigate(`/employee-performance?employeeId=${selectedEmployee.user_id}`);
-                      }}
-                      className="w-full"
-                    >
-                      <BarChart3 className="h-4 w-4 mr-2" />
-                      View Performance
-                    </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowViewDialog(false);
+                          navigateToAttendance({ 
+                            employeeId: selectedEmployee.user_id, 
+                            employeeName: selectedEmployee.full_name,
+                            departmentId: selectedEmployee.department_id,
+                            departmentName: selectedEmployee.department || undefined
+                          });
+                        }}
+                        className="w-full"
+                      >
+                        <Clock className="h-4 w-4 mr-2" />
+                        View Attendance
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowViewDialog(false);
+                          navigateToPayroll({ 
+                            employeeId: selectedEmployee.user_id, 
+                            employeeName: selectedEmployee.full_name,
+                            departmentId: selectedEmployee.department_id,
+                            departmentName: selectedEmployee.department || undefined
+                          });
+                        }}
+                        className="w-full"
+                      >
+                        <Calculator className="h-4 w-4 mr-2" />
+                        View Payroll
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setShowViewDialog(false);
+                          navigate(`/employee-performance?employeeId=${selectedEmployee.user_id}`);
+                        }}
+                        className="w-full"
+                      >
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        View Performance
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </TabsContent>
+            </Tabs>
           )}
         </DialogContent>
       </Dialog>

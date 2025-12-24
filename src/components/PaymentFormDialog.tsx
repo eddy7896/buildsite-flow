@@ -406,7 +406,6 @@ const PaymentFormDialog: React.FC<PaymentFormDialogProps> = ({
         newStatus = 'sent';
       }
 
-      const { updateRecord } = await import('@/services/api/postgresql-service');
       await updateRecord('invoices', {
         status: newStatus,
       }, { id: invoice.id }, user.id);

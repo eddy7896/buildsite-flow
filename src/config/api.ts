@@ -16,7 +16,10 @@ function getEnvApiUrl(): URL | null {
   try {
     return new URL(raw);
   } catch {
-    console.warn('[API Config] Invalid VITE_API_URL value:', raw);
+    // Invalid URL format - will fall back to default
+    if (typeof window !== 'undefined' && window.console) {
+      console.warn('[API Config] Invalid VITE_API_URL value:', raw);
+    }
     return null;
   }
 }
@@ -43,12 +46,8 @@ export function getApiRoot(): string {
 
     // Browser on localhost (developer machine)
     if (browserIsLocalhost) {
-      if (envIsValid) {
-        // Trust VITE_API_URL exactly as provided in local dev
-        return envUrl!.toString().replace(/\/$/, '');
-      }
-
-      // Sensible default for local dev when env is missing
+      // Always use localhost:3000 when browser is on localhost
+      // This ensures local development works regardless of VITE_API_URL setting
       return `${protocol}//localhost:3000/api`;
     }
 

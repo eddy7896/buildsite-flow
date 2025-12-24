@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Search, Filter, Edit, Trash2, Mail, Phone, MapPin, Building, Calendar, User, DollarSign, FileText } from "lucide-react";
+import { Plus, Search, Filter, Edit, Trash2, Mail, Phone, MapPin, Building, Calendar, User, DollarSign, FileText, ExternalLink, TrendingUp, Activity } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { db } from '@/lib/database';
@@ -13,6 +13,10 @@ import { getAgencyId } from "@/utils/agencyUtils";
 import { RoleGuard } from "@/components/RoleGuard";
 import { hasRoleOrHigher, AppRole } from "@/utils/roleUtils";
 import { useNavigate } from "react-router-dom";
+import { selectRecords } from "@/services/api/postgresql-service";
+import { getProjectsForSelectionAuto } from "@/services/api/project-selector-service";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
 
 const Clients = () => {
   const { toast } = useToast();
@@ -24,6 +28,12 @@ const Clients = () => {
   const [selectedTab, setSelectedTab] = useState('all');
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedClient, setSelectedClient] = useState<any>(null);
+  const [expandedClientId, setExpandedClientId] = useState<string | null>(null);
+  const [clientProjects, setClientProjects] = useState<Record<string, any[]>>({});
+  const [clientInvoices, setClientInvoices] = useState<Record<string, any[]>>({});
+  const [clientFinancials, setClientFinancials] = useState<Record<string, any>>({});
+  const [clientActivities, setClientActivities] = useState<Record<string, any[]>>({});
+  const [loadingIntegration, setLoadingIntegration] = useState<Record<string, boolean>>({});
   const [clientStats, setClientStats] = useState({
     totalClients: 0,
     activeClients: 0,
@@ -136,7 +146,109 @@ const Clients = () => {
     }
   };
 
-  const ClientCard = ({ client }: { client: any }) => (
+  const loadClientIntegrationData = async (clientId: string) => {
+    if (loadingIntegration[clientId]) return;
+    
+    setLoadingIntegration(prev => ({ ...prev, [clientId]: true }));
+    try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) return;
+
+      // Load projects for client
+      try {
+        const projects = await getProjectsForSelectionAuto(profile, user?.id, {
+          clientId: clientId,
+          includeInactive: false
+        });
+        setClientProjects(prev => ({ ...prev, [clientId]: projects }));
+      } catch (error) {
+        console.error('Error loading client projects:', error);
+      }
+
+      // Load invoices for client
+      try {
+        const invoices = await selectRecords('invoices', {
+          filters: [
+            { column: 'agency_id', operator: 'eq', value: agencyId },
+            { column: 'client_id', operator: 'eq', value: clientId }
+          ],
+          orderBy: 'issue_date DESC',
+          limit: 10
+        });
+        setClientInvoices(prev => ({ ...prev, [clientId]: invoices || [] }));
+
+        // Calculate financial summary
+        const totalInvoiced = invoices.reduce((sum: number, inv: any) => {
+          return sum + (parseFloat(inv.total_amount) || 0);
+        }, 0);
+        
+        const paidInvoices = invoices.filter((inv: any) => inv.status === 'paid');
+        const totalPaid = paidInvoices.reduce((sum: number, inv: any) => {
+          return sum + (parseFloat(inv.total_amount) || 0);
+        }, 0);
+
+        const outstanding = totalInvoiced - totalPaid;
+
+        setClientFinancials(prev => ({
+          ...prev,
+          [clientId]: {
+            totalInvoiced,
+            totalPaid,
+            outstanding,
+            invoiceCount: invoices.length
+          }
+        }));
+      } catch (error) {
+        console.error('Error loading client invoices:', error);
+      }
+
+      // Load CRM activities for client
+      try {
+        const activities = await selectRecords('crm_activities', {
+          filters: [
+            { column: 'agency_id', operator: 'eq', value: agencyId },
+            { column: 'related_entity_type', operator: 'eq', value: 'client' },
+            { column: 'related_entity_id', operator: 'eq', value: clientId }
+          ],
+          orderBy: 'created_at DESC',
+          limit: 10
+        });
+        setClientActivities(prev => ({ ...prev, [clientId]: activities || [] }));
+      } catch (error) {
+        console.error('Error loading client activities:', error);
+      }
+    } catch (error) {
+      console.error('Error loading client integration data:', error);
+    } finally {
+      setLoadingIntegration(prev => ({ ...prev, [clientId]: false }));
+    }
+  };
+
+  const handleClientExpand = (clientId: string) => {
+    if (expandedClientId === clientId) {
+      setExpandedClientId(null);
+    } else {
+      setExpandedClientId(clientId);
+      loadClientIntegrationData(clientId);
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount);
+  };
+
+  const ClientCard = ({ client }: { client: any }) => {
+    const isExpanded = expandedClientId === client.id;
+    const projects = clientProjects[client.id] || [];
+    const invoices = clientInvoices[client.id] || [];
+    const financials = clientFinancials[client.id];
+    const activities = clientActivities[client.id] || [];
+    const isLoading = loadingIntegration[client.id];
+
+    return (
     <Card>
       <CardContent className="pt-6">
         <div className="flex items-start justify-between mb-4">
@@ -229,6 +341,13 @@ const Clients = () => {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => handleClientExpand(client.id)}
+          >
+            {isExpanded ? 'Hide Details' : 'View Details'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => navigate(`/projects?client_id=${client.id}`)}
           >
             View Projects
@@ -248,9 +367,220 @@ const Clients = () => {
             View Quotations
           </Button>
         </div>
+
+        {/* Expanded Integration Details */}
+        {isExpanded && (
+          <div className="mt-6 border-t pt-6">
+            <Tabs defaultValue="projects" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="projects">
+                  Projects ({projects.length})
+                </TabsTrigger>
+                <TabsTrigger value="financials">
+                  Financial Summary
+                </TabsTrigger>
+                <TabsTrigger value="activities">
+                  CRM Activities ({activities.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="projects" className="mt-4">
+                {isLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
+                    <p className="text-sm text-muted-foreground">Loading projects...</p>
+                  </div>
+                ) : projects.length > 0 ? (
+                  <div className="space-y-3">
+                    {projects.map((project: any) => (
+                      <Card key={project.id}>
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h4 className="font-semibold">{project.name}</h4>
+                                {project.project_code && (
+                                  <Badge variant="outline">{project.project_code}</Badge>
+                                )}
+                                <Badge variant={
+                                  project.status === 'completed' ? 'default' :
+                                  project.status === 'in_progress' ? 'secondary' :
+                                  'outline'
+                                }>
+                                  {project.status}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                {project.start_date && (
+                                  <span>Start: {new Date(project.start_date).toLocaleDateString()}</span>
+                                )}
+                                {project.budget && (
+                                  <span>Budget: {formatCurrency(project.budget)}</span>
+                                )}
+                                <span>Progress: {project.progress}%</span>
+                              </div>
+                              {project.progress > 0 && (
+                                <Progress value={project.progress} className="mt-2 h-2" />
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/project-management/${project.id}`)}
+                            >
+                              View <ExternalLink className="h-3 w-3 ml-1" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <FileText className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
+                    <p className="text-sm text-muted-foreground">No projects found for this client</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      onClick={() => navigate(`/project-management?client_id=${client.id}`)}
+                    >
+                      Create Project
+                    </Button>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="financials" className="mt-4">
+                {isLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
+                    <p className="text-sm text-muted-foreground">Loading financial data...</p>
+                  </div>
+                ) : financials ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <Card>
+                        <CardContent className="pt-4">
+                          <p className="text-sm text-muted-foreground mb-1">Total Invoiced</p>
+                          <p className="text-2xl font-bold">{formatCurrency(financials.totalInvoiced)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-4">
+                          <p className="text-sm text-muted-foreground mb-1">Total Paid</p>
+                          <p className="text-2xl font-bold text-green-600">{formatCurrency(financials.totalPaid)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="pt-4">
+                          <p className="text-sm text-muted-foreground mb-1">Outstanding</p>
+                          <p className="text-2xl font-bold text-orange-600">{formatCurrency(financials.outstanding)}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                    
+                    {invoices.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">Recent Invoices</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Invoice #</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {invoices.slice(0, 5).map((invoice: any) => (
+                                <TableRow key={invoice.id}>
+                                  <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
+                                  <TableCell>{new Date(invoice.issue_date).toLocaleDateString()}</TableCell>
+                                  <TableCell>
+                                    <Badge variant={
+                                      invoice.status === 'paid' ? 'default' :
+                                      invoice.status === 'overdue' ? 'destructive' :
+                                      'secondary'
+                                    }>
+                                      {invoice.status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-right font-medium">
+                                    {formatCurrency(invoice.total_amount || 0)}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                          <div className="mt-4">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate(`/invoices?client_id=${client.id}`)}
+                            >
+                              View All Invoices <ExternalLink className="h-3 w-3 ml-1" />
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <DollarSign className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
+                    <p className="text-sm text-muted-foreground">No financial data available</p>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="activities" className="mt-4">
+                {isLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
+                    <p className="text-sm text-muted-foreground">Loading activities...</p>
+                  </div>
+                ) : activities.length > 0 ? (
+                  <div className="space-y-3">
+                    {activities.map((activity: any) => (
+                      <Card key={activity.id}>
+                        <CardContent className="pt-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Activity className="h-4 w-4 text-muted-foreground" />
+                                <h4 className="font-semibold">{activity.title || activity.type}</h4>
+                                <Badge variant="outline">{activity.type}</Badge>
+                              </div>
+                              {activity.description && (
+                                <p className="text-sm text-muted-foreground mb-2">{activity.description}</p>
+                              )}
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(activity.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Activity className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
+                    <p className="text-sm text-muted-foreground">No CRM activities found</p>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
       </CardContent>
     </Card>
-  );
+    );
+  };
 
   if (loading) {
     return (

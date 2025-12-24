@@ -8,6 +8,7 @@ import { io } from 'socket.io-client';
 import type { Socket } from 'socket.io-client';
 import { useAuth } from './useAuth';
 import { logDebug, logWarn, logError } from '@/utils/consoleLogger';
+import { getApiBaseUrl } from '@/config/api';
 
 interface UseMessagingWebSocketOptions {
   enabled?: boolean;
@@ -106,7 +107,6 @@ export function useMessagingWebSocket(options: UseMessagingWebSocketOptions = {}
     }
 
     // WebSocket connects to base server URL (without /api)
-    const { getApiBaseUrl } = await import('@/config/api');
     const apiUrl = getApiBaseUrl();
 
     // Disconnect existing connection if any

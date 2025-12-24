@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { logError } from '@/utils/consoleLogger';
 import { 
   Building, 
   Users, 
@@ -212,7 +213,7 @@ export function AppSidebar() {
           setSetupComplete(true);
         }
       } catch (error) {
-        console.error('Error checking setup status:', error);
+        logError('Error checking setup status:', error);
         setSetupComplete(true);
       }
     };

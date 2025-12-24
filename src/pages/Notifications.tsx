@@ -302,8 +302,7 @@ const Notifications = () => {
       const { error } = await db
         .from('notifications')
         .delete()
-        .eq('id', notificationId)
-        .single();
+        .eq('id', notificationId);
 
       if (error) throw error;
 

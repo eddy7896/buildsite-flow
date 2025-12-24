@@ -6,9 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { insertRecord, updateRecord, selectRecords } from '@/services/api/postgresql-service';
+import { insertRecord, updateRecord, selectRecords, selectOne } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
 import { getEmployeesForAssignmentAuto } from '@/services/api/employee-selector-service';
+import { getClientsForSelectionAuto } from '@/services/api/client-selector-service';
+import { getProjectsForSelectionAuto } from '@/services/api/project-selector-service';
+import { getProductsForSelectionAuto } from '@/services/api/inventory-selector-service';
 import { X } from 'lucide-react';
 
 interface Job {
@@ -118,21 +121,23 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
         setClients([]);
         return;
       }
-      // Get agency_id from profile
-      const { selectOne } = await import('@/services/api/postgresql-service');
-      const profile = await selectOne('profiles', { user_id: user.id });
-      if (!profile?.agency_id) {
-        setClients([]);
-        return;
-      }
       
-      const clientsData = await selectRecords('clients', {
-        where: { agency_id: profile.agency_id },
-        orderBy: 'company_name ASC',
-      });
-      setClients(clientsData || []);
-    } catch (error) {
+      // Use standardized client fetching service
+      const clientsData = await getClientsForSelectionAuto(profile, user.id);
+      
+      // Transform to component format
+      setClients(clientsData.map(c => ({
+        id: c.id,
+        company_name: c.company_name || c.name,
+        name: c.name
+      })));
+    } catch (error: any) {
       console.error('Error fetching clients:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch clients",
+        variant: "destructive",
+      });
       setClients([]);
     }
   };
@@ -213,7 +218,6 @@ const JobFormDialog: React.FC<JobFormDialogProps> = ({ isOpen, onClose, job, onJ
         });
       } else {
         // Get agency_id from profile
-        const { selectOne } = await import('@/services/api/postgresql-service');
         const profile = user?.id ? await selectOne('profiles', { user_id: user.id }) : null;
         if (!profile?.agency_id) {
           toast({

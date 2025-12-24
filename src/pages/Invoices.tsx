@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import InvoiceFormDialog from "@/components/InvoiceFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
 import { useSearchParams } from "react-router-dom";
+import { logError } from '@/utils/consoleLogger';
 
 interface Invoice {
   id: string;
@@ -57,7 +58,7 @@ const Invoices = () => {
         : scoped;
       setInvoices(filteredByClient);
     } catch (error: any) {
-      console.error('Error fetching invoices:', error);
+      logError('Error fetching invoices:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to fetch invoices. Please try again.",

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { selectOne, updateRecord, insertRecord } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
 import { getAgencyId } from '@/utils/agencyUtils';
+import { getApiBaseUrl } from '@/config/api';
 
 export interface AgencySettings {
   id?: string;
@@ -59,7 +60,6 @@ export const useAgencySettings = () => {
       const isValidAgencyId = agencyId && agencyId !== '00000000-0000-0000-0000-000000000000';
       if (isValidAgencyId && (!agencySettings?.agency_name || agencySettings.agency_name === 'My Agency' || agencySettings.agency_name === '')) {
         try {
-          const { getApiBaseUrl } = await import('@/config/api');
           const apiBaseUrl = getApiBaseUrl();
           const response = await fetch(`${apiBaseUrl}/api/system/agency-settings/${encodeURIComponent(agencyId)}`, {
             method: 'GET',

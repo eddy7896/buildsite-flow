@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { usePageRecommendations } from '@/hooks/usePageRecommendations';
 import { getApiBaseUrl } from '@/config/api';
+import { logError } from '@/utils/consoleLogger';
 import type { OnboardingFormData, SelectedPage } from '../hooks/useOnboardingState';
 import type { RecommendedPage, PageCategory } from '@/types/pageCatalog';
 
@@ -97,10 +98,31 @@ export default function Step5PageSelection({
             setSelectedTemplate('quick-start');
           }
         } catch (error: any) {
-          console.error('Error fetching recommendations:', error);
+          logError('Error fetching recommendations:', error);
           const errorMessage = error?.message || 'Failed to load page recommendations';
+          
+          // Set empty recommendations structure if error occurs
+          const emptyRecs = {
+            all: [],
+            categorized: {
+              required: [],
+              recommended: [],
+              optional: []
+            },
+            summary: {
+              total: 0,
+              required: 0,
+              recommended: 0,
+              optional: 0
+            }
+          };
+          setRecommendations(emptyRecs);
+          setAllPages([]);
+          
           if (errorMessage.includes('NetworkError') || errorMessage.includes('Failed to fetch') || errorMessage.includes('CORS')) {
             setError('Backend server is not running. Please start the backend server on port 3000 to continue.');
+          } else if (errorMessage.includes('does not exist') || errorMessage.includes('MISSING_TABLES')) {
+            setError('Page catalog tables not found. Please run database migrations.');
           } else {
             setError(`Error loading pages: ${errorMessage}`);
           }

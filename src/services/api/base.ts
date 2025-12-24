@@ -277,7 +277,9 @@ export class BaseApiService {
 
       const query = `SELECT * FROM ${functionName}(${paramString})`;
       const result = await pgClient.query(query, paramValues);
-      return result.rows as T[];
+      const rows = result.rows as T[];
+      // Return single item if only one result, otherwise return array
+      return rows.length === 1 ? rows[0] : rows;
     }, options);
   }
 }

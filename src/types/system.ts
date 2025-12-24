@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export interface SystemMetrics {
   totalAgencies: number;
   activeAgencies: number;
@@ -42,4 +44,50 @@ export interface SystemMetricsResponse {
   metrics: SystemMetrics;
   agencies: AgencySummary[];
 }
+
+// Zod schemas for runtime validation
+export const SystemMetricsSchema = z.object({
+  totalAgencies: z.number(),
+  activeAgencies: z.number(),
+  totalUsers: z.number(),
+  activeUsers: z.number(),
+  subscriptionPlans: z.object({
+    basic: z.number(),
+    pro: z.number(),
+    enterprise: z.number(),
+  }),
+  revenueMetrics: z.object({
+    mrr: z.number(),
+    arr: z.number(),
+  }),
+  usageStats: z.object({
+    totalProjects: z.number(),
+    totalInvoices: z.number(),
+    totalClients: z.number(),
+    totalAttendanceRecords: z.number(),
+  }),
+  systemHealth: z.object({
+    uptime: z.string(),
+    responseTime: z.number(),
+    errorRate: z.number(),
+  }),
+});
+
+export const AgencySummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  domain: z.string(),
+  subscription_plan: z.string(),
+  max_users: z.number(),
+  is_active: z.boolean(),
+  created_at: z.string(),
+  user_count: z.number(),
+  project_count: z.number(),
+  invoice_count: z.number(),
+});
+
+export const SystemMetricsResponseSchema = z.object({
+  metrics: SystemMetricsSchema,
+  agencies: z.array(AgencySummarySchema),
+});
 

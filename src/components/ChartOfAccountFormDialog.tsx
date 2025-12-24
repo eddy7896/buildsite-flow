@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { insertRecord, updateRecord } from '@/services/api/postgresql-service';
+import { insertRecord, updateRecord, selectRecords, selectOne } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
 import { getAgencyId } from '@/utils/agencyUtils';
 
@@ -73,11 +73,9 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
 
   const fetchParentAccounts = async () => {
     try {
-      const { selectRecords } = await import('@/services/api/postgresql-service');
       if (!user?.id) return;
       
       // Get agency_id using utility function (handles multi-database architecture)
-      const { selectOne } = await import('@/services/api/postgresql-service');
       const userProfile = profile || await selectOne('profiles', { user_id: user.id });
       const agencyId = await getAgencyId(userProfile, user.id);
       
@@ -94,7 +92,6 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
     } catch (error: any) {
       // Fallback if agency_id column doesn't exist
       if (error?.code === '42703' || String(error?.message || '').includes('agency_id')) {
-        const { selectRecords } = await import('@/services/api/postgresql-service');
         const accounts = await selectRecords('chart_of_accounts', {
           where: { is_active: true },
           orderBy: 'account_code ASC',
@@ -133,7 +130,6 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
       }
 
       // Get agency_id using utility function (handles multi-database architecture)
-      const { selectOne } = await import('@/services/api/postgresql-service');
       const userProfile = profile || (user?.id ? await selectOne('profiles', { user_id: user.id }) : null);
       const agencyId = await getAgencyId(userProfile, user?.id);
       

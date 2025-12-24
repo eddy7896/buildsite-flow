@@ -77,7 +77,7 @@ export default function AIFeatures() {
         variant: "default"
       });
     } catch (error) {
-      console.error('Error fetching AI metrics:', error);
+      logError('Error fetching AI metrics:', error);
       setMetrics(null);
       toast({
         title: "Error",
@@ -93,7 +93,7 @@ export default function AIFeatures() {
       // For now, show empty state
       setPredictions([]);
     } catch (error) {
-      console.error('Error fetching predictions:', error);
+      logError('Error fetching predictions:', error);
       setPredictions([]);
     }
   };
@@ -104,7 +104,7 @@ export default function AIFeatures() {
       // For now, show empty state
       setProcessedDocs([]);
     } catch (error) {
-      console.error('Error fetching processed documents:', error);
+      logError('Error fetching processed documents:', error);
       setProcessedDocs([]);
     }
   };

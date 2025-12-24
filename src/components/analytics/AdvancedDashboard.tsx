@@ -88,7 +88,7 @@ export function AdvancedDashboard() {
       if (error) throw error;
       setWidgets(data || []);
     } catch (error) {
-      console.error('Error fetching widgets:', error);
+      logError('Error fetching widgets:', error);
       toast.error('Failed to load dashboard widgets');
     }
   };
@@ -106,7 +106,7 @@ export function AdvancedDashboard() {
       if (error) throw error;
       setReports(data || []);
     } catch (error) {
-      console.error('Error fetching reports:', error);
+      logError('Error fetching reports:', error);
       toast.error('Failed to load custom reports');
     }
   };
@@ -147,7 +147,7 @@ export function AdvancedDashboard() {
       setWidgetForm({ title: '', widget_type: 'chart', data_source: '', config: {} });
       fetchWidgets();
     } catch (error) {
-      console.error('Error creating widget:', error);
+      logError('Error creating widget:', error);
       toast.error('Failed to create widget');
     }
   };
@@ -174,7 +174,7 @@ export function AdvancedDashboard() {
       setReportForm({ name: '', description: '', data_sources: [], is_public: false, is_scheduled: false });
       fetchReports();
     } catch (error) {
-      console.error('Error creating report:', error);
+      logError('Error creating report:', error);
       toast.error('Failed to create report');
     }
   };
@@ -191,7 +191,7 @@ export function AdvancedDashboard() {
       toast.success('Widget deleted successfully');
       fetchWidgets();
     } catch (error) {
-      console.error('Error deleting widget:', error);
+      logError('Error deleting widget:', error);
       toast.error('Failed to delete widget');
     }
   };
@@ -281,7 +281,7 @@ export function AdvancedDashboard() {
               ];
           }
         } catch (error: any) {
-          console.error(`Error fetching data for widget ${widget.id}:`, error);
+          logError(`Error fetching data for widget ${widget.id}:`, error);
           // Set empty data on error
           dataMap[widget.id] = [
             { name: 'Jan', value: 0 },
@@ -295,7 +295,7 @@ export function AdvancedDashboard() {
       
       setWidgetData(dataMap);
     } catch (error) {
-      console.error('Error fetching widget data:', error);
+      logError('Error fetching widget data:', error);
     }
   };
 
@@ -358,7 +358,7 @@ export function AdvancedDashboard() {
           return 0;
       }
     } catch (error) {
-      console.error(`Error fetching metric for widget ${widget.id}:`, error);
+      logError(`Error fetching metric for widget ${widget.id}:`, error);
       return 0;
     }
   };

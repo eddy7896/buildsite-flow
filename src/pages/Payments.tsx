@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Search, Filter, Download, CreditCard, DollarSign, TrendingUp, Calendar, Loader2, Edit, Trash2, Eye } from "lucide-react";
 import { useState, useEffect } from "react";
-import { selectRecords, rawQuery, deleteRecord } from '@/services/api/postgresql-service';
+import { selectRecords, rawQuery, deleteRecord, updateRecord } from '@/services/api/postgresql-service';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/hooks/useAuth';
 import { getAgencyId } from '@/utils/agencyUtils';
 import PaymentFormDialog from "@/components/PaymentFormDialog";
 import DeleteConfirmDialog from "@/components/DeleteConfirmDialog";
+import { logError } from '@/utils/consoleLogger';
 
 interface Payment {
   id: string;
@@ -200,7 +201,7 @@ const Payments = () => {
       });
 
     } catch (error: any) {
-      console.error('Error fetching payments:', error);
+      logError('Error fetching payments:', error);
       toast({
         title: "Error",
         description: error?.message || "Failed to load payments. Please try again.",
@@ -275,7 +276,6 @@ const Payments = () => {
             newStatus = 'sent';
           }
 
-          const { updateRecord } = await import('@/services/api/postgresql-service');
           await updateRecord('invoices', inv.id, {
             status: newStatus,
           }, user.id);
@@ -291,7 +291,7 @@ const Payments = () => {
       setDeleteDialogOpen(false);
       setPaymentToDelete(null);
     } catch (error: any) {
-      console.error('Error deleting payment:', error);
+      logError('Error deleting payment:', error);
       toast({
         title: "Error",
         description: error?.message || "Failed to delete payment. Please try again.",
@@ -531,7 +531,7 @@ const Payments = () => {
                             setSelectedPayment(payment);
                             setPaymentFormOpen(true);
                           } catch (error) {
-                            console.error('Error fetching payment details:', error);
+                            logError('Error fetching payment details:', error);
                             setSelectedPayment(payment);
                             setPaymentFormOpen(true);
                           }

@@ -10,6 +10,7 @@ import { db } from '@/lib/database';
 import { useAuth } from '@/hooks/useAuth';
 import { generateUUID } from '@/lib/uuid';
 import { getAgencyId } from '@/utils/agencyUtils';
+import { getEmployeesForAssignmentAuto } from '@/services/api/employee-selector-service';
 
 interface Lead {
   id?: string;
@@ -32,6 +33,7 @@ interface Lead {
   due_date?: string;
   follow_up_date?: string;
   notes?: string;
+  assigned_to?: string;
 }
 
 interface LeadFormDialogProps {
@@ -46,6 +48,7 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [leadSources, setLeadSources] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<Array<{ id: string; full_name: string }>>([]);
   const [formData, setFormData] = useState<Lead>({
     company_name: lead?.company_name || lead?.name || '',
     contact_name: lead?.contact_name || lead?.name || '',
@@ -65,11 +68,13 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
     due_date: lead?.due_date || '',
     follow_up_date: lead?.follow_up_date || '',
     notes: lead?.notes || lead?.description || '',
+    assigned_to: lead?.assigned_to || '',
   });
 
   useEffect(() => {
     if (isOpen) {
       fetchLeadSources();
+      fetchEmployees();
       // Reset form when dialog opens
       if (lead) {
         setFormData({
@@ -91,6 +96,7 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
           due_date: lead.due_date || '',
           follow_up_date: lead.follow_up_date || '',
           notes: lead.notes || lead.description || '',
+          assigned_to: lead.assigned_to || '',
         });
       } else {
         setFormData({
@@ -112,6 +118,7 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
           due_date: '',
           follow_up_date: '',
           notes: '',
+          assigned_to: '',
         });
       }
     }
@@ -129,6 +136,33 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
       setLeadSources(data || []);
     } catch (error) {
       console.error('Error fetching lead sources:', error);
+    }
+  };
+
+  const fetchEmployees = async () => {
+    try {
+      if (!user?.id) {
+        setEmployees([]);
+        return;
+      }
+      
+      // Use standardized employee fetching service
+      const employeesData = await getEmployeesForAssignmentAuto(profile, user.id);
+      
+      // Transform to component format
+      const transformedEmployees = employeesData.map(emp => ({
+        id: emp.user_id,
+        full_name: emp.full_name
+      }));
+      
+      setEmployees(transformedEmployees);
+    } catch (error: any) {
+      console.error('Error fetching employees:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch employees",
+        variant: "destructive",
+      });
     }
   };
 
@@ -173,6 +207,7 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
           follow_up_date: formData.follow_up_date || null,
           notes: formData.notes || null,
           description: formData.notes || null,
+          assigned_to: (formData.assigned_to && formData.assigned_to !== '__none__') ? formData.assigned_to : null,
           updated_at: new Date().toISOString(),
         };
 
@@ -222,7 +257,7 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
             follow_up_date: formData.follow_up_date || null,
             notes: formData.notes || null,
             description: formData.notes || null,
-            assigned_to: null,
+            assigned_to: (formData.assigned_to && formData.assigned_to !== '__none__') ? formData.assigned_to : null,
             created_by: userId,
             agency_id: agencyId,
             created_at: new Date().toISOString(),
@@ -355,24 +390,45 @@ const LeadFormDialog: React.FC<LeadFormDialogProps> = ({ isOpen, onClose, lead, 
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="lead_source_id">Lead Source</Label>
-            <Select 
-              value={formData.lead_source_id || undefined} 
-              onValueChange={(value) => setFormData(prev => ({ ...prev, lead_source_id: value === '__none__' ? '' : value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select lead source (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">None</SelectItem>
-                {leadSources.map((source) => (
-                  <SelectItem key={source.id} value={source.id}>
-                    {source.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="lead_source_id">Lead Source</Label>
+              <Select 
+                value={formData.lead_source_id || undefined} 
+                onValueChange={(value) => setFormData(prev => ({ ...prev, lead_source_id: value === '__none__' ? '' : value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select lead source (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {leadSources.map((source) => (
+                    <SelectItem key={source.id} value={source.id}>
+                      {source.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="assigned_to">Assigned To</Label>
+              <Select 
+                value={formData.assigned_to || undefined} 
+                onValueChange={(value) => setFormData(prev => ({ ...prev, assigned_to: value === '__none__' ? '' : value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select employee (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

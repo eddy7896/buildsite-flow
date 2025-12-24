@@ -9,7 +9,8 @@ import { useNavigate } from "react-router-dom";
 import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { selectRecords } from '@/services/api/postgresql-service';
+import { selectRecords, selectOne } from '@/services/api/postgresql-service';
+import { logDebug, logWarn, logError } from '@/utils/consoleLogger';
 
 interface Transaction {
   id: string;
@@ -55,11 +56,10 @@ const Ledger = () => {
       
       if (!agencyId && user?.id) {
         try {
-          const { selectOne } = await import('@/services/api/postgresql-service');
           const userProfile = await selectOne('profiles', { user_id: user.id });
           agencyId = userProfile?.agency_id;
         } catch (err) {
-          console.warn('Could not fetch profile:', err);
+          logWarn('Could not fetch profile:', err);
         }
       }
 
@@ -73,16 +73,16 @@ const Ledger = () => {
 
       const { data: entries, error: entriesError } = await query;
 
-      console.log('Fetched journal entries:', entries?.length || 0, 'entries');
+      logDebug('Fetched journal entries:', entries?.length || 0, 'entries');
 
       if (entriesError) {
-        console.error('Error fetching journal entries:', entriesError);
+        logError('Error fetching journal entries:', entriesError);
         throw entriesError;
       }
 
       // If no entries, still show the page with empty state
       if (!entries || entries.length === 0) {
-        console.log('No journal entries found');
+        logDebug('No journal entries found');
         setTransactions([]);
         setLedgerSummary({
           totalBalance: 0,
@@ -110,7 +110,7 @@ const Ledger = () => {
           .in('journal_entry_id', entryIds);
 
         if (linesError) {
-          console.error('Error fetching journal entry lines:', linesError);
+          logError('Error fetching journal entry lines:', linesError);
           throw linesError;
         }
         lines = linesData || [];
@@ -131,7 +131,7 @@ const Ledger = () => {
       } catch (err: any) {
         // Fallback if agency_id column does not exist in current schema
         if (err?.code === '42703' || String(err?.message || '').includes('agency_id')) {
-          console.warn('chart_of_accounts has no agency_id column, falling back to global accounts');
+          logWarn('chart_of_accounts has no agency_id column, falling back to global accounts');
           accounts = await selectRecords('chart_of_accounts', {
             where: { is_active: true },
             orderBy: 'account_code ASC'
@@ -275,7 +275,7 @@ const Ledger = () => {
       });
 
     } catch (error: any) {
-      console.error('Error fetching ledger data:', error);
+      logError('Error fetching ledger data:', error);
       const errorMessage = error?.message || 'Failed to load ledger data. Please try again.';
       setError(errorMessage);
       toast({
@@ -340,7 +340,7 @@ const Ledger = () => {
         description: "Ledger exported successfully",
       });
     } catch (error: any) {
-      console.error('Error exporting ledger:', error);
+      logError('Error exporting ledger:', error);
       toast({
         title: "Error",
         description: "Failed to export ledger. Please try again.",

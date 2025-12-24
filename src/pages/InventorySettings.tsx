@@ -28,8 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { getWarehouses } from '@/services/api/inventory-service';
-import type { Warehouse } from '@/services/api/inventory-service';
+import { getWarehouses, type Warehouse as WarehouseType } from '@/services/api/inventory-service';
 
 interface InventorySettings {
   // Valuation
@@ -63,7 +62,7 @@ export default function InventorySettings() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseType[]>([]);
   const [settings, setSettings] = useState<InventorySettings>({
     default_valuation_method: 'weighted_average',
     auto_reorder_enabled: false,
@@ -107,7 +106,7 @@ export default function InventorySettings() {
       const data = await getWarehouses();
       setWarehouses(data || []);
     } catch (error: any) {
-      console.error('Failed to load warehouses:', error);
+      logError('Failed to load warehouses:', error);
       // Don't show toast for warehouses as it's not critical
     }
   };

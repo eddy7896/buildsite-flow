@@ -3,6 +3,7 @@ import { db } from '@/lib/database';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { countRecords } from '@/services/api/postgresql-service';
+import { logWarn, logError } from '@/utils/consoleLogger';
 
 export interface AgencyMetrics {
   totalUsers: number;
@@ -54,22 +55,25 @@ export const useAgencyAnalytics = () => {
       }
 
       if (!agencyId) {
-        console.warn('No agency_id available for analytics');
+        logWarn('No agency_id available for analytics');
         setLoading(false);
         return;
       }
 
       // Helper function to safely execute queries
-      const safeQuery = async (queryPromise: Promise<any>, fallback: any = null) => {
+      const safeQuery = async (queryPromise: PromiseLike<any> | Promise<any>, fallback: any = null) => {
         try {
           const result = await queryPromise;
-          if (result.error) {
-            console.warn('[Agency Analytics] Query error:', result.error);
+          if (result && typeof result === 'object' && 'error' in result && result.error) {
+            logWarn('[Agency Analytics] Query error:', result.error);
             return fallback;
           }
-          return result.data || fallback;
+          if (result && typeof result === 'object' && 'data' in result) {
+            return result.data || fallback;
+          }
+          return result || fallback;
         } catch (error: any) {
-          console.warn('[Agency Analytics] Query exception:', error);
+          logWarn('[Agency Analytics] Query exception:', error);
           return fallback;
         }
       };
@@ -79,7 +83,7 @@ export const useAgencyAnalytics = () => {
         try {
           return await countRecords(table, filters);
         } catch (error: any) {
-          console.warn(`[Agency Analytics] Count error for ${table}:`, error);
+          logWarn(`[Agency Analytics] Count error for ${table}:`, error);
           return fallback;
         }
       };
@@ -155,7 +159,7 @@ export const useAgencyAnalytics = () => {
       setMetrics(agencyMetrics);
 
     } catch (error: any) {
-      console.error('Error fetching agency metrics:', error);
+      logError('Error fetching agency metrics:', error);
       toast({
         title: "Error loading agency metrics",
         description: error.message,

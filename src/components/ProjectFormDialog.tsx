@@ -13,6 +13,8 @@ import { projectService, Project as ProjectType } from '@/services/api/project-s
 import { selectRecords } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 import { getEmployeesForAssignmentAuto } from '@/services/api/employee-selector-service';
+import { getClientsForSelectionAuto } from '@/services/api/client-selector-service';
+import { getDepartmentsForSelectionAuto } from '@/services/api/department-selector-service';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -274,24 +276,14 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
   const fetchClients = async () => {
     try {
       setLoadingClients(true);
-      const agencyId = await getAgencyId(profile, user?.id);
       
-      if (!agencyId) {
-        toast({
-          title: 'Error',
-          description: 'Agency ID not found. Please ensure you are logged in to an agency account.',
-          variant: 'destructive',
-        });
-        setLoadingClients(false);
-        return;
-      }
-      
-      const data = await selectRecords('clients', {
-        where: { agency_id: agencyId, is_active: true },
-        orderBy: 'name ASC'
+      // Use standardized client fetching service
+      const clientsData = await getClientsForSelectionAuto(profile, user?.id, {
+        includeInactive: false
       });
       
-      setClients(data.map((c: any) => ({
+      // Transform to Client interface format
+      setClients(clientsData.map(c => ({
         id: c.id,
         name: c.name,
         company_name: c.company_name,
@@ -342,20 +334,18 @@ const ProjectFormDialog: React.FC<ProjectFormDialogProps> = ({ isOpen, onClose, 
   const fetchDepartments = async () => {
     try {
       setLoadingDepartments(true);
-      // In isolated database architecture, all records in this DB belong to the agency
-      // No need to filter by agency_id - just get all active departments
-      const data = await selectRecords('departments', {
-        filters: [
-          { column: 'is_active', operator: 'eq', value: true }
-        ],
-        orderBy: 'name ASC'
+      
+      // Use standardized department fetching service
+      const departmentsData = await getDepartmentsForSelectionAuto(profile, user?.id, {
+        includeInactive: false
       });
       
-      setDepartments(data.map((d: any) => ({
+      // Transform to Department interface format
+      setDepartments(departmentsData.map(d => ({
         id: d.id,
         name: d.name,
-        manager_name: d.manager_name,
-        member_count: d.member_count
+        manager_name: d.manager_name || undefined,
+        member_count: d.member_count || undefined
       })));
     } catch (error: any) {
       console.error('Error fetching departments:', error);

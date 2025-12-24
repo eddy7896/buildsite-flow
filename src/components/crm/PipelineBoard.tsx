@@ -13,6 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { crmService, Lead, PipelineStage as Stage } from '@/services/api/crm-service';
 import { useNavigate } from 'react-router-dom';
+import { insertRecord } from '@/services/api/postgresql-service';
+import { getAgencyId } from '@/utils/agencyUtils';
 
 interface PipelineBoardProps {
   onLeadClick?: (lead: Lead) => void;
@@ -237,8 +239,6 @@ export const PipelineBoard: React.FC<PipelineBoardProps> = ({
   const handleLeadDuplicate = async (lead: Lead) => {
     try {
       // Create a duplicate lead
-      const { insertRecord } = await import('@/services/api/postgresql-service');
-      const { getAgencyId } = await import('@/utils/agencyUtils');
       const agencyId = await getAgencyId(profile, user?.id || null);
 
       const duplicate = {

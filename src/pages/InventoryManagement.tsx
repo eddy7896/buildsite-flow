@@ -133,8 +133,8 @@ export default function InventoryManagement() {
           fetchLowStockAlerts(),
         ]);
       } catch (error: any) {
-        // Error handling is done in individual functions
-        console.error('Error loading inventory data:', error);
+        // Error handling is done in individual functions; log summarized error for diagnostics
+        logError('Error loading inventory data:', error);
       } finally {
         setInitialLoad(false);
       }
@@ -154,7 +154,7 @@ export default function InventoryManagement() {
       const data = await getWarehouses();
       setWarehouses(data || []);
     } catch (error: any) {
-      console.error('Error fetching warehouses:', error);
+      logError('Error fetching warehouses:', error);
       const errorMessage = error.message || 'Failed to fetch warehouses';
       // Check if it's a network/connection error
       if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
@@ -209,7 +209,7 @@ export default function InventoryManagement() {
       const data = await getLowStockAlerts();
       setLowStockAlerts(data);
     } catch (error: any) {
-      console.error('Failed to fetch low stock alerts:', error);
+      logError('Failed to fetch low stock alerts:', error);
     }
   };
 
@@ -250,7 +250,12 @@ export default function InventoryManagement() {
   const handleCreateProduct = async () => {
     try {
       setLoading(true);
-      await createProduct(productForm);
+      // Convert weight from string to number if provided
+      const productData: Partial<ProductType> = {
+        ...productForm,
+        weight: productForm.weight ? parseFloat(productForm.weight) || undefined : undefined,
+      };
+      await createProduct(productData);
       toast({
         title: 'Success',
         description: 'Product created successfully',
@@ -1065,7 +1070,9 @@ export default function InventoryManagement() {
                         </TableCell>
                         <TableCell className="font-mono">{alert.reorder_point}</TableCell>
                         <TableCell className="font-mono text-red-500 font-semibold">
-                          {alert.shortage > 0 ? `-${alert.shortage}` : '0'}
+                          {alert.reorder_point > alert.available_quantity 
+                            ? `-${alert.reorder_point - alert.available_quantity}` 
+                            : '0'}
                         </TableCell>
                         <TableCell>
                           <Button

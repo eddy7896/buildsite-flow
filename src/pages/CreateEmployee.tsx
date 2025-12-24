@@ -23,6 +23,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { insertRecord, updateRecord, selectOne, selectRecords, deleteRecord } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 import bcrypt from '@/lib/bcrypt';
+import { logError } from '@/utils/consoleLogger';
 
 const formSchema = z.object({
   // Personal Information
@@ -159,7 +160,7 @@ const CreateEmployee = () => {
         const existingEmployeeDetails = await selectOne('employee_details', { user_id: existingUser.id });
         if (!existingEmployeeDetails) {
           // Orphaned user - delete it and continue with creation
-          console.warn('Found orphaned user, cleaning up and retrying...');
+          logWarn('Found orphaned user, cleaning up and retrying...');
           try {
             // Delete related records first (user_roles, profiles)
             await deleteRecord('user_roles', { user_id: existingUser.id }).catch(() => {});
@@ -171,7 +172,7 @@ const CreateEmployee = () => {
               variant: "default",
             });
           } catch (cleanupError) {
-            console.error('Failed to cleanup orphaned user:', cleanupError);
+            logError('Failed to cleanup orphaned user:', cleanupError);
             throw new Error(`A user with email "${values.email}" exists but is incomplete. Please contact support or use a different email.`);
           }
         } else {
@@ -283,7 +284,7 @@ const CreateEmployee = () => {
           supervisorId = values.supervisor.trim();
         } else {
           // If supervisor is provided but not a valid UUID, log warning and set to null
-          console.warn('Invalid supervisor UUID provided:', values.supervisor);
+          logWarn('Invalid supervisor UUID provided:', values.supervisor);
           // Could optionally show a toast warning here
         }
       }
@@ -341,7 +342,7 @@ const CreateEmployee = () => {
       const finalRole = validRoles.includes(normalizedRole) ? normalizedRole : 'employee';
       
       if (normalizedRole !== finalRole) {
-        console.warn(`[CreateEmployee] Invalid role "${values.role}" normalized to "${finalRole}"`);
+        logWarn(`[CreateEmployee] Invalid role "${values.role}" normalized to "${finalRole}"`);
         toast({
           title: "Role adjusted",
           description: `Role "${values.role}" is not valid. Using "${finalRole}" instead.`,
@@ -383,7 +384,7 @@ const CreateEmployee = () => {
       setProfileImagePreview(null);
       
     } catch (error) {
-      console.error("Error creating employee:", error);
+      logError("Error creating employee:", error);
       
       // Handle specific database errors
       let errorMessage = "Error creating employee. Please try again.";
@@ -538,7 +539,7 @@ const CreateEmployee = () => {
       
       setDepartments(deptData || []);
     } catch (error) {
-      console.error('Error fetching departments:', error);
+      logError('Error fetching departments:', error);
       toast({
         title: "Warning",
         description: "Failed to load departments. Please refresh the page.",
@@ -552,7 +553,7 @@ const CreateEmployee = () => {
     try {
       const agencyId = await getAgencyId(profile, user?.id);
       if (!agencyId) {
-        console.warn('No agency_id available for fetching roles');
+        logWarn('No agency_id available for fetching roles');
         return;
       }
 
@@ -588,7 +589,7 @@ const CreateEmployee = () => {
         setRoles(combinedRoles.sort());
       }
     } catch (error) {
-      console.error('Error fetching roles:', error);
+      logError('Error fetching roles:', error);
       // Fallback to default valid roles
       setRoles(['employee', 'hr', 'finance_manager', 'admin', 'super_admin']);
     }
@@ -599,7 +600,7 @@ const CreateEmployee = () => {
     try {
       const agencyId = await getAgencyId(profile, user?.id);
       if (!agencyId) {
-        console.warn('No agency_id available for fetching employment types');
+        logWarn('No agency_id available for fetching employment types');
         return;
       }
 
@@ -627,7 +628,7 @@ const CreateEmployee = () => {
         setEmploymentTypes(Array.from(new Set(normalizedTypes)).sort());
       }
     } catch (error) {
-      console.error('Error fetching employment types:', error);
+      logError('Error fetching employment types:', error);
       // Fallback to default types
       setEmploymentTypes(['full-time', 'part-time', 'contract', 'intern']);
     }
@@ -638,7 +639,7 @@ const CreateEmployee = () => {
     try {
       const agencyId = await getAgencyId(profile, user?.id);
       if (!agencyId) {
-        console.warn('No agency_id available for fetching positions');
+        logWarn('No agency_id available for fetching positions');
         return;
       }
 
@@ -655,7 +656,7 @@ const CreateEmployee = () => {
       const uniquePositions = Array.from(new Set((profilesData || []).map((p: any) => p.position).filter(Boolean)));
       setPositions(uniquePositions.sort());
     } catch (error) {
-      console.error('Error fetching positions:', error);
+      logError('Error fetching positions:', error);
       // Positions can be empty - it's optional to have existing positions
       setPositions([]);
     }
@@ -673,7 +674,7 @@ const CreateEmployee = () => {
           fetchPositions()
         ]);
       } catch (error) {
-        console.error('Error loading options:', error);
+        logError('Error loading options:', error);
       } finally {
         setLoadingOptions(false);
       }
@@ -686,7 +687,6 @@ const CreateEmployee = () => {
   useEffect(() => {
     const generateInitialEmployeeId = async () => {
       try {
-        const { selectRecords } = await import('@/services/api/postgresql-service');
         const latestEmployees = await selectRecords('employee_details', {
           select: 'employee_id',
           orderBy: 'created_at DESC',
@@ -709,7 +709,7 @@ const CreateEmployee = () => {
           form.setValue('employeeId', 'EMP-0001');
         }
       } catch (error) {
-        console.error('Error generating employee ID:', error);
+        logError('Error generating employee ID:', error);
         // Fallback to default
         setGeneratedEmployeeId('EMP-0001');
         form.setValue('employeeId', 'EMP-0001');
@@ -1097,7 +1097,6 @@ const CreateEmployee = () => {
                                 className="absolute right-1 top-1 h-7 px-2 text-xs"
                                 onClick={async () => {
                                   try {
-                                    const { selectRecords } = await import('@/services/api/postgresql-service');
                                     const latestEmployees = await selectRecords('employee_details', {
                                       select: 'employee_id',
                                       orderBy: 'created_at DESC',
@@ -1119,7 +1118,7 @@ const CreateEmployee = () => {
                                       description: `New ID: ${newId}`,
                                     });
                                   } catch (error) {
-                                    console.error('Error regenerating ID:', error);
+                                    logError('Error regenerating ID:', error);
                                   }
                                 }}
                               >

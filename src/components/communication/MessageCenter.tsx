@@ -28,6 +28,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, Settings, Hash, MessageCircle, Users } from 'lucide-react';
+import { getApiRoot } from '@/config/api';
+import { logWarn, logError } from '@/utils/consoleLogger';
 import { toast } from 'sonner';
 import { getAgencyId } from '@/utils/agencyUtils';
 import type { Channel, Thread, Message } from '@/services/api/messaging';
@@ -145,7 +147,6 @@ export function MessageCenter() {
       if (id) {
         try {
           const token = localStorage.getItem('auth_token') || '';
-          const { getApiRoot } = await import('@/config/api');
           const baseUrl = getApiRoot();
           await fetch(`${baseUrl}/schema/ensure-messaging`, {
             method: 'POST',
@@ -155,7 +156,7 @@ export function MessageCenter() {
             },
           });
         } catch (error) {
-          console.warn('Failed to ensure messaging schema:', error);
+          logWarn('Failed to ensure messaging schema:', error);
           // Schema will be auto-created on first use
         }
       }
@@ -315,7 +316,6 @@ export function MessageCenter() {
       const channel = await channelApi.create({
         name: newChannelName,
         channel_type: newChannelType,
-        agency_id: agencyId,
         other_user_id: newChannelType === 'direct' ? selectedUserForDM?.id : undefined,
       });
       setChannels([...channels, channel]);
@@ -362,7 +362,6 @@ export function MessageCenter() {
       const channel = await channelApi.create({
         name: dmChannelName,
         channel_type: 'direct',
-        agency_id: agencyId,
         other_user_id: userId,
       });
       
@@ -374,7 +373,7 @@ export function MessageCenter() {
       setSelectedUserForDM(null);
       toast.success(`Direct message with ${userName} created`);
     } catch (error: any) {
-      console.error('Error creating direct message:', error);
+      logError('Error creating direct message:', error);
       toast.error(error.message || 'Failed to create direct message');
       setShowUserSelector(true); // Reopen selector on error
     }
@@ -399,7 +398,6 @@ export function MessageCenter() {
       const channel = await channelApi.create({
         name: newChannelName,
         channel_type: 'private',
-        agency_id: agencyId,
       });
 
       // Add selected team members to the channel
@@ -407,7 +405,7 @@ export function MessageCenter() {
         try {
           await channelApi.addMember(channel.id, memberId, 'member');
         } catch (error) {
-          console.error(`Failed to add member ${memberId}:`, error);
+          logError(`Failed to add member ${memberId}:`, error);
         }
       }
 

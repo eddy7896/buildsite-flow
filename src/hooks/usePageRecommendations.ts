@@ -6,6 +6,7 @@
 import { useState, useCallback } from 'react';
 import { getApiBaseUrl } from '@/config/api';
 import { useToast } from './use-toast';
+import { logError } from '@/utils/consoleLogger';
 import type { PageRecommendations } from '@/types/pageCatalog';
 
 interface RecommendationCriteria {
@@ -31,32 +32,117 @@ export function usePageRecommendations() {
         criteria.business_goals.forEach(goal => params.append('business_goals', goal));
       }
 
-      const response = await fetch(
-        `${getApiBaseUrl()}/api/system/page-catalog/recommendations/preview?${params.toString()}`,
-        {
-          headers: {
-            'Content-Type': 'application/json'
-          }
+      const apiBase = getApiBaseUrl();
+      const url = `${apiBase}/api/system/page-catalog/recommendations/preview?${params.toString()}`;
+      
+      const response = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json'
         }
+      });
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError) {
+        // If response is not JSON, create error from status
+        const errorMessage = `Failed to fetch recommendations: ${response.status} ${response.statusText}`;
+        logError('Failed to parse recommendations response:', parseError);
+        throw new Error(errorMessage);
+      }
+
+      // Check if backend provided fallback data (even on error)
+      const hasFallbackData = data.data && (
+        Array.isArray(data.data.all) || 
+        (data.data.categorized && typeof data.data.categorized === 'object')
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch recommendations');
+        // Try to get error message from response
+        const errorMessage = data.error?.message || data.message || data.error || `Failed to fetch recommendations: ${response.status} ${response.statusText}`;
+        
+        // If backend returns fallback data, use it instead of throwing
+        if (hasFallbackData) {
+          logError('Recommendations API returned error but provided fallback data:', {
+            error: data.error,
+            message: errorMessage,
+            status: response.status
+          });
+          setRecommendations(data.data);
+          return data.data;
+        }
+        
+        // Log the full error for debugging
+        logError('Recommendations API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: data.error,
+          message: errorMessage,
+          fullResponse: data
+        });
+        
+        throw new Error(errorMessage);
       }
 
-      const data = await response.json();
-      if (data.success) {
+      if (data.success && data.data) {
         setRecommendations(data.data);
         return data.data;
+      } else {
+        // Handle case where API returns success:false or no data
+        // But check if fallback data exists
+        if (hasFallbackData) {
+          logError('Recommendations API returned success:false but provided data:', data);
+          setRecommendations(data.data);
+          return data.data;
+        }
+        const errorMsg = data.error?.message || data.message || 'No recommendations available';
+        throw new Error(errorMsg);
       }
-    } catch (error) {
-      console.error('Error fetching recommendations:', error);
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Failed to fetch page recommendations';
+      
+      logError('Error fetching recommendations:', {
+        message: errorMessage,
+        error: error,
+        stack: error?.stack
+      });
+      
+      // Provide more specific error messages
+      let userMessage = 'Failed to fetch page recommendations';
+      if (errorMessage.includes('does not exist') || errorMessage.includes('MISSING_TABLES')) {
+        userMessage = 'Page catalog tables not found. Please run database migrations.';
+      } else if (errorMessage.includes('NetworkError') || errorMessage.includes('Failed to fetch')) {
+        userMessage = 'Unable to connect to the server. Please check your connection.';
+      } else if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
+        userMessage = 'Server error occurred. Please try again later or contact support.';
+      } else if (errorMessage) {
+        userMessage = errorMessage;
+      }
+      
       toast({
         title: 'Error',
-        description: 'Failed to fetch page recommendations',
+        description: userMessage,
         variant: 'destructive'
       });
-      throw error;
+      
+      // Return empty recommendations structure instead of throwing
+      // This allows the UI to continue functioning
+      const emptyRecs = {
+        all: [],
+        categorized: {
+          required: [],
+          recommended: [],
+          optional: []
+        },
+        summary: {
+          total: 0,
+          required: 0,
+          recommended: 0,
+          optional: 0
+        }
+      };
+      setRecommendations(emptyRecs);
+      return emptyRecs;
     } finally {
       setLoading(false);
     }

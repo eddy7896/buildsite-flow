@@ -11,7 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, MoreHorizontal, Users, Building2, Calendar, DollarSign, Eye, Settings, Activity, FileText, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import type { AgencyData } from '@/hooks/useSystemAnalytics';
+import type { AgencySummary as AgencyData } from '@/types/system';
 import {
   fetchAgencyDetails,
   updateAgency,

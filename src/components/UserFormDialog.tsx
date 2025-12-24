@@ -10,8 +10,9 @@ import { generateUUID } from '@/lib/uuid';
 import { Loader2, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import bcrypt from '@/lib/bcrypt';
-import { selectRecords, insertRecord, updateRecord } from '@/services/api/postgresql-service';
+import { selectRecords, insertRecord, updateRecord, selectOne } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
+import { getDepartmentsForSelectionAuto } from '@/services/api/department-selector-service';
 
 interface User {
   id: string;
@@ -55,6 +56,7 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
   const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [createdUser, setCreatedUser] = useState<CreatedUserCredentials | null>(null);
+  const [departments, setDepartments] = useState<Array<{ id: string; name: string }>>([]);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -76,6 +78,30 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
+    // Fetch departments when dialog opens
+    const fetchDepartments = async () => {
+      try {
+        if (!currentUser?.id) {
+          setDepartments([]);
+          return;
+        }
+        
+        // Use standardized department fetching service
+        const departmentsData = await getDepartmentsForSelectionAuto(profile, currentUser.id);
+        
+        // Transform to component format (using name as value since profiles.department is a string)
+        setDepartments(departmentsData.map(d => ({
+          id: d.id,
+          name: d.name
+        })));
+      } catch (error: any) {
+        console.error('Error fetching departments:', error);
+        setDepartments([]);
+      }
+    };
+    
+    fetchDepartments();
+    
     if (user) {
       // Fetch current user status from database
       const fetchUserStatus = async () => {
@@ -251,7 +277,6 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
         }, currentUser?.id);
 
         // Check if profile was created by trigger, otherwise create it
-        const { selectOne } = await import('@/services/api/postgresql-service');
         const existingProfile = await selectOne('profiles', { user_id: newUserId });
         
         const agencyId = await getAgencyId(profile, currentUser?.id);
@@ -491,23 +516,19 @@ const UserFormDialog = ({ isOpen, onClose, user, onUserSaved }: UserFormDialogPr
               <Label htmlFor="department">Department</Label>
               <Select
                 value={formData.department}
-                onValueChange={(value) => setFormData({ ...formData, department: value })}
+                onValueChange={(value) => setFormData({ ...formData, department: value === '__none__' ? '' : value })}
                 disabled={loading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select department" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Engineering">Engineering</SelectItem>
-                  <SelectItem value="Development">Development</SelectItem>
-                  <SelectItem value="Design">Design</SelectItem>
-                  <SelectItem value="Marketing">Marketing</SelectItem>
-                  <SelectItem value="Sales">Sales</SelectItem>
-                  <SelectItem value="Finance">Finance</SelectItem>
-                  <SelectItem value="Human Resources">Human Resources</SelectItem>
-                  <SelectItem value="Operations">Operations</SelectItem>
-                  <SelectItem value="Support">Support</SelectItem>
-                  <SelectItem value="Management">Management</SelectItem>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {departments.map((dept) => (
+                    <SelectItem key={dept.id} value={dept.name}>
+                      {dept.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -110,7 +110,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+        VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
         VITE_DATABASE_URL: ${VITE_DATABASE_URL:-}  # Empty string is fine - frontend doesn't use DB directly
         VITE_APP_NAME: ${VITE_APP_NAME:-BuildFlow Agency Management}
         VITE_APP_VERSION: ${VITE_APP_VERSION:-1.0.0}
@@ -119,7 +119,7 @@ services:
     container_name: frontend
     environment:
       # Note: These env vars are only for runtime reference, build-time vars are in build.args
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+      VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
       VITE_APP_NAME: ${VITE_APP_NAME:-BuildFlow Agency Management}
       VITE_APP_ENVIRONMENT: ${VITE_APP_ENVIRONMENT:-production}
     ports:

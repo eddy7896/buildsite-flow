@@ -20,7 +20,14 @@ import {
   CheckCircle,
   AlertTriangle,
   FileText,
-  BarChart3
+  BarChart3,
+  Mail,
+  Phone,
+  MapPin,
+  Building,
+  ExternalLink,
+  TrendingUp,
+  TrendingDown
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,6 +36,13 @@ import { projectService, Project, Task } from "@/services/api/project-service";
 import ProjectFormDialog from "@/components/ProjectFormDialog";
 import { TaskKanbanBoard } from "@/components/TaskKanbanBoard";
 import { GanttChart } from "@/components/project-management/GanttChart";
+import { selectRecords, selectOne } from "@/services/api/postgresql-service";
+import { getAgencyId } from "@/utils/agencyUtils";
+import { getEmployeesForAssignmentAuto } from "@/services/api/employee-selector-service";
+import { getClientById } from "@/services/api/client-selector-service";
+import { getDepartmentsForSelectionAuto } from "@/services/api/department-selector-service";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 const statusColors: Record<string, string> = {
   planning: 'bg-blue-100 text-blue-800',
@@ -56,6 +70,14 @@ export default function ProjectDetails() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showEditForm, setShowEditForm] = useState(false);
+  
+  // Integration data
+  const [clientDetails, setClientDetails] = useState<any>(null);
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [loadingIntegration, setLoadingIntegration] = useState(false);
+  const [revenue, setRevenue] = useState<number>(0);
 
   useEffect(() => {
     if (id) {
@@ -63,6 +85,12 @@ export default function ProjectDetails() {
       loadTasks();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (project) {
+      loadIntegrationData();
+    }
+  }, [project]);
 
   const loadProject = async () => {
     if (!id) return;
@@ -91,6 +119,81 @@ export default function ProjectDetails() {
       setTasks(data);
     } catch (error: any) {
       console.error('Error loading tasks:', error);
+    }
+  };
+
+  const loadIntegrationData = async () => {
+    if (!project) return;
+    
+    setLoadingIntegration(true);
+    try {
+      const agencyId = await getAgencyId(profile, user?.id);
+      if (!agencyId) return;
+
+      // Load client details
+      if (project.client_id) {
+        try {
+          const client = await getClientById(project.client_id, agencyId);
+          setClientDetails(client);
+        } catch (error) {
+          console.error('Error loading client details:', error);
+        }
+      }
+
+      // Load team member details
+      if (project.assigned_team && Array.isArray(project.assigned_team) && project.assigned_team.length > 0) {
+        try {
+          const allEmployees = await getEmployeesForAssignmentAuto(profile, user?.id);
+          const teamMemberIds = project.assigned_team.map((m: any) => 
+            typeof m === 'string' ? m : m.user_id || m.id || String(m)
+          );
+          const members = allEmployees.filter(emp => teamMemberIds.includes(emp.user_id));
+          setTeamMembers(members);
+        } catch (error) {
+          console.error('Error loading team members:', error);
+        }
+      }
+
+      // Load department details
+      if (project.departments && Array.isArray(project.departments) && project.departments.length > 0) {
+        try {
+          const allDepartments = await getDepartmentsForSelectionAuto(profile, user?.id);
+          const projectDepts = allDepartments.filter(dept => 
+            project.departments.includes(dept.id)
+          );
+          setDepartments(projectDepts);
+        } catch (error) {
+          console.error('Error loading departments:', error);
+        }
+      }
+
+      // Load related invoices
+      try {
+        const projectInvoices = await selectRecords('invoices', {
+          filters: [
+            { column: 'agency_id', operator: 'eq', value: agencyId },
+            { column: 'client_id', operator: 'eq', value: project.client_id || '' }
+          ],
+          orderBy: 'issue_date DESC',
+          limit: 10
+        });
+        setInvoices(projectInvoices || []);
+        
+        // Calculate revenue from paid invoices
+        const paidInvoices = (projectInvoices || []).filter((inv: any) => 
+          inv.status === 'paid' || inv.status === 'partial'
+        );
+        const totalRevenue = paidInvoices.reduce((sum: number, inv: any) => {
+          return sum + (parseFloat(inv.total_amount) || 0);
+        }, 0);
+        setRevenue(totalRevenue);
+      } catch (error) {
+        console.error('Error loading invoices:', error);
+      }
+    } catch (error: any) {
+      console.error('Error loading integration data:', error);
+    } finally {
+      setLoadingIntegration(false);
     }
   };
 
@@ -277,6 +380,16 @@ export default function ProjectDetails() {
                   <div>
                     <p className="text-sm text-muted-foreground">Client</p>
                     <p className="mt-1">{project.client.company_name || project.client.name}</p>
+                    {clientDetails && (
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="p-0 h-auto mt-1"
+                        onClick={() => navigate(`/clients?client_id=${project.client_id}`)}
+                      >
+                        View Client Details <ExternalLink className="h-3 w-3 ml-1" />
+                      </Button>
+                    )}
                   </div>
                 )}
                 {project.project_manager && (
@@ -285,39 +398,155 @@ export default function ProjectDetails() {
                     <p className="mt-1">{project.project_manager.full_name}</p>
                   </div>
                 )}
+                {project.account_manager && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Account Manager</p>
+                    <p className="mt-1">{project.account_manager.full_name}</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Quick Stats</CardTitle>
+                <CardTitle>Financial Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Tasks</p>
-                  <p className="text-2xl font-bold mt-1">{totalTasks}</p>
+                  <p className="text-sm text-muted-foreground">Budget</p>
+                  <p className="text-2xl font-bold mt-1">{formatCurrency(project.budget)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Completed Tasks</p>
-                  <p className="text-2xl font-bold mt-1">{completedTasks}</p>
+                  <p className="text-sm text-muted-foreground">Actual Cost</p>
+                  <p className="text-2xl font-bold mt-1">{formatCurrency(project.actual_cost)}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Team Members</p>
-                  <p className="text-2xl font-bold mt-1">{project.assigned_team?.length || 0}</p>
+                  <p className="text-sm text-muted-foreground">Revenue</p>
+                  <p className="text-2xl font-bold mt-1 text-green-600">{formatCurrency(revenue)}</p>
                 </div>
-                {project.tags && project.tags.length > 0 && (
+                {project.budget && project.actual_cost && (
                   <div>
-                    <p className="text-sm text-muted-foreground mb-2">Tags</p>
-                    <div className="flex flex-wrap gap-2">
-                      {project.tags.map((tag, idx) => (
-                        <Badge key={idx} variant="outline">{tag}</Badge>
-                      ))}
-                    </div>
+                    <p className="text-sm text-muted-foreground">Profit Margin</p>
+                    <p className={`text-2xl font-bold mt-1 ${(revenue - (project.actual_cost || 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(revenue - (project.actual_cost || 0))}
+                    </p>
+                    {project.budget > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {(((revenue - (project.actual_cost || 0)) / project.budget) * 100).toFixed(1)}% margin
+                      </p>
+                    )}
                   </div>
                 )}
               </CardContent>
             </Card>
           </div>
+
+          {/* Client Information Section */}
+          {clientDetails && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building className="h-5 w-5" />
+                  Client Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium">{clientDetails.name}</p>
+                      {clientDetails.company_name && (
+                        <p className="text-sm text-muted-foreground">{clientDetails.company_name}</p>
+                      )}
+                    </div>
+                    {clientDetails.contact_person && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <span>{clientDetails.contact_person}</span>
+                        {clientDetails.contact_position && (
+                          <span className="text-muted-foreground">({clientDetails.contact_position})</span>
+                        )}
+                      </div>
+                    )}
+                    {clientDetails.email && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <span>{clientDetails.email}</span>
+                      </div>
+                    )}
+                    {clientDetails.phone && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Phone className="h-4 w-4 text-muted-foreground" />
+                        <span>{clientDetails.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {clientDetails.address && (
+                      <div className="flex items-start gap-2 text-sm">
+                        <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <span>{clientDetails.address}</span>
+                      </div>
+                    )}
+                    {clientDetails.payment_terms && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Payment Terms</p>
+                        <p className="text-sm font-medium">{clientDetails.payment_terms} days</p>
+                      </div>
+                    )}
+                    {clientDetails.industry && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Industry</p>
+                        <Badge variant="outline">{clientDetails.industry}</Badge>
+                      </div>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => navigate(`/clients?client_id=${project.client_id}`)}
+                    >
+                      View Full Client Profile <ExternalLink className="h-3 w-3 ml-1" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Task Progress Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Task Progress
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Completion Rate</span>
+                    <span className="font-medium">{Math.round(taskCompletionRate)}%</span>
+                  </div>
+                  <Progress value={taskCompletionRate} className="h-2" />
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold">{totalTasks}</p>
+                    <p className="text-xs text-muted-foreground">Total Tasks</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-green-600">{completedTasks}</p>
+                    <p className="text-xs text-muted-foreground">Completed</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-orange-600">{totalTasks - completedTasks}</p>
+                    <p className="text-xs text-muted-foreground">Remaining</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="tasks" className="space-y-4">
@@ -330,11 +559,46 @@ export default function ProjectDetails() {
               <CardTitle>Team Members</CardTitle>
             </CardHeader>
             <CardContent>
-              {project.assigned_team && project.assigned_team.length > 0 ? (
-                <div className="space-y-2">
-                  {project.assigned_team.map((member, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2 border rounded">
-                      <span>{member}</span>
+              {loadingIntegration ? (
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner />
+                </div>
+              ) : teamMembers.length > 0 ? (
+                <div className="space-y-3">
+                  {teamMembers.map((member) => (
+                    <div key={member.user_id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={member.avatar_url} />
+                          <AvatarFallback>
+                            {member.full_name?.charAt(0) || 'U'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium">{member.full_name}</p>
+                          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                            {member.email && (
+                              <span className="flex items-center gap-1">
+                                <Mail className="h-3 w-3" />
+                                {member.email}
+                              </span>
+                            )}
+                            {member.department && (
+                              <span>{member.department}</span>
+                            )}
+                            {member.position && (
+                              <span>• {member.position}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/employee-management?employee_id=${member.user_id}`)}
+                      >
+                        View Profile <ExternalLink className="h-3 w-3 ml-1" />
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -343,6 +607,41 @@ export default function ProjectDetails() {
               )}
             </CardContent>
           </Card>
+
+          {/* Department Assignments */}
+          {departments.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Department Assignments</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {departments.map((dept) => (
+                    <div key={dept.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">{dept.name}</p>
+                        <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1">
+                          {dept.manager_name && (
+                            <span>Manager: {dept.manager_name}</span>
+                          )}
+                          {dept.member_count > 0 && (
+                            <span>• {dept.member_count} members</span>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/department-management?department_id=${dept.id}`)}
+                      >
+                        View Department <ExternalLink className="h-3 w-3 ml-1" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="timeline" className="space-y-4">
@@ -383,6 +682,10 @@ export default function ProjectDetails() {
                   <p className="text-sm text-muted-foreground">Actual Cost</p>
                   <p className="text-2xl font-bold mt-1">{formatCurrency(project.actual_cost)}</p>
                 </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Revenue</p>
+                  <p className="text-2xl font-bold mt-1 text-green-600">{formatCurrency(revenue)}</p>
+                </div>
                 {project.cost_center && (
                   <div>
                     <p className="text-sm text-muted-foreground">Cost Center</p>
@@ -394,7 +697,7 @@ export default function ProjectDetails() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Budget Performance</CardTitle>
+                <CardTitle>Financial Performance</CardTitle>
               </CardHeader>
               <CardContent>
                 {project.budget && project.actual_cost ? (
@@ -412,6 +715,24 @@ export default function ProjectDetails() {
                         {formatCurrency(project.budget - project.actual_cost)}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Profit Margin</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {revenue - (project.actual_cost || 0) >= 0 ? (
+                          <TrendingUp className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <TrendingDown className="h-4 w-4 text-red-600" />
+                        )}
+                        <p className={`text-2xl font-bold ${(revenue - (project.actual_cost || 0)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(revenue - (project.actual_cost || 0))}
+                        </p>
+                      </div>
+                      {project.budget > 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {(((revenue - (project.actual_cost || 0)) / project.budget) * 100).toFixed(1)}% margin
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <p className="text-muted-foreground">Budget information not available</p>
@@ -419,6 +740,59 @@ export default function ProjectDetails() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Related Invoices */}
+          {invoices.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Related Invoices
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice Number</TableHead>
+                      <TableHead>Issue Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invoices.map((invoice: any) => (
+                      <TableRow key={invoice.id}>
+                        <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
+                        <TableCell>{formatDate(invoice.issue_date)}</TableCell>
+                        <TableCell>
+                          <Badge variant={
+                            invoice.status === 'paid' ? 'default' :
+                            invoice.status === 'overdue' ? 'destructive' :
+                            'secondary'
+                          }>
+                            {invoice.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(invoice.total_amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="mt-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate(`/invoices?client_id=${project.client_id}`)}
+                  >
+                    View All Invoices <ExternalLink className="h-3 w-3 ml-1" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 

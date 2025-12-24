@@ -12,6 +12,7 @@
  */
 
 import { AppRole, hasRoleOrHigher } from './roleUtils';
+import { hasPageAccess } from './agencyPageAccess';
 
 /**
  * Route permission configuration
@@ -674,7 +675,6 @@ export async function canAccessRoute(userRole: AppRole | null, routePath: string
 
   // Check page assignments for non-super-admin users
   try {
-    const { hasPageAccess } = await import('./agencyPageAccess');
     const hasAccess = await hasPageAccess(routePath);
     if (!hasAccess) {
       return false; // Agency doesn't have this page assigned

@@ -8,9 +8,13 @@ import { Button } from '@/components/ui/button';
 import type { Attachment } from '@/services/api/messaging';
 import { getApiBaseUrl } from '@/config/api';
 
+// Partial attachment type for simplified attachments from Message interface
+type AttachmentLike = Pick<Attachment, 'id' | 'file_name' | 'file_path' | 'file_size' | 'mime_type'> & 
+  Partial<Pick<Attachment, 'thumbnail_path'>>;
+
 interface FileAttachmentProps {
-  attachment: Attachment;
-  onDownload?: (attachment: Attachment) => void;
+  attachment: AttachmentLike;
+  onDownload?: (attachment: AttachmentLike) => void;
 }
 
 const getFileIcon = (mimeType: string) => {
@@ -31,12 +35,11 @@ export const FileAttachment: React.FC<FileAttachmentProps> = ({ attachment, onDo
   const FileIcon = getFileIcon(attachment.mime_type);
   const isImage = attachment.mime_type.startsWith('image/');
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (onDownload) {
       onDownload(attachment);
     } else {
       // Default download behavior
-      const { getApiBaseUrl } = await import('@/config/api');
       const baseUrl = getApiBaseUrl();
       const token = localStorage.getItem('auth_token') || '';
       window.open(`${baseUrl}/api/files/messaging/${attachment.file_path}?token=${token}`, '_blank');

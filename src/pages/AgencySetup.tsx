@@ -55,6 +55,7 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { getApiBaseUrl } from '@/config/api';
 
 const SETUP_STEPS = [
   { id: 1, title: 'Company Profile', icon: Building2, description: 'Basic company information and branding' },
@@ -236,7 +237,6 @@ export default function AgencySetup() {
           return;
         }
 
-        const { getApiBaseUrl } = await import('@/config/api');
         const apiBaseUrl = getApiBaseUrl();
         
         const response = await fetch(`${apiBaseUrl}/api/agencies/check-setup?database=${encodeURIComponent(agencyDatabase || '')}`, {
@@ -274,7 +274,6 @@ export default function AgencySetup() {
         
         if (!agencyId && !agencyDatabase) return;
 
-        const { getApiBaseUrl } = await import('@/config/api');
         const apiBaseUrl = getApiBaseUrl();
 
         // Fetch from both sources in parallel
@@ -636,7 +635,6 @@ export default function AgencySetup() {
 
     setIsLoading(true);
     try {
-      const { getApiBaseUrl } = await import('@/config/api');
       const apiBaseUrl = getApiBaseUrl();
       
       const agencyDatabase = localStorage.getItem('agency_database');

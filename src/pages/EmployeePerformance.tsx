@@ -25,6 +25,7 @@ import {
   getWorkHours,
   getWorkHoursByProject,
   getDailyActivity,
+  getDailyActivitiesBatch,
   getPerformanceTrends,
   getEmployeeInfo,
   type DateRange,
@@ -238,7 +239,6 @@ export default function EmployeePerformance() {
       }
 
       // Use batch endpoint for efficient fetching
-      const { getDailyActivitiesBatch } = await import('@/services/api/performance-service');
       const activities = await getDailyActivitiesBatch(selectedEmployeeId, datesToFetch, agencyId || undefined);
       
       return activities;

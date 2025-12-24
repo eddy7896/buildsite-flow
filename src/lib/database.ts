@@ -197,7 +197,9 @@ function createQueryBuilder<T = any>(table: string): QueryBuilder<T> {
           state._single = true;
           return insertBuilder;
         },
-        async then(onfulfilled) {
+        async then<TResult = { data: T | T[] | null; error: Error | null }>(
+          onfulfilled?: (value: { data: T | T[] | null; error: Error | null }) => TResult | PromiseLike<TResult>
+        ): Promise<TResult> {
           try {
             // Get agency_id from localStorage if available
             let agencyId: string | null = null;
@@ -215,12 +217,14 @@ function createQueryBuilder<T = any>(table: string): QueryBuilder<T> {
             
             const response = {
               data: state._single ? results[0] : results,
-              error: null
+              error: null as Error | null
             };
-            return onfulfilled ? onfulfilled(response) : response;
+            const result = onfulfilled ? await onfulfilled(response) : response;
+            return result as TResult;
           } catch (error: any) {
-            const response = { data: null, error };
-            return onfulfilled ? onfulfilled(response) : response;
+            const response = { data: null as T | T[] | null, error: error as Error };
+            const result = onfulfilled ? await onfulfilled(response) : response;
+            return result as TResult;
           }
         }
       };
@@ -245,7 +249,9 @@ function createQueryBuilder<T = any>(table: string): QueryBuilder<T> {
           state._single = true;
           return updateBuilder;
         },
-        async then(onfulfilled) {
+        async then<TResult = { data: T | null; error: Error | null }>(
+          onfulfilled?: (value: { data: T | null; error: Error | null }) => TResult | PromiseLike<TResult>
+        ): Promise<TResult> {
           try {
             const where: Record<string, any> = {};
             state._filters.forEach(f => {
@@ -255,11 +261,13 @@ function createQueryBuilder<T = any>(table: string): QueryBuilder<T> {
             });
             
             const result = await updateRecord<T>(state._table, state._updateData, where);
-            const response = { data: result, error: null };
-            return onfulfilled ? onfulfilled(response) : response;
+            const response = { data: result, error: null as Error | null };
+            const fulfilled = onfulfilled ? await onfulfilled(response) : response;
+            return fulfilled as TResult;
           } catch (error: any) {
-            const response = { data: null, error };
-            return onfulfilled ? onfulfilled(response) : response;
+            const response = { data: null as T | null, error: error as Error };
+            const fulfilled = onfulfilled ? await onfulfilled(response) : response;
+            return fulfilled as TResult;
           }
         }
       };
@@ -275,7 +283,9 @@ function createQueryBuilder<T = any>(table: string): QueryBuilder<T> {
           state._filters.push({ column, operator: 'eq', value });
           return deleteBuilder;
         },
-        async then(onfulfilled) {
+        async then<TResult = { data: null; error: Error | null }>(
+          onfulfilled?: (value: { data: null; error: Error | null }) => TResult | PromiseLike<TResult>
+        ): Promise<TResult> {
           try {
             const where: Record<string, any> = {};
             state._filters.forEach(f => {
@@ -285,11 +295,13 @@ function createQueryBuilder<T = any>(table: string): QueryBuilder<T> {
             });
             
             await deleteRecord(state._table, where);
-            const response = { data: null, error: null };
-            return onfulfilled ? onfulfilled(response) : response;
+            const response = { data: null, error: null as Error | null };
+            const fulfilled = onfulfilled ? await onfulfilled(response) : response;
+            return fulfilled as TResult;
           } catch (error: any) {
-            const response = { data: null, error };
-            return onfulfilled ? onfulfilled(response) : response;
+            const response = { data: null, error: error as Error };
+            const fulfilled = onfulfilled ? await onfulfilled(response) : response;
+            return fulfilled as TResult;
           }
         }
       };
@@ -297,7 +309,9 @@ function createQueryBuilder<T = any>(table: string): QueryBuilder<T> {
       return deleteBuilder;
     },
 
-    async then(onfulfilled) {
+    async then<TResult = { data: T | T[] | null; error: Error | null }>(
+      onfulfilled?: (value: { data: T | T[] | null; error: Error | null }) => TResult | PromiseLike<TResult>
+    ): Promise<TResult> {
       try {
         // Build filters object with all operators
         const filters = state._filters.map(f => ({
@@ -329,11 +343,13 @@ function createQueryBuilder<T = any>(table: string): QueryBuilder<T> {
           });
         }
 
-        const response = { data, error: null };
-        return onfulfilled ? onfulfilled(response) : response;
+        const response = { data, error: null as Error | null };
+        const fulfilled = onfulfilled ? await onfulfilled(response) : response;
+        return fulfilled as TResult;
       } catch (error: any) {
-        const response = { data: null, error };
-        return onfulfilled ? onfulfilled(response) : response;
+        const response = { data: null as T | T[] | null, error: error as Error };
+        const fulfilled = onfulfilled ? await onfulfilled(response) : response;
+        return fulfilled as TResult;
       }
     }
   };

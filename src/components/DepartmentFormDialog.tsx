@@ -9,6 +9,7 @@ import { db } from '@/lib/database';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { getAgencyId } from '@/utils/agencyUtils';
+import { getDepartmentsForSelectionAuto } from '@/services/api/department-selector-service';
 
 interface Department {
   id: string;
@@ -97,20 +98,32 @@ export function DepartmentFormDialog({
 
   const fetchDepartments = async () => {
     try {
-      // In isolated database architecture, all records in this DB belong to the agency
-      // No need to filter by agency_id - just get all active departments
-      const { data, error } = await db
-        .from("departments")
-        .select("id, name")
-        .eq("is_active", true)
-        .order("name");
-
-      if (error) throw error;
-      if (data) {
-        setDepartments(data);
+      if (!user?.id) {
+        setDepartments([]);
+        return;
       }
-    } catch (error) {
+      
+      // Use standardized department fetching service
+      const departmentsData = await getDepartmentsForSelectionAuto(profile, user.id);
+      
+      // Filter out the current department if editing (can't be parent of itself)
+      const filteredDepartments = department && department.id
+        ? departmentsData.filter(d => d.id !== department.id)
+        : departmentsData;
+      
+      // Transform to component format
+      setDepartments(filteredDepartments.map(d => ({
+        id: d.id,
+        name: d.name
+      })));
+    } catch (error: any) {
       console.error("Error fetching departments:", error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch departments",
+        variant: "destructive",
+      });
+      setDepartments([]);
     }
   };
 

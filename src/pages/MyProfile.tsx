@@ -10,9 +10,10 @@ import { Save, Edit, Upload, User, Mail, Phone, MapPin, Calendar, Briefcase, Loa
 import { useEffect, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { selectOne, updateRecord, insertRecord, rawQuery } from '@/services/api/postgresql-service';
+import { selectOne, updateRecord, insertRecord, rawQuery, upsertRecord } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 import type { AppRole } from '@/utils/roleUtils';
+import { logError } from '@/utils/consoleLogger';
 
 interface UserProfile {
   id: string;
@@ -217,7 +218,7 @@ const MyProfile = () => {
           updated_at: new Date().toISOString()
         }, 'user_id');
       } catch (profileError) {
-        console.error('Profile upsert error:', profileError);
+        logError('Profile upsert error:', profileError);
         // Fallback: try another upsert with safe fields only
         try {
           await upsertRecord('profiles', {

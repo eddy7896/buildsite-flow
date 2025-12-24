@@ -67,29 +67,83 @@ function calculateScore(rule, criteria) {
  * @returns {Promise<Array>} Array of recommended pages with scores and reasoning
  */
 async function getRecommendedPages(criteria) {
-  const client = await pool.connect();
+  let client;
   try {
+    // Get database connection
+    if (!pool) {
+      console.error('[Page Recommendations] Database pool is not initialized');
+      throw new Error('Database connection pool is not available');
+    }
+
+    client = await pool.connect();
+    
+    if (!client) {
+      console.error('[Page Recommendations] Failed to get database client');
+      throw new Error('Failed to establish database connection');
+    }
+
     const { industry, companySize, primaryFocus, businessGoals } = criteria;
 
     // First, check if tables exist
-    const tableCheck = await client.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'page_catalog'
-      ) as catalog_exists,
-      EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'page_recommendation_rules'
-      ) as rules_exists
-    `);
+    let tableCheck;
+    try {
+      tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'page_catalog'
+        ) as catalog_exists,
+        EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'page_recommendation_rules'
+        ) as rules_exists
+      `);
+    } catch (queryError) {
+      console.error('[Page Recommendations] Error checking table existence:', queryError);
+      // If we can't check tables, assume they don't exist and return empty
+      if (client) client.release();
+      return {
+        all: [],
+        categorized: {
+          required: [],
+          recommended: [],
+          optional: []
+        },
+        summary: {
+          total: 0,
+          required: 0,
+          recommended: 0,
+          optional: 0
+        }
+      };
+    }
+
+    if (!tableCheck || !tableCheck.rows || tableCheck.rows.length === 0) {
+      console.warn('[Page Recommendations] Could not check table existence');
+      if (client) client.release();
+      return {
+        all: [],
+        categorized: {
+          required: [],
+          recommended: [],
+          optional: []
+        },
+        summary: {
+          total: 0,
+          required: 0,
+          recommended: 0,
+          optional: 0
+        }
+      };
+    }
 
     const { catalog_exists, rules_exists } = tableCheck.rows[0];
 
     if (!catalog_exists) {
       console.warn('[Page Recommendations] page_catalog table does not exist');
       // Return empty recommendations if tables don't exist
+      if (client) client.release();
       return {
         all: [],
         categorized: {
@@ -107,29 +161,41 @@ async function getRecommendedPages(criteria) {
     }
 
     // Get all active pages with their recommendation rules
-    const result = await client.query(`
-      SELECT 
-        pc.id,
-        pc.path,
-        pc.title,
-        pc.description,
-        pc.icon,
-        pc.category,
-        pc.base_cost,
-        pc.requires_approval,
-        pc.metadata,
-        prr.id as rule_id,
-        prr.industry,
-        prr.company_size,
-        prr.primary_focus,
-        prr.business_goals,
-        prr.priority,
-        prr.is_required
-      FROM public.page_catalog pc
-      LEFT JOIN public.page_recommendation_rules prr ON pc.id = prr.page_id
-      WHERE pc.is_active = true
-      ORDER BY pc.category, pc.title
-    `);
+    let result;
+    try {
+      result = await client.query(`
+        SELECT 
+          pc.id,
+          pc.path,
+          pc.title,
+          pc.description,
+          pc.icon,
+          pc.category,
+          pc.base_cost,
+          pc.requires_approval,
+          pc.metadata,
+          prr.id as rule_id,
+          prr.industry,
+          prr.company_size,
+          prr.primary_focus,
+          prr.business_goals,
+          prr.priority,
+          prr.is_required
+        FROM public.page_catalog pc
+        LEFT JOIN public.page_recommendation_rules prr ON pc.id = prr.page_id
+        WHERE pc.is_active = true
+        ORDER BY pc.category, pc.title
+      `);
+    } catch (queryError) {
+      console.error('[Page Recommendations] Error querying pages:', queryError);
+      console.error('[Page Recommendations] Query error details:', {
+        message: queryError.message,
+        code: queryError.code,
+        detail: queryError.detail
+      });
+      if (client) client.release();
+      throw new Error(`Database query failed: ${queryError.message}`);
+    }
 
     // Group pages by page_id (a page can have multiple rules)
     const pageMap = new Map();
@@ -295,9 +361,24 @@ async function getRecommendedPages(criteria) {
   } catch (error) {
     console.error('[Page Recommendations] Error in getRecommendedPages:', error);
     console.error('[Page Recommendations] Error stack:', error.stack);
-    throw error; // Re-throw to be handled by route handler
-  } finally {
-    client.release();
+    console.error('[Page Recommendations] Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+      name: error.name
+    });
+    
+    // Release client if it exists
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseError) {
+        console.error('[Page Recommendations] Error releasing client:', releaseError);
+      }
+    }
+    
+    // Re-throw to be handled by route handler
+    throw error;
   }
 }
 

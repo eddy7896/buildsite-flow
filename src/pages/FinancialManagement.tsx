@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { selectRecords, selectOne, rawQuery } from '@/services/api/postgresql-service';
+import { selectRecords, selectOne, rawQuery, deleteRecord, executeTransaction } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { getAgencyId } from '@/utils/agencyUtils';
@@ -18,12 +18,18 @@ import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import ChartOfAccountFormDialog from '@/components/ChartOfAccountFormDialog';
 import JournalEntryFormDialog from '@/components/JournalEntryFormDialog';
 import JobCostItemsDialog from '@/components/JobCostItemsDialog';
+import { logDebug, logWarn, logError } from '@/utils/consoleLogger';
+import { projectService } from '@/services/api/project-service';
+import { Progress } from '@/components/ui/progress';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 const FinancialManagement = () => {
   const { toast } = useToast();
   const { user, profile } = useAuth();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [jobs, setJobs] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
   const [chartOfAccounts, setChartOfAccounts] = useState<any[]>([]);
   const [journalEntries, setJournalEntries] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -109,7 +115,7 @@ const FinancialManagement = () => {
     const effectiveAgencyId = agencyIdParam || agencyId;
     
     if (!effectiveAgencyId) {
-      console.warn('No agency_id available, cannot fetch data');
+      logWarn('No agency_id available, cannot fetch data');
       setLoading(false);
       return;
     }
@@ -119,12 +125,13 @@ const FinancialManagement = () => {
       // Fetch all data in parallel but with individual loading states
       await Promise.all([
         fetchJobs(effectiveAgencyId),
+        fetchProjects(effectiveAgencyId),
         fetchChartOfAccounts(effectiveAgencyId),
         fetchJournalEntries(effectiveAgencyId),
         fetchTransactions(effectiveAgencyId),
       ]);
     } catch (error) {
-      console.error('Error fetching financial data:', error);
+      logError('Error fetching financial data:', error);
       toast({
         title: 'Error',
         description: 'Failed to load financial data',
@@ -149,7 +156,7 @@ const FinancialManagement = () => {
         } catch (err: any) {
           // Fallback if agency_id column does not exist in current schema
           if (err?.code === '42703' || String(err?.message || '').includes('agency_id')) {
-            console.warn('jobs has no agency_id column, falling back to all jobs');
+            logWarn('jobs has no agency_id column, falling back to all jobs');
             jobsData = await selectRecords('jobs', {
               orderBy: 'created_at DESC',
             });
@@ -165,7 +172,7 @@ const FinancialManagement = () => {
       }
       setJobs(jobsData || []);
     } catch (error: any) {
-      console.error('Error fetching jobs:', error);
+      logError('Error fetching jobs:', error);
       // Do not toast on schema issues; just show empty state
       if (error?.code !== '42703') {
         toast({
@@ -177,6 +184,35 @@ const FinancialManagement = () => {
       setJobs([]);
     } finally {
       setJobsLoading(false);
+    }
+  };
+
+  const fetchProjects = async (agencyIdParam?: string | null) => {
+    const effectiveAgencyId = agencyIdParam || agencyId;
+    setProjectsLoading(true);
+    try {
+      // Fetch projects with financial data
+      const projectsData = await projectService.getProjects({}, profile, user?.id);
+      
+      // Enhance each project with financial summary
+      const projectsWithFinancials = await Promise.all(
+        projectsData.map(async (project: any) => {
+          try {
+            const projectWithFinancials = await projectService.getProjectWithFinancials(project.id, profile, user?.id);
+            return projectWithFinancials || project;
+          } catch (error) {
+            console.error(`Error fetching financials for project ${project.id}:`, error);
+            return project;
+          }
+        })
+      );
+      
+      setProjects(projectsWithFinancials);
+    } catch (error: any) {
+      logError('Error fetching projects:', error);
+      setProjects([]);
+    } finally {
+      setProjectsLoading(false);
     }
   };
 
@@ -202,7 +238,7 @@ const FinancialManagement = () => {
       } catch (err: any) {
         // Fallback if agency_id column does not exist in current schema
         if (err?.code === '42703' || String(err?.message || '').includes('agency_id')) {
-          console.warn('chart_of_accounts has no agency_id column, falling back to global accounts');
+          logWarn('chart_of_accounts has no agency_id column, falling back to global accounts');
           accounts = await selectRecords('chart_of_accounts', {
             where: { is_active: true },
             orderBy: 'account_code ASC',
@@ -213,7 +249,7 @@ const FinancialManagement = () => {
       }
       setChartOfAccounts(accounts || []);
     } catch (error) {
-      console.error('Error fetching chart of accounts:', error);
+      logError('Error fetching chart of accounts:', error);
       toast({
         title: 'Error',
         description: 'Failed to fetch chart of accounts',
@@ -239,11 +275,11 @@ const FinancialManagement = () => {
             where: { agency_id: effectiveAgencyId },
             orderBy: 'entry_date DESC, created_at DESC',
           });
-          console.log(`Fetched journal entries with agency_id filter: ${entries?.length || 0} entries`);
+          logDebug(`Fetched journal entries with agency_id filter: ${entries?.length || 0} entries`);
         } catch (err: any) {
           // Fallback if agency_id column does not exist in current schema
           if (err?.code === '42703' || String(err?.message || '').includes('agency_id') || String(err?.message || '').includes('does not exist')) {
-            console.warn('journal_entries has no agency_id column, trying fallback strategies');
+            logWarn('journal_entries has no agency_id column, trying fallback strategies');
             try {
               // Strategy 2: Fetch all entries and filter in memory
               const allEntries = await selectRecords('journal_entries', {
@@ -252,9 +288,9 @@ const FinancialManagement = () => {
               entries = (allEntries || []).filter((e: any) => 
                 !e.agency_id || e.agency_id === effectiveAgencyId
               );
-              console.log(`Fetched journal entries (fallback): ${entries?.length || 0} entries from ${allEntries?.length || 0} total`);
+              logDebug(`Fetched journal entries (fallback): ${entries?.length || 0} entries from ${allEntries?.length || 0} total`);
             } catch (fallbackErr: any) {
-              console.error('Fallback fetch also failed:', fallbackErr);
+              logError('Fallback fetch also failed:', fallbackErr);
               entries = [];
             }
           } else {
@@ -267,9 +303,9 @@ const FinancialManagement = () => {
           entries = await selectRecords('journal_entries', {
             orderBy: 'entry_date DESC, created_at DESC',
           });
-          console.log(`Fetched journal entries (no agency filter): ${entries?.length || 0} entries`);
+          logDebug(`Fetched journal entries (no agency filter): ${entries?.length || 0} entries`);
         } catch (err: any) {
-          console.error('Error fetching journal entries without agency filter:', err);
+          logError('Error fetching journal entries without agency filter:', err);
           entries = [];
         }
       }
@@ -277,10 +313,10 @@ const FinancialManagement = () => {
       setJournalEntries(entries || []);
       
       if ((entries || []).length === 0) {
-        console.warn('No journal entries found. This may be normal if no entries have been created yet.');
+        logWarn('No journal entries found. This may be normal if no entries have been created yet.');
       }
     } catch (error: any) {
-      console.error('Error fetching journal entries:', error);
+      logError('Error fetching journal entries:', error);
       toast({
         title: 'Error',
         description: `Failed to fetch journal entries: ${error?.message || 'Unknown error'}`,
@@ -349,7 +385,7 @@ const FinancialManagement = () => {
         // Fallbacks for missing columns in older schemas
         if (err?.code === '42703' || message.includes('column')) {
           if (message.includes('agency_id')) {
-            console.warn('journal_entries has no agency_id column, falling back to all transactions');
+            logWarn('journal_entries has no agency_id column, falling back to all transactions');
             query = `
               SELECT 
                 jel.id,
@@ -370,7 +406,7 @@ const FinancialManagement = () => {
             `;
             txnData = await rawQuery(query, []);
           } else if (message.includes('line_number')) {
-            console.warn('journal_entry_lines has no line_number column, falling back to ordering by id');
+            logWarn('journal_entry_lines has no line_number column, falling back to ordering by id');
             // Re-run the original query but order by jel.id instead of line_number
             if (effectiveAgencyId) {
               query = `
@@ -421,13 +457,13 @@ const FinancialManagement = () => {
         }
       }
       setTransactions(txnData || []);
-      console.log(`Fetched transactions: ${txnData?.length || 0} transactions`);
+      logDebug(`Fetched transactions: ${txnData?.length || 0} transactions`);
       
       if ((txnData || []).length === 0) {
-        console.warn('No transactions found. This may be normal if no journal entries have been posted yet.');
+        logWarn('No transactions found. This may be normal if no journal entries have been posted yet.');
       }
     } catch (error: any) {
-      console.error('Error fetching transactions:', error);
+      logError('Error fetching transactions:', error);
       toast({
         title: 'Warning',
         description: `Could not fetch transactions: ${error?.message || 'Unknown error'}. Financial stats may be incomplete.`,
@@ -478,12 +514,12 @@ const FinancialManagement = () => {
         let balancesData: any[] = [];
         try {
           balancesData = await rawQuery(query, [effectiveAgencyId]);
-          console.log(`Calculated account balances for ${balancesData.length} accounts`);
+          logDebug(`Calculated account balances for ${balancesData.length} accounts`);
         } catch (err: any) {
           const message = String(err?.message || '');
           // Fallback if agency_id column does not exist in current schema
           if (err?.code === '42703' || message.includes('agency_id') || message.includes('does not exist')) {
-            console.warn('agency_id column missing, using fallback query for balance calculation');
+            logWarn('agency_id column missing, using fallback query for balance calculation');
             // Try without agency_id filter on chart_of_accounts
             query = `
               SELECT 
@@ -500,10 +536,10 @@ const FinancialManagement = () => {
             `;
             try {
               balancesData = await rawQuery(query, [effectiveAgencyId]);
-              console.log(`Calculated account balances (fallback 1) for ${balancesData.length} accounts`);
+              logDebug(`Calculated account balances (fallback 1) for ${balancesData.length} accounts`);
             } catch (err2: any) {
               // Final fallback - no agency filtering
-              console.warn('Using final fallback - no agency filtering for balances');
+              logWarn('Using final fallback - no agency filtering for balances');
               query = `
                 SELECT 
                   coa.id as account_id,
@@ -517,7 +553,7 @@ const FinancialManagement = () => {
                 GROUP BY coa.id, coa.account_type
               `;
               balancesData = await rawQuery(query, []);
-              console.log(`Calculated account balances (fallback 2) for ${balancesData.length} accounts`);
+              logDebug(`Calculated account balances (fallback 2) for ${balancesData.length} accounts`);
             }
           } else {
             throw err;
@@ -547,10 +583,10 @@ const FinancialManagement = () => {
           else if (account_type === 'equity') totalEquity += balance;
         });
         
-        console.log(`Account balances calculated - Assets: ₹${totalAssets.toLocaleString()}, Liabilities: ₹${totalLiabilities.toLocaleString()}, Equity: ₹${totalEquity.toLocaleString()}`);
+        logDebug(`Account balances calculated - Assets: ₹${totalAssets.toLocaleString()}, Liabilities: ₹${totalLiabilities.toLocaleString()}, Equity: ₹${totalEquity.toLocaleString()}`);
         setAccountBalances(balances);
       } catch (error) {
-        console.error('Error calculating account balances:', error);
+        logError('Error calculating account balances:', error);
         setAccountBalances({});
       } finally {
         setBalancesLoading(false);
@@ -656,7 +692,6 @@ const FinancialManagement = () => {
       setJobs(prev => prev.filter(job => job.id !== jobToDelete.id));
       
       try {
-        const { deleteRecord } = await import('@/services/api/postgresql-service');
         await deleteRecord('jobs', { id: jobToDelete.id });
         toast({
           title: 'Success',
@@ -902,7 +937,7 @@ const FinancialManagement = () => {
         }
       } catch (error: any) {
         // If reports table doesn't exist or save fails, show in dialog instead of preview window
-        console.warn('Could not save report to database:', error);
+        logWarn('Could not save report to database:', error);
         
         // Display report in a proper dialog component instead of preview window
         setReportViewData({ title: reportTitle, data: reportData });
@@ -951,7 +986,6 @@ const FinancialManagement = () => {
       setDeleteLoading(true);
       try {
         // Check if account has associated journal entry lines
-        const { selectRecords } = await import('@/services/api/postgresql-service');
         const lines = await selectRecords('journal_entry_lines', {
           where: { account_id: accountToDelete.id },
           limit: 1,
@@ -973,7 +1007,6 @@ const FinancialManagement = () => {
         const originalAccounts = [...chartOfAccounts];
         setChartOfAccounts(prev => prev.filter(acc => acc.id !== accountToDelete.id));
 
-        const { deleteRecord } = await import('@/services/api/postgresql-service');
         await deleteRecord('chart_of_accounts', { id: accountToDelete.id });
         toast({
           title: 'Success',
@@ -1017,7 +1050,7 @@ const FinancialManagement = () => {
       setSelectedEntry({ ...entry, lines: lines || [] });
       setEntryFormOpen(true);
     } catch (error) {
-      console.error('Error fetching entry lines:', error);
+      logError('Error fetching entry lines:', error);
       setSelectedEntry(entry);
       setEntryFormOpen(true);
     }
@@ -1060,7 +1093,6 @@ const FinancialManagement = () => {
       setTransactions(prev => prev.filter(txn => txn.entry_number !== entryToDelete.entry_number));
       
       try {
-        const { executeTransaction } = await import('@/services/api/postgresql-service');
         await executeTransaction(async (client) => {
           // Delete lines first
           await client.query(
@@ -1674,13 +1706,20 @@ const FinancialManagement = () => {
         
         {/* Job Costing Tab */}
         <TabsContent value="job-costing" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Job Cost Management</h3>
-            <Button onClick={handleNewJob}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Job
-            </Button>
-          </div>
+          <Tabs defaultValue="jobs" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="jobs">Jobs ({jobs.length})</TabsTrigger>
+              <TabsTrigger value="projects">Projects ({projects.length})</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="jobs" className="space-y-4 mt-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Job Cost Management</h3>
+                <Button onClick={handleNewJob}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Job
+                </Button>
+              </div>
           
           {loading || jobsLoading ? (
             <div className="text-center py-8">
@@ -1790,6 +1829,145 @@ const FinancialManagement = () => {
               </div>
             </div>
           )}
+            </TabsContent>
+
+            <TabsContent value="projects" className="space-y-4 mt-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Project Financials</h3>
+                <Button variant="outline" onClick={() => navigate('/project-management')}>
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  View All Projects
+                </Button>
+              </div>
+
+              {projectsLoading ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  <p className="mt-2 text-muted-foreground">Loading projects...</p>
+                </div>
+              ) : projects.length === 0 ? (
+                <Card>
+                  <CardContent className="p-8 text-center text-muted-foreground">
+                    <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg font-medium mb-2">No projects found</p>
+                    <p>Projects will appear here once they are created.</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {projects.map((project: any) => {
+                    const budgetVariance = project.budget && project.actual_cost
+                      ? ((project.actual_cost - project.budget) / project.budget) * 100
+                      : 0;
+                    const profit = project.financials?.totalPaid - (project.actual_cost || 0);
+                    const profitMargin = project.budget && project.budget > 0
+                      ? ((profit / project.budget) * 100)
+                      : 0;
+
+                    return (
+                      <Card key={project.id} className="hover:shadow-md transition-shadow">
+                        <CardHeader className="pb-3">
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <CardTitle className="text-lg">{project.name}</CardTitle>
+                              <div className="flex items-center gap-2 mt-1">
+                                {project.project_code && (
+                                  <Badge variant="outline">{project.project_code}</Badge>
+                                )}
+                                <Badge variant={
+                                  project.status === 'completed' ? 'default' :
+                                  project.status === 'in_progress' ? 'secondary' :
+                                  'outline'
+                                }>
+                                  {project.status}
+                                </Badge>
+                                {project.client && (
+                                  <span className="text-sm text-muted-foreground">
+                                    • {project.client.company_name || project.client.name}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => navigate(`/project-management/${project.id}`)}
+                            >
+                              View <ExternalLink className="h-3 w-3 ml-1" />
+                            </Button>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Budget</p>
+                              <p className="font-semibold">
+                                {new Intl.NumberFormat('en-US', {
+                                  style: 'currency',
+                                  currency: project.currency || 'USD'
+                                }).format(project.budget || 0)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Actual Cost</p>
+                              <p className="font-semibold">
+                                {new Intl.NumberFormat('en-US', {
+                                  style: 'currency',
+                                  currency: project.currency || 'USD'
+                                }).format(project.actual_cost || 0)}
+                              </p>
+                              {budgetVariance !== 0 && (
+                                <p className={`text-xs ${budgetVariance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  {budgetVariance > 0 ? '+' : ''}{budgetVariance.toFixed(1)}% variance
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Revenue</p>
+                              <p className="font-semibold text-green-600">
+                                {new Intl.NumberFormat('en-US', {
+                                  style: 'currency',
+                                  currency: project.currency || 'USD'
+                                }).format(project.financials?.totalPaid || 0)}
+                              </p>
+                              {project.financials?.invoiceCount > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                  {project.financials.invoiceCount} invoices
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Profit Margin</p>
+                              <p className={`font-semibold ${profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {new Intl.NumberFormat('en-US', {
+                                  style: 'currency',
+                                  currency: project.currency || 'USD'
+                                }).format(profit || 0)}
+                              </p>
+                              {project.budget && project.budget > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                  {profitMargin.toFixed(1)}% margin
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          {project.budget && project.actual_cost && (
+                            <div className="mt-4">
+                              <div className="flex justify-between text-sm mb-2">
+                                <span className="text-muted-foreground">Budget Utilization</span>
+                                <span>{Math.min((project.actual_cost / project.budget) * 100, 100).toFixed(1)}%</span>
+                              </div>
+                              <Progress value={Math.min((project.actual_cost / project.budget) * 100, 100)} className="h-2" />
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </TabsContent>
         
         {/* General Ledger Tab */}
@@ -1837,7 +2015,7 @@ const FinancialManagement = () => {
                               setTransactionDetailsOpen(true);
                             }
                           } catch (error) {
-                            console.error('Error fetching transaction details:', error);
+                            logError('Error fetching transaction details:', error);
                           }
                         }}
                       >

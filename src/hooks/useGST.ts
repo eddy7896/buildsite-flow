@@ -30,7 +30,7 @@ export const useGST = () => {
         setSettings(null);
       }
     } catch (error) {
-      console.error('Error fetching GST settings:', error);
+      logError('Error fetching GST settings:', error);
       toast({
         title: "Error",
         description: "Failed to fetch GST settings",
@@ -57,7 +57,7 @@ export const useGST = () => {
         setReturns([]);
       }
     } catch (error) {
-      console.error('Error fetching GST returns:', error);
+      logError('Error fetching GST returns:', error);
       toast({
         title: "Error",
         description: "Failed to fetch GST returns",
@@ -89,7 +89,7 @@ export const useGST = () => {
         setTransactions([]);
       }
     } catch (error) {
-      console.error('Error fetching GST transactions:', error);
+      logError('Error fetching GST transactions:', error);
       toast({
         title: "Error",
         description: "Failed to fetch GST transactions",
@@ -123,7 +123,7 @@ export const useGST = () => {
         });
       }
     } catch (error) {
-      console.error('Error calculating GST liability:', error);
+      logError('Error calculating GST liability:', error);
       toast({
         title: "Error",
         description: "Failed to calculate GST liability",
@@ -172,7 +172,7 @@ export const useGST = () => {
         throw new Error(response.error || 'Failed to save GST settings');
       }
     } catch (error) {
-      console.error('Error saving GST settings:', error);
+      logError('Error saving GST settings:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to save GST settings",
@@ -209,7 +209,7 @@ export const useGST = () => {
         throw new Error(response.error || 'Failed to create GST transaction');
       }
     } catch (error) {
-      console.error('Error creating GST transaction:', error);
+      logError('Error creating GST transaction:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to create GST transaction",
@@ -246,7 +246,7 @@ export const useGST = () => {
         throw new Error(response.error || 'Failed to update GST transaction');
       }
     } catch (error) {
-      console.error('Error updating GST transaction:', error);
+      logError('Error updating GST transaction:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to update GST transaction",
@@ -282,7 +282,7 @@ export const useGST = () => {
         throw new Error(response.error || 'Failed to delete GST transaction');
       }
     } catch (error) {
-      console.error('Error deleting GST transaction:', error);
+      logError('Error deleting GST transaction:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to delete GST transaction",
@@ -319,7 +319,7 @@ export const useGST = () => {
         throw new Error(response.error || 'Failed to generate GST return');
       }
     } catch (error) {
-      console.error('Error generating GST return:', error);
+      logError('Error generating GST return:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to generate GST return",
@@ -356,7 +356,7 @@ export const useGST = () => {
         throw new Error(response.error || 'Failed to update GST return');
       }
     } catch (error) {
-      console.error('Error updating GST return:', error);
+      logError('Error updating GST return:', error);
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to update GST return",

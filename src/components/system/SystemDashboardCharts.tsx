@@ -1,9 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
-import type { SystemMetrics } from '@/hooks/useSystemAnalytics';
+import type { SystemMetrics } from '@/types/system';
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { logError } from '@/utils/consoleLogger';
 
 interface SystemDashboardChartsProps {
   metrics: SystemMetrics;
@@ -49,7 +50,7 @@ export const SystemDashboardCharts = ({ metrics }: SystemDashboardChartsProps) =
     loadRecharts()
       .then(setRecharts)
       .catch((err) => {
-        console.error('Failed to load recharts:', err);
+        logError('Failed to load recharts:', err);
         setError(err);
       })
       .finally(() => setLoading(false));

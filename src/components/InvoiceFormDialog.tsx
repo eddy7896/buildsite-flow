@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { insertRecord, updateRecord, selectRecords } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
+import { getClientsForSelectionAuto } from '@/services/api/client-selector-service';
+import { getProjectsForSelectionAuto } from '@/services/api/project-selector-service';
 
 interface Invoice {
   id?: string;
@@ -33,10 +35,12 @@ interface InvoiceFormDialogProps {
 
 const InvoiceFormDialog: React.FC<InvoiceFormDialogProps> = ({ isOpen, onClose, invoice, onInvoiceSaved }) => {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [clients, setClients] = useState<any[]>([]);
   const [clientsLoading, setClientsLoading] = useState(true);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
   const [formData, setFormData] = useState<Invoice>({
     client_id: invoice?.client_id || '',
     title: invoice?.title || '',
@@ -53,6 +57,7 @@ const InvoiceFormDialog: React.FC<InvoiceFormDialogProps> = ({ isOpen, onClose, 
   useEffect(() => {
     if (isOpen) {
       fetchClients();
+      fetchProjects();
       if (invoice) {
         setFormData({
           client_id: invoice.client_id || '',
@@ -86,20 +91,54 @@ const InvoiceFormDialog: React.FC<InvoiceFormDialogProps> = ({ isOpen, onClose, 
   const fetchClients = async () => {
     try {
       setClientsLoading(true);
-      const clientsData = await selectRecords('clients', {
-        where: { status: 'active' },
-        orderBy: 'name ASC',
+      
+      // Use standardized client fetching service
+      const clientsData = await getClientsForSelectionAuto(profile, user?.id, {
+        includeInactive: false,
+        status: 'active'
       });
-      // Filter out any invalid clients and ensure all have required fields
-      const validClients = (clientsData || []).filter(
-        (client: any) => client && client.id && typeof client.id === 'string' && client.id.trim() !== ''
-      );
-      setClients(validClients);
+      
+      // Transform to component format
+      setClients(clientsData.map(c => ({
+        id: c.id,
+        name: c.name,
+        company_name: c.company_name,
+        email: c.email
+      })));
     } catch (error) {
       console.error('Error fetching clients:', error);
-      setClients([]); // Set empty array on error
+      toast({
+        title: 'Error',
+        description: 'Failed to load clients',
+        variant: 'destructive',
+      });
+      setClients([]);
     } finally {
       setClientsLoading(false);
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      setProjectsLoading(true);
+      
+      // Use standardized project fetching service
+      const projectsData = await getProjectsForSelectionAuto(profile, user?.id, {
+        includeInactive: false
+      });
+      
+      // Transform to component format
+      setProjects(projectsData.map(p => ({
+        id: p.id,
+        name: p.name,
+        project_code: p.project_code,
+        client_name: p.client_name || p.client_company_name
+      })));
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+      setProjects([]);
+    } finally {
+      setProjectsLoading(false);
     }
   };
 

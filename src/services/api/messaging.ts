@@ -3,9 +3,11 @@
  * Type-safe interfaces for all messaging operations
  */
 
+import { getApiBaseUrl } from '@/config/api';
+
 // Get API base URL - VITE_API_URL already includes /api
-// Endpoints in this file start with /api/messaging, so we use VITE_API_URL directly
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+// Endpoints in this file start with /api/messaging, so we use getApiBaseUrl() which returns base without /api
+const API_URL = getApiBaseUrl();
 
 interface ApiResponse<T> {
   success: boolean;
@@ -33,9 +35,9 @@ async function apiRequest<T>(
 ): Promise<ApiResponse<T>> {
   const token = getAuthToken();
   
-  // VITE_API_URL already includes /api, endpoints start with /api/messaging
-  // So we remove /api from endpoint and append to VITE_API_URL
-  const cleanEndpoint = endpoint.startsWith('/api/') ? endpoint.slice(4) : endpoint;
+  // API_URL is base URL (without /api), endpoints start with /api/messaging
+  // So we use the endpoint as-is and prepend API_URL
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${API_URL}${cleanEndpoint}`;
   
   const response = await fetch(url, {
@@ -491,8 +493,7 @@ export const attachmentApi = {
     formData.append('message_id', messageId);
 
     const token = getAuthToken();
-    const baseUrl = API_URL;
-    const response = await fetch(`${baseUrl}/messaging/attachments`, {
+    const response = await fetch(`${API_URL}/api/messaging/attachments`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,

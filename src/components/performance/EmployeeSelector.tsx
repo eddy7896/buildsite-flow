@@ -3,6 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/hooks/useAuth";
 import { getAccessibleEmployees } from "@/services/api/performance-service";
 import { Loader2 } from "lucide-react";
+import { selectRecords } from '@/services/api/postgresql-service';
 
 interface Employee {
   id: string;
@@ -69,7 +70,6 @@ export function EmployeeSelector({ selectedEmployeeId, onEmployeeChange }: Emplo
       } else if (deptAccessRoles.includes(userRole)) {
         // Department access - get department employees
         try {
-          const { selectRecords } = await import('@/services/api/postgresql-service');
           const teamAssignments = await selectRecords('team_assignments', {
             filters: [
               { column: 'user_id', operator: 'eq', value: user.id },

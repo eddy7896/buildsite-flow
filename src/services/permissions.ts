@@ -114,7 +114,9 @@ async function handleJsonResponse<T>(response: Response): Promise<T> {
   }
 
   if (!parsed.success) {
-    const message = parsed.error?.message || parsed.message || 'Request failed';
+    // Type guard: if success is false, it's an error response
+    const errorResponse = parsed as { success: false; error?: string; message?: string };
+    const message = errorResponse.error || errorResponse.message || 'Request failed';
     throw new Error(message);
   }
 
@@ -166,7 +168,9 @@ export async function getPermissions(params?: {
   }
 
   if (!parsed.success) {
-    const message = parsed.error?.message || parsed.message || 'Request failed';
+    // Type guard: if success is false, it's an error response
+    const errorResponse = parsed as { success: false; error?: string; message?: string };
+    const message = errorResponse.error || errorResponse.message || 'Request failed';
     throw new Error(message);
   }
   

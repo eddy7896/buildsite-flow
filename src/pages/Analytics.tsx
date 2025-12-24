@@ -43,6 +43,7 @@ import { DateRange } from "react-day-picker";
 import { useAuth } from "@/hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 import { getAgencyId } from "@/utils/agencyUtils";
+import { logWarn } from '@/utils/consoleLogger';
 
 interface DashboardMetrics {
   totalRevenue: number;
@@ -155,16 +156,19 @@ export default function Analytics() {
       const previousToDateStr = previousToDate.toISOString();
 
       // Helper function to safely execute queries with error handling
-      const safeQuery = async (queryPromise: Promise<any>, fallback: any = null) => {
+      const safeQuery = async (queryPromise: PromiseLike<any> | Promise<any>, fallback: any = null) => {
         try {
           const result = await queryPromise;
-          if (result.error) {
-            console.warn('[Analytics] Query error:', result.error);
+          if (result && typeof result === 'object' && 'error' in result && result.error) {
+            logWarn('[Analytics] Query error:', result.error);
             return fallback;
           }
-          return result.data || fallback;
+          if (result && typeof result === 'object' && 'data' in result) {
+            return result.data || fallback;
+          }
+          return result || fallback;
         } catch (error: any) {
-          console.warn('[Analytics] Query exception:', error);
+          logWarn('[Analytics] Query exception:', error);
           return fallback;
         }
       };

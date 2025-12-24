@@ -14,7 +14,7 @@ import {
   type AgencyDetails,
 } from '@/services/system-agencies';
 import { getApiEndpoint } from '@/config/services';
-import type { AgencyData } from '@/hooks/useSystemAnalytics';
+import type { AgencySummary as AgencyData } from '@/types/system';
 
 interface AgencySettingsProps {
   agencies: AgencyData[];

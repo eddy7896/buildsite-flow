@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { selectRecords } from '@/services/api/postgresql-service';
+import { selectRecords, selectOne, executeTransaction, insertRecord } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
 import { Plus, Trash2 } from 'lucide-react';
 
@@ -87,7 +87,6 @@ const JournalEntryFormDialog: React.FC<JournalEntryFormDialogProps> = ({
     try {
       if (!user?.id) return;
       // Get agency_id from profile
-      const { selectOne } = await import('@/services/api/postgresql-service');
       const profile = await selectOne('profiles', { user_id: user.id });
       if (!profile?.agency_id) return;
 
@@ -249,7 +248,6 @@ const JournalEntryFormDialog: React.FC<JournalEntryFormDialogProps> = ({
 
       // Use transactions for updates to ensure data consistency
       if (entry?.id) {
-        const { executeTransaction } = await import('@/services/api/postgresql-service');
         
         // Use transaction for atomic update
         await executeTransaction(async (client: any) => {
@@ -295,7 +293,6 @@ const JournalEntryFormDialog: React.FC<JournalEntryFormDialogProps> = ({
         });
       } else {
         // Get agency_id from profile
-        const { selectOne, insertRecord } = await import('@/services/api/postgresql-service');
         const profile = user?.id ? await selectOne('profiles', { user_id: user.id }) : null;
         if (!profile?.agency_id) {
           toast({

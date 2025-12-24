@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { fetchSystemMetrics as fetchSystemMetricsApi } from '@/services/system-dashboard';
 import type { SystemMetrics, AgencySummary as AgencyData } from '@/types/system';
+import { logError } from '@/utils/consoleLogger';
 
 interface UseSystemAnalyticsProps {
   userId: string;
@@ -29,7 +30,7 @@ export const useSystemAnalytics = ({ userId, userRole }: UseSystemAnalyticsProps
       setAgencies(agencies);
 
     } catch (error: any) {
-      console.error('Error fetching system metrics:', error);
+      logError('Error fetching system metrics:', error);
       toast({
         title: "Error loading system metrics",
         description: error.message,

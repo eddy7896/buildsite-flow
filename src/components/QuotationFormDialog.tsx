@@ -10,6 +10,7 @@ import { db } from '@/lib/database';
 import { generateUUID } from '@/lib/uuid';
 import { useAuth } from '@/hooks/useAuth';
 import { getAgencyId } from '@/utils/agencyUtils';
+import { getClientsForSelectionAuto } from '@/services/api/client-selector-service';
 import { Plus, Trash2, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -181,22 +182,20 @@ const QuotationFormDialog: React.FC<QuotationFormDialogProps> = ({ isOpen, onClo
   const fetchClients = async () => {
     try {
       setLoadingClients(true);
-      const agencyId = await getAgencyId(profile, user?.id);
-      if (!agencyId) {
-        console.warn('No agency_id available for fetching clients');
+      if (!user?.id) {
         setClients([]);
         return;
       }
 
-      const { data, error } = await db
-        .from('clients')
-        .select('id, name, company_name')
-        .eq('agency_id', agencyId)
-        .eq('is_active', true)
-        .order('name', { ascending: true });
-
-      if (error) throw error;
-      setClients(data || []);
+      // Use standardized client fetching service
+      const clientsData = await getClientsForSelectionAuto(profile, user.id);
+      
+      // Transform to component format
+      setClients(clientsData.map(c => ({
+        id: c.id,
+        name: c.name,
+        company_name: c.company_name || c.name
+      })));
     } catch (error: any) {
       console.error('Error fetching clients:', error);
       toast({
@@ -204,6 +203,7 @@ const QuotationFormDialog: React.FC<QuotationFormDialogProps> = ({ isOpen, onClo
         description: 'Failed to fetch clients',
         variant: 'destructive',
       });
+      setClients([]);
     } finally {
       setLoadingClients(false);
     }

@@ -1,5 +1,24 @@
 import { BaseApiService, ApiResponse, ApiOptions } from './base';
 import { pgClient } from '@/integrations/postgresql/client';
+import { getApiBaseUrl } from '@/config/api';
+
+// Helper function to safely access localStorage (handles SSR)
+const getStorageItem = (key: string): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    return localStorage.getItem(key);
+  } catch (error) {
+    // Use console.error here as this is a utility function in a service file
+    // and logError may not be available in all contexts
+    if (typeof window !== 'undefined' && (window as any).logError) {
+      (window as any).logError(`Error accessing localStorage key ${key}:`, error);
+    } else {
+      // eslint-disable-next-line no-console
+      console.error(`Error accessing localStorage key ${key}:`, error);
+    }
+    return null;
+  }
+};
 
 export interface MonthlyReportData {
   revenue: number;
@@ -641,7 +660,7 @@ export class ReportService extends BaseApiService {
         const result = await pgClient.query(query, values);
         return result.rows[0] as CustomReport;
       } catch (error: any) {
-        console.error('Error inserting custom report:', error);
+        logError('Error inserting custom report:', error);
         throw error;
       }
     }, options);
@@ -869,7 +888,6 @@ export class ReportService extends BaseApiService {
     options: ApiOptions = {}
   ): Promise<ApiResponse<any>> {
     return this.execute(async () => {
-      const { getApiBaseUrl } = await import('@/config/api');
       const API_BASE = getApiBaseUrl();
       
       // Safely access localStorage (handles SSR)
@@ -878,7 +896,14 @@ export class ReportService extends BaseApiService {
         try {
           return localStorage.getItem(key);
         } catch (error) {
-          console.error(`Error accessing localStorage key ${key}:`, error);
+          // Use console.error here as this is a utility function in a service file
+          // and logError may not be available in all contexts
+          if (typeof window !== 'undefined' && (window as any).logError) {
+            (window as any).logError(`Error accessing localStorage key ${key}:`, error);
+          } else {
+            // eslint-disable-next-line no-console
+            console.error(`Error accessing localStorage key ${key}:`, error);
+          }
           return null;
         }
       };
@@ -954,7 +979,6 @@ export class ReportService extends BaseApiService {
       throw new Error('Authentication required');
     }
 
-    const { getApiBaseUrl } = await import('@/config/api');
     const API_BASE = getApiBaseUrl();
 
     const response = await fetch(`${API_BASE}/api/reports/custom`, {
@@ -986,8 +1010,9 @@ export class ReportService extends BaseApiService {
     report_type?: string;
     is_active?: boolean;
     search?: string;
-  }): Promise<ScheduledReport[]> {
+  }): Promise<ApiResponse<ScheduledReport[]>> {
     return this.execute(async () => {
+      const API_BASE = getApiBaseUrl();
       const token = getStorageItem('auth_token');
       if (!token) {
         throw new Error('Authentication required');
@@ -1014,14 +1039,15 @@ export class ReportService extends BaseApiService {
 
       const result = await response.json();
       return result.data || [];
-    });
+    }, {});
   }
 
   /**
    * Get scheduled report by ID
    */
-  static async getScheduledReportById(scheduleId: string): Promise<ScheduledReport> {
+  static async getScheduledReportById(scheduleId: string): Promise<ApiResponse<ScheduledReport>> {
     return this.execute(async () => {
+      const API_BASE = getApiBaseUrl();
       const token = getStorageItem('auth_token');
       if (!token) {
         throw new Error('Authentication required');
@@ -1043,14 +1069,15 @@ export class ReportService extends BaseApiService {
 
       const result = await response.json();
       return result.data;
-    });
+    }, {});
   }
 
   /**
    * Create scheduled report
    */
-  static async createScheduledReport(scheduleData: Partial<ScheduledReport>): Promise<ScheduledReport> {
+  static async createScheduledReport(scheduleData: Partial<ScheduledReport>): Promise<ApiResponse<ScheduledReport>> {
     return this.execute(async () => {
+      const API_BASE = getApiBaseUrl();
       const token = getStorageItem('auth_token');
       if (!token) {
         throw new Error('Authentication required');
@@ -1081,8 +1108,9 @@ export class ReportService extends BaseApiService {
   /**
    * Update scheduled report
    */
-  static async updateScheduledReport(scheduleId: string, scheduleData: Partial<ScheduledReport>): Promise<ScheduledReport> {
+  static async updateScheduledReport(scheduleId: string, scheduleData: Partial<ScheduledReport>): Promise<ApiResponse<ScheduledReport>> {
     return this.execute(async () => {
+      const API_BASE = getApiBaseUrl();
       const token = getStorageItem('auth_token');
       if (!token) {
         throw new Error('Authentication required');
@@ -1107,14 +1135,15 @@ export class ReportService extends BaseApiService {
 
       const result = await response.json();
       return result.data;
-    });
+    }, {});
   }
 
   /**
    * Delete scheduled report
    */
-  static async deleteScheduledReport(scheduleId: string): Promise<void> {
+  static async deleteScheduledReport(scheduleId: string): Promise<ApiResponse<void>> {
     return this.execute(async () => {
+      const API_BASE = getApiBaseUrl();
       const token = getStorageItem('auth_token');
       if (!token) {
         throw new Error('Authentication required');
@@ -1176,14 +1205,15 @@ export class ReportService extends BaseApiService {
 
       const result = await response.json();
       return result.data || [];
-    });
+    }, {});
   }
 
   /**
    * Delete report export
    */
-  static async deleteReportExport(exportId: string): Promise<void> {
+  static async deleteReportExport(exportId: string): Promise<ApiResponse<void>> {
     return this.execute(async () => {
+      const API_BASE = getApiBaseUrl();
       const token = getStorageItem('auth_token');
       if (!token) {
         throw new Error('Authentication required');
@@ -1203,7 +1233,8 @@ export class ReportService extends BaseApiService {
         const error = await response.json().catch(() => ({ error: 'Failed to delete report export' }));
         throw new Error(error.error || 'Failed to delete report export');
       }
-    });
+      return undefined;
+    }, {});
   }
 
   /**
@@ -1213,8 +1244,9 @@ export class ReportService extends BaseApiService {
     date_from?: string;
     date_to?: string;
     period?: string;
-  }): Promise<AnalyticsMetrics> {
+  }): Promise<ApiResponse<AnalyticsMetrics>> {
     return this.execute(async () => {
+      const API_BASE = getApiBaseUrl();
       const token = getStorageItem('auth_token');
       if (!token) {
         throw new Error('Authentication required');
@@ -1241,7 +1273,7 @@ export class ReportService extends BaseApiService {
 
       const result = await response.json();
       return result.data;
-    });
+    }, {});
   }
 }
 

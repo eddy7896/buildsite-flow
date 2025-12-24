@@ -187,13 +187,23 @@ export default function InventoryProducts() {
     try {
       setLoading(true);
       if (isEditing && selectedProduct) {
-        await updateProduct(selectedProduct.id, productForm);
+        // Convert weight from string to number if provided
+        const productData: Partial<ProductType> = {
+          ...productForm,
+          weight: productForm.weight ? parseFloat(productForm.weight) || undefined : undefined,
+        };
+        await updateProduct(selectedProduct.id, productData);
         toast({
           title: 'Success',
           description: 'Product updated successfully',
         });
       } else {
-        await createProduct(productForm);
+        // Convert weight from string to number if provided
+        const productData: Partial<ProductType> = {
+          ...productForm,
+          weight: productForm.weight ? parseFloat(productForm.weight) || undefined : undefined,
+        };
+        await createProduct(productData);
         toast({
           title: 'Success',
           description: 'Product created successfully',

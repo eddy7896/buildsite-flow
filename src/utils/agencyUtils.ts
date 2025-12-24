@@ -4,6 +4,7 @@
  */
 
 import { selectOne } from '@/services/api/postgresql-service';
+import { queryMainDatabase } from '@/integrations/postgresql/client-http';
 
 /**
  * Get agency_id from profile or fetch from database
@@ -45,7 +46,6 @@ export async function getAgencyId(
 
   // Try to get from agency_settings table (first record)
   try {
-    const { selectOne } = await import('@/services/api/postgresql-service');
     const agencySettings = await selectOne('agency_settings', {});
     if (agencySettings?.agency_id) {
       return agencySettings.agency_id;
@@ -56,7 +56,6 @@ export async function getAgencyId(
 
   // Try to get from profiles table (first user's agency_id)
   try {
-    const { selectOne } = await import('@/services/api/postgresql-service');
     const firstProfile = await selectOne('profiles', {});
     if (firstProfile?.agency_id && firstProfile.agency_id !== '00000000-0000-0000-0000-000000000000') {
       return firstProfile.agency_id;
@@ -71,7 +70,6 @@ export async function getAgencyId(
     if (agencyDatabase) {
       try {
         // Query main database for agency_id
-        const { queryMainDatabase } = await import('@/integrations/postgresql/client-http');
         const result = await queryMainDatabase(`
           SELECT id FROM public.agencies WHERE database_name = $1
         `, [agencyDatabase]);

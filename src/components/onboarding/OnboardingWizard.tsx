@@ -23,6 +23,7 @@ import Step7AdminAccount from './steps/Step7AdminAccount';
 import Step8Review from './steps/Step8Review';
 
 import { useOnboardingState } from './hooks/useOnboardingState';
+import { logError } from '@/utils/consoleLogger';
 
 const STEPS = [
   { id: 1, title: 'Agency Essentials', component: Step1AgencyEssentials },
@@ -65,7 +66,7 @@ export default function OnboardingWizard() {
           setSelectedPages(parsed.selectedPages);
         }
       } catch (error) {
-        console.error('Error loading draft:', error);
+        logError('Error loading draft:', error);
       }
     }
   }, []);
@@ -158,7 +159,7 @@ export default function OnboardingWizard() {
       // Navigate to dashboard
       navigate('/dashboard');
     } catch (error: any) {
-      console.error('Agency creation error:', error);
+      logError('Agency creation error:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to create agency. Please try again.',
