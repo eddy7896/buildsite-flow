@@ -406,24 +406,45 @@ router.get(
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
       }
 
+      // Enhanced error logging
       console.error('[API] Recommendations preview error:', error);
       console.error('[API] Recommendations preview error stack:', error.stack);
       console.error('[API] Error details:', {
         message: error.message,
         code: error.code,
         detail: error.detail,
+        name: error.name,
         query: req.query,
         origin: origin,
-        headers: req.headers
+        url: req.url,
+        method: req.method
       });
+      
+      // Determine error message and code
+      let errorMessage = error.message || 'Failed to fetch recommendations';
+      let errorCode = error.code || 'INTERNAL_ERROR';
+      
+      // Handle specific error types
+      if (error.code === '42P01' || error.message?.includes('does not exist')) {
+        errorMessage = 'Page catalog tables not found. Please run database migrations.';
+        errorCode = 'MISSING_TABLES';
+      } else if (error.message?.includes('connection') || error.message?.includes('pool')) {
+        errorMessage = 'Database connection error. Please check database configuration.';
+        errorCode = 'DATABASE_CONNECTION_ERROR';
+      } else if (error.message?.includes('timeout')) {
+        errorMessage = 'Request timed out. Please try again.';
+        errorCode = 'TIMEOUT_ERROR';
+      }
       
       // Return error response with CORS headers and fallback data
       const errorResponse = {
         success: false,
         error: {
-          message: error.message || 'Failed to fetch recommendations',
-          code: error.code || 'INTERNAL_ERROR',
-          detail: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+          message: errorMessage,
+          code: errorCode,
+          detail: process.env.NODE_ENV !== 'production' ? error.stack : undefined,
+          // Include original error message in development
+          originalMessage: process.env.NODE_ENV !== 'production' ? error.message : undefined
         },
         data: {
           all: [],
@@ -441,11 +462,8 @@ router.get(
         }
       };
 
-      // If it's a database error, provide more context
-      if (error.code === '42P01' || error.message?.includes('does not exist')) {
-        errorResponse.error.message = 'Page catalog tables not found. Please run database migrations.';
-        errorResponse.error.code = 'MISSING_TABLES';
-      }
+      // Log the error response for debugging
+      console.error('[API] Returning error response:', JSON.stringify(errorResponse, null, 2));
 
       res.status(500).json(errorResponse);
     }

@@ -69,15 +69,33 @@ export function usePageRecommendations() {
       );
 
       if (!response.ok) {
-        // Try to get error message from response
-        const errorMessage = data.error?.message || data.message || data.error || `Failed to fetch recommendations: ${response.status} ${response.statusText}`;
+        // Try to get error message from response - check multiple possible locations
+        let errorMessage = `Failed to fetch recommendations: ${response.status} ${response.statusText}`;
+        
+        if (data) {
+          // Check various error message locations
+          if (data.error) {
+            if (typeof data.error === 'string') {
+              errorMessage = data.error;
+            } else if (data.error.message) {
+              errorMessage = data.error.message;
+            } else if (data.error.code) {
+              errorMessage = `${data.error.code}: ${data.error.message || data.error.details || 'Unknown error'}`;
+            }
+          } else if (data.message) {
+            errorMessage = data.message;
+          } else if (typeof data === 'string') {
+            errorMessage = data;
+          }
+        }
         
         // If backend returns fallback data, use it instead of throwing
         if (hasFallbackData) {
           logError('Recommendations API returned error but provided fallback data:', {
-            error: data.error,
+            error: data?.error,
             message: errorMessage,
-            status: response.status
+            status: response.status,
+            fullResponse: data
           });
           setRecommendations(data.data);
           return data.data;
@@ -87,9 +105,10 @@ export function usePageRecommendations() {
         logError('Recommendations API error:', {
           status: response.status,
           statusText: response.statusText,
-          error: data.error,
+          error: data?.error,
           message: errorMessage,
-          fullResponse: data
+          fullResponse: data,
+          url: url
         });
         
         throw new Error(errorMessage);
