@@ -321,16 +321,46 @@ router.get(
  *   }
  * }
  */
+/**
+ * OPTIONS /api/system/metrics
+ * Handle CORS preflight requests
+ */
+router.options('/metrics', (req, res) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  res.sendStatus(204);
+});
+
 router.get(
   '/metrics',
   authenticate,
   requireSuperAdmin,
   asyncHandler(async (req, res) => {
+    // Set CORS headers explicitly
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+
     let client;
     try {
       client = await pool.connect();
     } catch (connectError) {
       console.error('[System] Failed to get database connection:', connectError);
+      // Set CORS headers even on error
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+      }
       return res.status(500).json({
         success: false,
         error: {
@@ -472,6 +502,14 @@ router.get(
         message: 'System metrics loaded successfully',
       });
     } catch (error) {
+      // Set CORS headers even on error
+      const origin = req.headers.origin;
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+      }
+
       console.error('[System] Error computing system metrics:', error);
       console.error('[System] Error stack:', error.stack);
       console.error('[System] Error code:', error.code);
@@ -2244,6 +2282,21 @@ router.get(
 );
 
 /**
+ * OPTIONS /api/system/usage/realtime
+ * Handle CORS preflight requests
+ */
+router.options('/usage/realtime', (req, res) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  res.sendStatus(204);
+});
+
+/**
  * GET /api/system/usage/realtime
  * Get real-time usage statistics from audit logs and active sessions
  */
@@ -2251,7 +2304,16 @@ router.get(
   '/usage/realtime',
   authenticate,
   requireSuperAdmin,
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    // Set CORS headers explicitly
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+
     const client = await pool.connect();
     try {
       // Get active users (users who have activity in last 15 minutes)
@@ -2378,6 +2440,14 @@ router.get(
         },
       });
     } catch (error) {
+      // Set CORS headers even on error
+      const origin = req.headers.origin;
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
+      }
+
       console.error('[System] Error fetching real-time usage:', error);
       return res.status(500).json({
         success: false,

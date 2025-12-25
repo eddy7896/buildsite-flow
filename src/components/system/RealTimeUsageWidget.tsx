@@ -45,13 +45,33 @@ export const RealTimeUsageWidget = () => {
       setLoading(true);
 
       const endpoint = getApiEndpoint('/system/usage/realtime');
+      
+      // Log API URL for debugging (only in development)
+      if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || import.meta.env.DEV)) {
+        console.log('[RealTime Usage] Fetching from URL:', endpoint);
+      }
+
       const response = await fetch(endpoint, {
         method: 'GET',
-        headers: authHeaders(),
+        headers: {
+          ...authHeaders(),
+          'Accept': 'application/json',
+        },
+        mode: 'cors', // Explicitly enable CORS
+        credentials: 'omit', // Don't send cookies (auth is header-based)
+        cache: 'no-cache', // Always fetch fresh data
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch usage metrics: ${response.status}`);
+        const errorText = await response.text();
+        let errorMessage = `Failed to fetch usage metrics: ${response.status}`;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error?.message || errorData.message || errorMessage;
+        } catch {
+          // Use default error message
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await response.json();
@@ -64,10 +84,30 @@ export const RealTimeUsageWidget = () => {
       }
 
     } catch (error: any) {
-      console.error('Error fetching usage metrics:', error);
+      const errorMessage = error?.message || 'Failed to load real-time usage statistics';
+      
+      // Check for CORS errors specifically
+      const isCorsError = errorMessage.includes('CORS') || 
+                         errorMessage.includes('cross-origin') ||
+                         errorMessage.includes('Access-Control') ||
+                         (error.name === 'TypeError' && errorMessage.includes('Failed to fetch'));
+      
+      console.error('Error fetching usage metrics:', {
+        message: errorMessage,
+        error: error,
+        stack: error?.stack,
+        name: error?.name,
+        isCorsError
+      });
+      
+      let userMessage = errorMessage;
+      if (isCorsError || errorMessage.includes('NetworkError') || errorMessage.includes('Failed to fetch')) {
+        userMessage = 'Unable to connect to the server. This may be a CORS or network configuration issue.';
+      }
+      
       toast({
         title: "Error loading usage data",
-        description: error.message || 'Failed to load real-time usage statistics',
+        description: userMessage,
         variant: "destructive"
       });
       

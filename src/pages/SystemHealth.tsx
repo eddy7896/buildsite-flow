@@ -168,28 +168,71 @@ export default function SystemHealth() {
       }
 
       const apiBaseUrl = getApiBaseUrl();
-      const response = await fetch(`${apiBaseUrl}/api/system-health`, {
+      const url = `${apiBaseUrl}/api/system-health`;
+      
+      // Log API URL for debugging (only in development)
+      if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || import.meta.env.DEV)) {
+        console.log('[System Health] Fetching from URL:', url);
+      }
+
+      const response = await fetch(url, {
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
           'X-Agency-Database': localStorage.getItem('agency_database') || '',
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
+        mode: 'cors', // Explicitly enable CORS
+        credentials: 'omit', // Don't send cookies (auth is header-based)
+        cache: 'no-cache', // Always fetch fresh data
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch health data');
+        const errorText = await response.text();
+        let errorMessage = 'Failed to fetch health data';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error?.message || errorData.message || errorMessage;
+        } catch {
+          errorMessage = `${errorMessage} (status ${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
       if (result.success) {
         setHealth(result.data);
       } else {
-        throw new Error(result.error || 'Failed to fetch health data');
+        throw new Error(result.error?.message || result.error || 'Failed to fetch health data');
       }
     } catch (error: any) {
-      console.error('Error fetching health:', error);
+      const errorMessage = error?.message || 'Failed to fetch system health';
+      
+      // Check for CORS errors specifically
+      const isCorsError = errorMessage.includes('CORS') || 
+                         errorMessage.includes('cross-origin') ||
+                         errorMessage.includes('Access-Control') ||
+                         (error.name === 'TypeError' && errorMessage.includes('Failed to fetch'));
+      
+      console.error('Error fetching health:', {
+        message: errorMessage,
+        error: error,
+        stack: error?.stack,
+        name: error?.name,
+        isCorsError,
+        apiBase: getApiBaseUrl(),
+        currentUrl: typeof window !== 'undefined' ? window.location.href : 'N/A'
+      });
+      
+      let userMessage = errorMessage;
+      if (isCorsError || errorMessage.includes('NetworkError') || errorMessage.includes('Failed to fetch')) {
+        userMessage = 'Unable to connect to the server. This may be a CORS or network configuration issue.';
+      }
+      
       toast({
         title: 'Error',
-        description: error.message || 'Failed to fetch system health',
+        description: userMessage,
         variant: 'destructive',
       });
     } finally {

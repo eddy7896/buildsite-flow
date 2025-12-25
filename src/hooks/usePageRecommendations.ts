@@ -35,10 +35,21 @@ export function usePageRecommendations() {
       const apiBase = getApiBaseUrl();
       const url = `${apiBase}/api/system/page-catalog/recommendations/preview?${params.toString()}`;
       
+      // Log API URL for debugging (only in development or when explicitly enabled)
+      if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || import.meta.env.DEV)) {
+        console.log('[Page Recommendations] Fetching from URL:', url);
+        console.log('[Page Recommendations] API Base URL:', apiBase);
+      }
+      
       const response = await fetch(url, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json'
-        }
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        mode: 'cors', // Explicitly enable CORS
+        credentials: 'omit', // Don't send cookies (auth is header-based)
+        cache: 'no-cache', // Always fetch fresh data
       });
 
       let data;
@@ -101,20 +112,32 @@ export function usePageRecommendations() {
     } catch (error: any) {
       const errorMessage = error?.message || 'Failed to fetch page recommendations';
       
+      // Check for CORS errors specifically
+      const isCorsError = errorMessage.includes('CORS') || 
+                         errorMessage.includes('cross-origin') ||
+                         errorMessage.includes('Access-Control') ||
+                         (error.name === 'TypeError' && errorMessage.includes('Failed to fetch'));
+      
       logError('Error fetching recommendations:', {
         message: errorMessage,
         error: error,
-        stack: error?.stack
+        stack: error?.stack,
+        name: error?.name,
+        isCorsError,
+        apiBase: getApiBaseUrl(),
+        currentUrl: typeof window !== 'undefined' ? window.location.href : 'N/A'
       });
       
       // Provide more specific error messages
       let userMessage = 'Failed to fetch page recommendations';
       if (errorMessage.includes('does not exist') || errorMessage.includes('MISSING_TABLES')) {
         userMessage = 'Page catalog tables not found. Please run database migrations.';
-      } else if (errorMessage.includes('NetworkError') || errorMessage.includes('Failed to fetch')) {
-        userMessage = 'Unable to connect to the server. Please check your connection.';
+      } else if (isCorsError || errorMessage.includes('NetworkError') || errorMessage.includes('Failed to fetch')) {
+        userMessage = 'Unable to connect to the server. This may be a CORS or network configuration issue. Please check your server settings.';
       } else if (errorMessage.includes('500') || errorMessage.includes('Internal Server Error')) {
         userMessage = 'Server error occurred. Please try again later or contact support.';
+      } else if (errorMessage.includes('TypeError') && errorMessage.includes('undefined')) {
+        userMessage = 'Configuration error detected. Please refresh the page or contact support.';
       } else if (errorMessage) {
         userMessage = errorMessage;
       }

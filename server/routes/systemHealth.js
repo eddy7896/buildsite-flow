@@ -19,12 +19,36 @@ let healthCacheTime = 0;
 const CACHE_TTL = 5000; // 5 seconds
 
 /**
+ * OPTIONS /api/system-health
+ * Handle CORS preflight requests
+ */
+router.options('/', (req, res) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Agency-Database, Accept');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  res.sendStatus(204);
+});
+
+/**
  * GET /api/system-health
  * Get comprehensive system health metrics with high performance
  * Requires admin role
  */
 router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
   try {
+    // Set CORS headers explicitly
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Agency-Database, Accept');
+      res.setHeader('Access-Control-Max-Age', '86400');
+    }
+
     // Return cached data if available and fresh
     const now = Date.now();
     if (healthCache && (now - healthCacheTime) < CACHE_TTL) {
@@ -147,6 +171,14 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
     console.error('[System Health] Error stack:', error.stack);
     console.error('[System Health] Error code:', error.code);
     // Return partial health data even on error
+    // Set CORS headers even on error
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Agency-Database, Accept');
+    }
+
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch system health',

@@ -343,6 +343,21 @@ router.post(
 );
 
 /**
+ * OPTIONS /api/system/page-catalog/recommendations/preview
+ * Handle CORS preflight requests
+ */
+router.options('/recommendations/preview', (req, res) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+    res.setHeader('Access-Control-Max-Age', '86400');
+  }
+  res.sendStatus(204);
+});
+
+/**
  * GET /api/system/page-catalog/recommendations/preview
  * Preview recommendations based on criteria
  * Public endpoint - used during onboarding before authentication
@@ -351,6 +366,15 @@ router.get(
   '/recommendations/preview',
   asyncHandler(async (req, res) => {
     try {
+      // Set CORS headers explicitly for this public endpoint
+      const origin = req.headers.origin;
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+        res.setHeader('Access-Control-Max-Age', '86400');
+      }
+
       const { industry, company_size, primary_focus, business_goals } = req.query;
 
       if (!industry || !company_size || !primary_focus) {
@@ -374,13 +398,23 @@ router.get(
         data: recommendations
       });
     } catch (error) {
+      // Set CORS headers even on error
+      const origin = req.headers.origin;
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+      }
+
       console.error('[API] Recommendations preview error:', error);
       console.error('[API] Recommendations preview error stack:', error.stack);
       console.error('[API] Error details:', {
         message: error.message,
         code: error.code,
         detail: error.detail,
-        query: req.query
+        query: req.query,
+        origin: origin,
+        headers: req.headers
       });
       
       // Return error response with CORS headers and fallback data

@@ -74,13 +74,32 @@ async function handleJsonResponse<T>(response: Response): Promise<T> {
 export async function fetchSystemMetrics(): Promise<SystemMetricsResponse> {
   const endpoint = getApiEndpoint('/system/metrics');
 
+  // Log API URL for debugging (only in development)
+  if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || import.meta.env.DEV)) {
+    console.log('[System Dashboard] Fetching from URL:', endpoint);
+  }
+
   const response = await fetch(endpoint, {
     method: 'GET',
-    headers: getAuthHeaders(),
+    headers: {
+      ...getAuthHeaders(),
+      'Accept': 'application/json',
+    },
+    mode: 'cors', // Explicitly enable CORS
+    credentials: 'omit', // Don't send cookies (auth is header-based)
+    cache: 'no-cache', // Always fetch fresh data
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to load system metrics (status ${response.status})`);
+    const errorText = await response.text();
+    let errorMessage = `Failed to load system metrics (status ${response.status})`;
+    try {
+      const errorData = JSON.parse(errorText);
+      errorMessage = errorData.error?.message || errorData.message || errorMessage;
+    } catch {
+      // Use default error message
+    }
+    throw new Error(errorMessage);
   }
 
   const data = await handleJsonResponse<SystemMetricsResponse>(response);
