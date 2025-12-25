@@ -12,7 +12,7 @@
  * - Performance optimized with proper indexing
  */
 
-import { selectRecords } from './postgresql-service';
+import { selectRecords, selectRecords as selectRecs } from './postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 
 /**
@@ -92,7 +92,6 @@ export async function getEmployeesForAssignment(
         unifiedData = unifiedData.filter((emp: any) => emp.agency_id === agencyId);
       } else {
         // Fallback: filter via profiles if view doesn't have agency_id
-        const { selectRecords: selectRecs } = await import('@/services/api/postgresql-service');
         const profiles = await selectRecs('profiles', {
           where: { agency_id: agencyId }
         });

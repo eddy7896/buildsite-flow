@@ -64,7 +64,7 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
   // Process Database Health
   if (dbHealth.status === 'fulfilled') {
     health.services.database = dbHealth.value;
-    if (dbHealth.value.status !== 'connected') {
+    if (dbHealth.value && dbHealth.value.status !== 'connected') {
       health.status = 'degraded';
     }
   } else {
@@ -73,11 +73,15 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
       status: 'error',
       error: dbHealth.reason?.message || 'Unknown error',
     };
+    console.error('[System Health] Database health check failed:', dbHealth.reason);
   }
 
   // Process Detailed Database Metrics
   if (dbDetailedMetrics.status === 'fulfilled') {
     health.database = dbDetailedMetrics.value;
+  } else {
+    console.error('[System Health] Detailed database metrics failed:', dbDetailedMetrics.reason);
+    health.database = { error: dbDetailedMetrics.reason?.message || 'Failed to get detailed metrics' };
   }
 
   // Process Redis Health
@@ -97,9 +101,10 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
 
   // Process System Resources
   if (systemResources.status === 'fulfilled') {
-    health.system = systemResources.value;
+    health.system = systemResources.value || {};
     health.system.disk = diskUsage.status === 'fulfilled' ? diskUsage.value : null;
   } else {
+    console.error('[System Health] System resources check failed:', systemResources.reason);
     health.system = {
       error: systemResources.reason?.message || 'Unknown error',
     };
@@ -107,8 +112,9 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
 
   // Process Performance Metrics
   if (performanceMetrics.status === 'fulfilled') {
-    health.performance = performanceMetrics.value;
+    health.performance = performanceMetrics.value || {};
   } else {
+    console.error('[System Health] Performance metrics check failed:', performanceMetrics.reason);
     health.performance = {
       error: performanceMetrics.reason?.message || 'Unknown error',
     };
@@ -138,6 +144,8 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
     });
   } catch (error) {
     console.error('[System Health] Error in health check:', error);
+    console.error('[System Health] Error stack:', error.stack);
+    console.error('[System Health] Error code:', error.code);
     // Return partial health data even on error
     res.status(500).json({
       success: false,
@@ -146,6 +154,7 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
         timestamp: new Date().toISOString(),
         status: 'error',
         error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       },
     });
   }
@@ -155,48 +164,57 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
  * Get comprehensive database health metrics
  */
 async function getDatabaseHealth() {
-  const dbStart = Date.now();
-  await pool.query('SELECT 1');
-  const dbTime = Date.now() - dbStart;
+  try {
+    const dbStart = Date.now();
+    await pool.query('SELECT 1');
+    const dbTime = Date.now() - dbStart;
 
-  const [dbInfo, poolStats] = await Promise.all([
-    pool.query(`
-      SELECT 
-        pg_database_size(current_database()) as size,
-        (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()) as connections,
-        (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') as max_connections
-    `),
-    pool.query(`
-      SELECT 
-        count(*) FILTER (WHERE state = 'active') as active,
-        count(*) FILTER (WHERE state = 'idle') as idle,
-        count(*) FILTER (WHERE state = 'idle in transaction') as idle_in_transaction,
-        count(*) FILTER (WHERE wait_event_type IS NOT NULL) as waiting
-      FROM pg_stat_activity
-      WHERE datname = current_database()
-    `),
-  ]);
+    const [dbInfo, poolStats] = await Promise.all([
+      pool.query(`
+        SELECT 
+          pg_database_size(current_database()) as size,
+          (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()) as connections,
+          (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') as max_connections
+      `),
+      pool.query(`
+        SELECT 
+          count(*) FILTER (WHERE state = 'active') as active,
+          count(*) FILTER (WHERE state = 'idle') as idle,
+          count(*) FILTER (WHERE state = 'idle in transaction') as idle_in_transaction,
+          count(*) FILTER (WHERE wait_event_type IS NOT NULL) as waiting
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+      `),
+    ]);
 
-  const connections = dbInfo.rows[0].connections;
-  const maxConnections = dbInfo.rows[0].max_connections;
-  const usagePercent = ((connections / maxConnections) * 100).toFixed(1);
+    const connections = parseInt(dbInfo.rows[0]?.connections || 0);
+    const maxConnections = parseInt(dbInfo.rows[0]?.max_connections || 100);
+    const usagePercent = maxConnections > 0 ? ((connections / maxConnections) * 100).toFixed(1) : '0.0';
 
-  return {
-    status: 'connected',
-    responseTime: dbTime,
-    size: parseInt(dbInfo.rows[0].size),
-    connections: {
-      current: connections,
-      max: maxConnections,
-      usage: usagePercent + '%',
-    },
-    pool: {
-      active: parseInt(poolStats.rows[0].active),
-      idle: parseInt(poolStats.rows[0].idle),
-      idleInTransaction: parseInt(poolStats.rows[0].idle_in_transaction),
-      waiting: parseInt(poolStats.rows[0].waiting),
-    },
-  };
+    return {
+      status: 'connected',
+      responseTime: dbTime,
+      size: parseInt(dbInfo.rows[0]?.size || 0),
+      connections: {
+        current: connections,
+        max: maxConnections,
+        usage: usagePercent + '%',
+      },
+      pool: {
+        active: parseInt(poolStats.rows[0]?.active || 0),
+        idle: parseInt(poolStats.rows[0]?.idle || 0),
+        idleInTransaction: parseInt(poolStats.rows[0]?.idle_in_transaction || 0),
+        waiting: parseInt(poolStats.rows[0]?.waiting || 0),
+      },
+    };
+  } catch (error) {
+    console.error('[System Health] Error in getDatabaseHealth:', error);
+    return {
+      status: 'error',
+      error: error.message,
+      responseTime: null,
+    };
+  }
 }
 
 /**

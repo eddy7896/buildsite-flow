@@ -4,25 +4,45 @@
 
 const express = require('express');
 const router = express.Router();
+const { body } = require('express-validator');
 const { asyncHandler } = require('../middleware/errorHandler');
+const { validateRequest, commonRules } = require('../middleware/validation');
 const { findUserAcrossAgencies, generateToken, formatUserResponse } = require('../services/authService');
 const passwordPolicyService = require('../services/passwordPolicyService');
 const { getAgencyPool } = require('../utils/poolManager');
+const { authLimiter, passwordResetLimiter, twoFactorLimiter } = require('../middleware/rateLimiter');
 
 /**
  * POST /api/auth/login
  * Login endpoint - searches across all agency databases for the user
+ * Protected by rate limiting: 5 attempts per 15 minutes
+ * Validates: email (valid email), password (8-128 chars)
  */
-router.post('/login', asyncHandler(async (req, res) => {
+router.post('/login', 
+  authLimiter,
+  [
+    commonRules.email,
+    body('password')
+      .notEmpty()
+      .withMessage('Password is required')
+      .isLength({ min: 1, max: 128 })
+      .withMessage('Password must be between 1 and 128 characters'),
+    body('twoFactorToken')
+      .optional()
+      .trim()
+      .isLength({ min: 6, max: 6 })
+      .withMessage('2FA token must be 6 digits')
+      .isNumeric()
+      .withMessage('2FA token must be numeric'),
+    body('recoveryCode')
+      .optional()
+      .trim()
+      .isLength({ min: 8, max: 8 })
+      .withMessage('Recovery code must be 8 characters'),
+    validateRequest,
+  ],
+  asyncHandler(async (req, res) => {
   const { email, password, twoFactorToken, recoveryCode } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      error: 'Email and password are required',
-      message: 'Email and password are required',
-    });
-  }
 
   const ipAddress = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'] || 'unknown';
   const userAgent = req.headers['user-agent'] || 'unknown';

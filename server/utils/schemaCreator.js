@@ -33,6 +33,56 @@ const { ensureWorkflowSchema } = require('./schema/workflowSchema');
 const { ensureIntegrationHubSchema } = require('./schema/integrationHubSchema');
 const { ensureIndexesAndFixes } = require('./schema/indexesAndFixes');
 const { quickSyncSchema } = require('./schemaSyncService');
+// Lazy load SchemaLogger to avoid potential circular dependency issues
+let SchemaLogger;
+function getSchemaLogger() {
+  if (!SchemaLogger) {
+    SchemaLogger = require('./schemaValidator').SchemaLogger;
+  }
+  return SchemaLogger;
+}
+
+/**
+ * Initialize schema versioning tables
+ * Moved here to break circular dependency with schemaValidator
+ * @param {Object} client - PostgreSQL client
+ */
+async function initializeSchemaVersioning(client) {
+  const logger = getSchemaLogger();
+  try {
+    // Create schema_migrations table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version VARCHAR(20) PRIMARY KEY,
+        description TEXT,
+        applied_at TIMESTAMP DEFAULT NOW(),
+        checksum VARCHAR(64),
+        success BOOLEAN DEFAULT true
+      )
+    `);
+
+    // Create schema_info table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_info (
+        key VARCHAR(50) PRIMARY KEY,
+        value TEXT,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Set initial schema version if not exists
+    await client.query(`
+      INSERT INTO schema_info (key, value) 
+      VALUES ('schema_version', '1.0.0') 
+      ON CONFLICT (key) DO NOTHING
+    `);
+
+    logger.info('Schema versioning initialized');
+  } catch (error) {
+    logger.error('Failed to initialize schema versioning', error);
+    throw error;
+  }
+}
 
 /**
  * Create complete agency database schema
@@ -94,7 +144,7 @@ async function createAgencySchema(client) {
 
     try {
       // Step 1: Ensure shared functions, types, and extensions
-      console.log('[SQL] Step 1/20: Ensuring shared functions, types, and extensions...');
+      console.log('[SQL] Step 1/21: Ensuring shared functions, types, and extensions...');
       await ensureSharedFunctions(client);
     
     // Verify critical functions exist
@@ -105,6 +155,17 @@ async function createAgencySchema(client) {
       AND proname IN ('update_updated_at_column', 'log_audit_change', 'current_user_id')
     `);
     console.log('[SQL] ✅ Shared functions verified:', functionCheck.rows.map(r => r.proname).join(', '));
+
+    // Step 1.5: Initialize schema versioning (must be early so migrations can be tracked)
+    console.log('[SQL] Step 1.5/21: Initializing schema versioning...');
+    
+    // Verify function exists before calling (safeguard against module loading issues)
+    if (typeof initializeSchemaVersioning !== 'function') {
+      throw new Error('initializeSchemaVersioning is not a function. This may indicate a module loading issue. Please restart the server.');
+    }
+    
+    await initializeSchemaVersioning(client);
+    console.log('[SQL] ✅ Schema versioning initialized');
 
     // Step 2: Authentication and authorization (foundational - must come first)
     console.log('[SQL] Step 2/19: Ensuring authentication schema...');
@@ -339,6 +400,15 @@ async function createAgencySchema(client) {
         console.warn('[SQL] Auto-sync error stack:', syncError.stack.split('\n').slice(0, 3).join('\n'));
       }
     }
+
+    // Update schema version to current version after successful creation
+    const CURRENT_SCHEMA_VERSION = '1.0.0';
+    await client.query(`
+      INSERT INTO schema_info (key, value, updated_at) 
+      VALUES ('schema_version', $1, NOW()) 
+      ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()
+    `, [CURRENT_SCHEMA_VERSION]);
+    console.log(`[SQL] ✅ Schema version set to ${CURRENT_SCHEMA_VERSION}`);
 
     // Final verification: Count all tables
     const tableCount = await client.query(`

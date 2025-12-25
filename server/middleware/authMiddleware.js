@@ -164,21 +164,43 @@ async function getUserRolesFromAgencyDb(userId, agencyDatabase) {
     return [];
   }
 
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-  const { Pool } = require('pg');
-  const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
-  const client = await agencyPool.connect();
-
   try {
-    const result = await client.query(
-      'SELECT role FROM public.user_roles WHERE user_id = $1',
-      [userId]
-    );
-    return result.rows.map((row) => row.role);
-  } finally {
-    client.release();
-    await agencyPool.end();
+    const dbConfig = parseDatabaseUrl();
+    
+    // Validate all required fields are present
+    if (!dbConfig.host || !dbConfig.user || dbConfig.password === undefined || !dbConfig.port) {
+      console.error('[Auth] Invalid database configuration for getUserRolesFromAgencyDb');
+      return [];
+    }
+    
+    // URL-encode password to handle special characters
+    const encodedPassword = encodeURIComponent(dbConfig.password);
+    const agencyDbUrl = `postgresql://${dbConfig.user}:${encodedPassword}@${dbConfig.host}:${dbConfig.port}/${agencyDatabase}`;
+    
+    // Validate connection string is not undefined
+    if (!agencyDbUrl || agencyDbUrl.includes('undefined')) {
+      console.error('[Auth] Failed to construct valid database connection string');
+      return [];
+    }
+    
+    const { Pool } = require('pg');
+    const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+    const client = await agencyPool.connect();
+
+    try {
+      const result = await client.query(
+        'SELECT role FROM public.user_roles WHERE user_id = $1',
+        [userId]
+      );
+      return result.rows.map((row) => row.role);
+    } finally {
+      client.release();
+      await agencyPool.end();
+    }
+  } catch (error) {
+    console.error('[Auth] Error in getUserRolesFromAgencyDb:', error.message);
+    // Return empty array on error to allow request to continue (will fail authorization check)
+    return [];
   }
 }
 

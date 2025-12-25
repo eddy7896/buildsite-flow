@@ -11,11 +11,13 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: parseInt(process.env.VITE_DEV_PORT || '5173', 10),
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: process.env.VITE_API_URL 
+          ? process.env.VITE_API_URL.replace('/api', '')
+          : `http://localhost:${process.env.PORT || process.env.BACKEND_PORT || 3000}`,
         changeOrigin: true,
         secure: false,
       },
@@ -23,7 +25,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: process.env.NODE_ENV === 'development',
+    minify: 'esbuild', // Use esbuild for faster, less memory-intensive minification
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks: {

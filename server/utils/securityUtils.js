@@ -54,11 +54,38 @@ function validateDatabaseName(dbName) {
 }
 
 /**
+ * Validate table or column name (less strict than database name)
+ * PostgreSQL identifiers must:
+ * - Be 1-63 characters
+ * - Start with letter or underscore
+ * - Contain only letters, digits, underscores, hyphens
+ */
+function validateIdentifier(identifier) {
+  if (!identifier || typeof identifier !== 'string') {
+    throw new Error('Identifier must be a non-empty string');
+  }
+
+  const trimmed = identifier.trim();
+
+  if (trimmed.length === 0 || trimmed.length > 63) {
+    throw new Error('Identifier must be between 1 and 63 characters');
+  }
+
+  // Check format: must start with letter or underscore, then alphanumeric, underscore, or hyphen
+  const validPattern = /^[a-z_][a-z0-9_-]*$/i;
+  if (!validPattern.test(trimmed)) {
+    throw new Error('Identifier contains invalid characters. Only letters, numbers, underscores, and hyphens are allowed, and it must start with a letter or underscore.');
+  }
+
+  return trimmed;
+}
+
+/**
  * Safely quote a PostgreSQL identifier
  * This is safe because we've already validated the name
  */
 function quoteIdentifier(identifier) {
-  const validated = validateDatabaseName(identifier);
+  const validated = validateIdentifier(identifier);
   // Double quotes for case sensitivity and special characters
   return `"${validated.replace(/"/g, '""')}"`;
 }
@@ -119,10 +146,32 @@ async function setSessionVariable(client, variableName, value) {
   await client.query(`SET LOCAL ${quotedVariableName} = ${quotedValue}`);
 }
 
+/**
+ * Validate join condition format
+ * Must be: table.column = table.column (or similar)
+ */
+function validateJoinCondition(condition) {
+  if (!condition || typeof condition !== 'string') {
+    throw new Error('Join condition must be a string');
+  }
+  
+  const trimmed = condition.trim();
+  
+  // Basic validation: must contain table.column format with operator
+  const pattern = /^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*\s*[=<>!]+=?s*[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/i;
+  if (!pattern.test(trimmed)) {
+    throw new Error('Invalid join condition format. Must be: table.column = table.column');
+  }
+  
+  return trimmed;
+}
+
 module.exports = {
   validateDatabaseName,
+  validateIdentifier,
   quoteIdentifier,
   validateUUID,
   setSessionVariable,
+  validateJoinCondition,
 };
 

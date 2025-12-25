@@ -12,7 +12,7 @@
  * - Performance optimized with proper indexing
  */
 
-import { selectRecords } from './postgresql-service';
+import { selectRecords, selectOne } from './postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 
 /**
@@ -138,7 +138,6 @@ export async function getDepartmentsForSelection(
         // Get manager name if manager_id exists
         if (dept.manager_id) {
           try {
-            const { selectOne } = await import('./postgresql-service');
             const manager = await selectOne('profiles', { user_id: dept.manager_id });
             if (manager) {
               managerName = manager.full_name || null;
@@ -151,7 +150,6 @@ export async function getDepartmentsForSelection(
         // Get parent department name if parent_department_id exists
         if (dept.parent_department_id) {
           try {
-            const { selectOne } = await import('./postgresql-service');
             const parent = await selectOne('departments', { id: dept.parent_department_id });
             if (parent) {
               parentDepartmentName = parent.name || null;
@@ -208,7 +206,6 @@ export async function getDepartmentById(
   options: DepartmentFetchOptions = {}
 ): Promise<DepartmentOption | null> {
   try {
-    const { selectOne } = await import('./postgresql-service');
     const dept = await selectOne('departments', { id: departmentId });
 
     if (!dept) {
@@ -219,8 +216,7 @@ export async function getDepartmentById(
     let managerName: string | null = null;
     if (dept.manager_id) {
       try {
-        const { selectOne: selectOneProfile } = await import('./postgresql-service');
-        const manager = await selectOneProfile('profiles', { user_id: dept.manager_id });
+        const manager = await selectOne('profiles', { user_id: dept.manager_id });
         if (manager) {
           managerName = manager.full_name || null;
         }
@@ -233,8 +229,7 @@ export async function getDepartmentById(
     let parentDepartmentName: string | null = null;
     if (dept.parent_department_id) {
       try {
-        const { selectOne: selectOneDept } = await import('./postgresql-service');
-        const parent = await selectOneDept('departments', { id: dept.parent_department_id });
+        const parent = await selectOne('departments', { id: dept.parent_department_id });
         if (parent) {
           parentDepartmentName = parent.name || null;
         }

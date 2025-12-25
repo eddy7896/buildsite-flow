@@ -151,19 +151,31 @@ export async function getTwoFactorStatus(): Promise<TwoFactorStatusResponse> {
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${API_BASE}/api/two-factor/status`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
-  });
+  try {
+    const response = await fetch(`${API_BASE}/api/two-factor/status`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        'X-Agency-Database': localStorage.getItem('agency_database') || '',
+      },
+    });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Failed to get 2FA status' }));
-    throw new Error(error.error || 'Failed to get 2FA status');
+    if (!response.ok) {
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch {
+        errorData = { error: `Failed to get 2FA status (${response.status})` };
+      }
+      throw new Error(errorData.error || errorData.message || 'Failed to get 2FA status');
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Failed to get 2FA status');
   }
-
-  return response.json();
 }

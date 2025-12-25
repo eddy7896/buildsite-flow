@@ -118,9 +118,10 @@ router.post('/query', asyncHandler(async (req, res) => {
       }
     }
 
-    // If table or function does not exist, try to create schema and retry
-    // BUT only once per request to prevent infinite loops
-    if ((error.code === '42P01' || error.code === '42883') && agencyDatabase && !req._schemaRepairAttempted) {
+    // NOTE: Schema repair is now handled in databaseService.js executeQuery()
+    // This old code path is kept for backward compatibility but should not be needed
+    // The error should already be handled by executeQuery's retry logic
+    if ((error.code === '42P01' || error.code === '42883') && agencyDatabase && req && !req._schemaRepairAttempted) {
       // 42P01 = relation does not exist (table/view)
       // 42883 = function does not exist
       req._schemaRepairAttempted = true; // Prevent infinite loops
@@ -155,6 +156,36 @@ router.post('/query', asyncHandler(async (req, res) => {
               await ensureMiscSchema(agencyClient);
               console.log(`[API] ✅ Document tables schema repair completed, retrying query...`);
             }
+            // Holidays and company events - repair misc schema
+            else if (['holidays', 'company_events', 'calendar_settings', 'notifications'].includes(missingTable)) {
+              const { ensureMiscSchema } = require('../utils/schema/miscSchema');
+              await ensureMiscSchema(agencyClient);
+              console.log(`[API] ✅ Miscellaneous schema repair completed for ${missingTable}, retrying query...`);
+            }
+            // Leave requests - repair HR schema
+            else if (['leave_requests', 'leave_types', 'employee_details', 'employee_salary_details', 'employee_files', 'payroll', 'payroll_periods'].includes(missingTable)) {
+              const { ensureHrSchema } = require('../utils/schema/hrSchema');
+              await ensureHrSchema(agencyClient);
+              console.log(`[API] ✅ HR schema repair completed for ${missingTable}, retrying query...`);
+            }
+            // Reimbursement - repair reimbursement schema
+            else if (['reimbursement_requests', 'reimbursement_attachments', 'expense_categories'].includes(missingTable)) {
+              const { ensureReimbursementSchema } = require('../utils/schema/reimbursementSchema');
+              await ensureReimbursementSchema(agencyClient);
+              console.log(`[API] ✅ Reimbursement schema repair completed for ${missingTable}, retrying query...`);
+            }
+            // Projects and tasks - repair projects schema
+            else if (['projects', 'tasks', 'task_assignments', 'task_comments', 'task_time_tracking'].includes(missingTable)) {
+              const { ensureProjectsTasksSchema } = require('../utils/schema/projectsTasksSchema');
+              await ensureProjectsTasksSchema(agencyClient);
+              console.log(`[API] ✅ Projects schema repair completed for ${missingTable}, retrying query...`);
+            }
+            // Invoices and clients - repair clients financial schema
+            else if (['invoices', 'clients', 'quotations', 'quotation_templates', 'quotation_line_items'].includes(missingTable)) {
+              const { ensureClientsFinancialSchema } = require('../utils/schema/clientsFinancialSchema');
+              await ensureClientsFinancialSchema(agencyClient);
+              console.log(`[API] ✅ Clients/Financial schema repair completed for ${missingTable}, retrying query...`);
+            }
             // GST tables - repair GST schema
             else if (missingTable.startsWith('gst_')) {
               const { ensureGstSchema } = require('../utils/schema/gstSchema');
@@ -165,7 +196,7 @@ router.post('/query', asyncHandler(async (req, res) => {
             else {
               const { createAgencySchema } = require('../utils/schemaCreator');
               await createAgencySchema(agencyClient);
-              console.log(`[API] ✅ Full schema repair completed, retrying query...`);
+              console.log(`[API] ✅ Full schema repair completed for ${missingTable}, retrying query...`);
             }
           } else {
             // If we can't identify the table, run full schema creation

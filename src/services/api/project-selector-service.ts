@@ -12,7 +12,7 @@
  * - Performance optimized with proper indexing
  */
 
-import { selectRecords } from './postgresql-service';
+import { selectRecords, selectOne } from './postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 
 /**
@@ -155,7 +155,6 @@ export async function getProjectsForSelection(
         // Get client information if client_id exists
         if (project.client_id) {
           try {
-            const { selectOne } = await import('./postgresql-service');
             const client = await selectOne('clients', { id: project.client_id });
             if (client) {
               clientName = client.name || null;
@@ -208,7 +207,6 @@ export async function getProjectById(
   }
 
   try {
-    const { selectOne } = await import('./postgresql-service');
     const project = await selectOne('projects', {
       id: projectId,
       agency_id: agencyId
@@ -223,8 +221,7 @@ export async function getProjectById(
     let clientCompanyName: string | null = null;
     if (project.client_id) {
       try {
-        const { selectOne: selectOneClient } = await import('./postgresql-service');
-        const client = await selectOneClient('clients', { id: project.client_id });
+        const client = await selectOne('clients', { id: project.client_id });
         if (client) {
           clientName = client.name || null;
           clientCompanyName = client.company_name || null;

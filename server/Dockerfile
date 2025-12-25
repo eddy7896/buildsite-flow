@@ -27,6 +27,11 @@ FROM node:20-alpine
 # Set production environment
 ENV NODE_ENV=production
 
+# Port configuration
+ARG PORT=3000
+ENV PORT=$PORT
+ENV BACKEND_PORT=$PORT
+
 WORKDIR /app
 
 # Copy package files from builder
@@ -63,9 +68,9 @@ USER nodejs
 
 EXPOSE 3000
 
-# Health check
+# Health check (uses PORT environment variable)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Start the application
 CMD ["node", "index.js"]

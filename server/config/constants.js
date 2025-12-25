@@ -26,13 +26,20 @@ function encodeDatabaseUrl(urlString) {
   }
 }
 
+// Get database port from environment
+const POSTGRES_PORT = parseInt(process.env.POSTGRES_PORT || process.env.DATABASE_PORT || '5432', 10);
+
+// Build default database URL with environment-based port
+const defaultDatabaseUrl = `postgresql://postgres:admin@localhost:${POSTGRES_PORT}/buildflow_db`;
+
 const rawDatabaseUrl = process.env.DATABASE_URL || 
   process.env.VITE_DATABASE_URL ||
-  'postgresql://postgres:admin@localhost:5432/buildflow_db';
+  defaultDatabaseUrl;
 
 const DATABASE_URL = encodeDatabaseUrl(rawDatabaseUrl);
 
-const PORT = process.env.PORT || 3000;
+// Get backend port from environment (support both PORT and BACKEND_PORT)
+const PORT = parseInt(process.env.PORT || process.env.BACKEND_PORT || '3000', 10);
 
 const POOL_CONFIG = {
   max: 20,

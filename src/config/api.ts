@@ -12,13 +12,14 @@ function isLocalhostHost(hostname: string): boolean {
  */
 function getEnvApiUrl(): URL | null {
   const raw = env.VITE_API_URL;
-  if (!raw) return null;
+  if (!raw || typeof raw !== 'string') return null;
   try {
-    return new URL(raw);
-  } catch {
+    const url = new URL(raw);
+    return url;
+  } catch (error) {
     // Invalid URL format - will fall back to default
     if (typeof window !== 'undefined' && window.console) {
-      console.warn('[API Config] Invalid VITE_API_URL value:', raw);
+      console.warn('[API Config] Invalid VITE_API_URL value:', raw, error);
     }
     return null;
   }
@@ -37,31 +38,40 @@ export function getApiRoot(): string {
   const envUrl = getEnvApiUrl();
 
   // Browser-aware logic
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined' && window.location) {
     const { protocol, hostname } = window.location;
 
     const browserIsLocalhost = isLocalhostHost(hostname);
     const envIsValid = !!envUrl;
-    const envIsLocalhost = envIsValid && isLocalhostHost(envUrl!.hostname);
+    const envIsLocalhost = envIsValid && envUrl && isLocalhostHost(envUrl.hostname);
 
     // Browser on localhost (developer machine)
     if (browserIsLocalhost) {
-      // Always use localhost:3000 when browser is on localhost
+      // Always use localhost with backend port when browser is on localhost
       // This ensures local development works regardless of VITE_API_URL setting
-      return `${protocol}//localhost:3000/api`;
+      const backendPort = typeof process !== 'undefined' && process.env?.PORT 
+        ? process.env.PORT 
+        : typeof process !== 'undefined' && process.env?.BACKEND_PORT
+        ? process.env.BACKEND_PORT
+        : '3000';
+      return `${protocol}//localhost:${backendPort}/api`;
     }
 
     // Browser on LAN IP or real domain
-    if (envIsValid && !envIsLocalhost) {
+    if (envIsValid && envUrl && !envIsLocalhost) {
       // If VITE_API_URL points to a non-localhost host (e.g. production API),
       // trust it even when accessed via LAN.
-      return envUrl!.toString().replace(/\/$/, '');
+      return envUrl.toString().replace(/\/$/, '');
     }
 
     // VITE_API_URL is missing or points to localhost, but browser is on a LAN IP.
-    // Derive API root from the current host and the known backend port (3000).
-    const apiPort = '3000';
-    const derivedRoot = `${protocol}//${hostname}:${apiPort}/api`;
+    // Derive API root from the current host and the backend port from environment.
+    const backendPort = typeof process !== 'undefined' && process.env?.PORT 
+      ? process.env.PORT 
+      : typeof process !== 'undefined' && process.env?.BACKEND_PORT
+      ? process.env.BACKEND_PORT
+      : '3000';
+    const derivedRoot = `${protocol}//${hostname}:${backendPort}/api`;
     return derivedRoot.replace(/\/$/, '');
   }
 
@@ -70,8 +80,13 @@ export function getApiRoot(): string {
     return envUrl.toString().replace(/\/$/, '');
   }
 
-  // Last-resort default
-  return 'http://localhost:3000/api';
+  // Last-resort default - use environment variable or fallback to 3000
+  const backendPort = typeof process !== 'undefined' && process.env?.PORT 
+    ? process.env.PORT 
+    : typeof process !== 'undefined' && process.env?.BACKEND_PORT
+    ? process.env.BACKEND_PORT
+    : '3000';
+  return `http://localhost:${backendPort}/api`;
 }
 
 /**

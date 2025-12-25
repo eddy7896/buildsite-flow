@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { selectOne } from '@/services/api/postgresql-service';
 
 const Reports = () => {
   const navigate = useNavigate();
@@ -67,7 +68,6 @@ const Reports = () => {
     const fetchProfileId = async () => {
       if (user?.id) {
         try {
-          const { selectOne } = await import('@/services/api/postgresql-service');
           const profileData = await selectOne('profiles', { user_id: user.id });
           if (profileData?.id) {
             setProfileId(profileData.id);

@@ -2,6 +2,8 @@
  * Centralized Error Handling Middleware
  */
 
+const logger = require('../utils/logger');
+
 /**
  * Async error handler wrapper
  * Wraps async route handlers to catch errors and pass them to error handler
@@ -22,10 +24,17 @@ function asyncHandler(fn) {
  * @param {Function} next - Express next function
  */
 function errorHandler(err, req, res, next) {
-  console.error('[API] Error:', err);
-  if (err.stack) {
-    console.error('[API] Stack:', err.stack);
-  }
+  // Log error with structured logging
+  logger.error('API Error', {
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    ip: req.ip || req.connection.remoteAddress,
+    userId: req.user?.id,
+    agencyDatabase: req.user?.agencyDatabase,
+    statusCode: err.statusCode || 500,
+  });
 
   // Ensure CORS headers are set even on errors
   const origin = req.headers.origin;

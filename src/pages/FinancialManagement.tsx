@@ -1042,7 +1042,6 @@ const FinancialManagement = () => {
   const handleEditEntry = async (entry: any) => {
     try {
       // Fetch entry with lines
-      const { selectRecords } = await import('@/services/api/postgresql-service');
       const lines = await selectRecords('journal_entry_lines', {
         where: { journal_entry_id: entry.id },
         orderBy: 'line_number ASC',
@@ -2004,7 +2003,6 @@ const FinancialManagement = () => {
                         onClick={async () => {
                           try {
                             // Fetch full journal entry details
-                            const { selectOne, selectRecords } = await import('@/services/api/postgresql-service');
                             const entry = await selectOne('journal_entries', { entry_number: transaction.entry_number });
                             if (entry) {
                               const lines = await selectRecords('journal_entry_lines', {

@@ -5,6 +5,7 @@
 
 const { Server } = require('socket.io');
 const { authenticate } = require('../middleware/authMiddleware');
+const { buildCorsOrigins, PORTS } = require('../config/ports');
 
 // Store active connections
 const activeConnections = new Map(); // userId -> Set of socketIds
@@ -15,28 +16,28 @@ const typingUsers = new Map(); // threadId -> Set of userIds
  * Initialize WebSocket server
  */
 function initializeWebSocket(server) {
-  // Get frontend URL from environment (Vite dev server typically runs on 5173)
+  // Get frontend URL from environment
   // Parse CORS origins from environment variable (same as main CORS config)
-  const rawOrigins = process.env.CORS_ORIGINS || '';
-  const envAllowedOrigins = rawOrigins
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
+  const isDevelopment = process.env.NODE_ENV !== 'production' || 
+                        process.env.VITE_APP_ENVIRONMENT === 'development';
   
-  // Common development origins
+  // Build CORS origins dynamically from port configuration
+  const dynamicOrigins = buildCorsOrigins(isDevelopment);
+  
+  // Common development origins (built from port configuration)
   const commonDevOrigins = [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:3000',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:5174',
-    'http://127.0.0.1:3000',
+    `http://localhost:${PORTS.FRONTEND_DEV}`,
+    `http://localhost:${PORTS.FRONTEND_DEV + 1}`,
+    `http://localhost:${PORTS.BACKEND}`,
+    `http://127.0.0.1:${PORTS.FRONTEND_DEV}`,
+    `http://127.0.0.1:${PORTS.FRONTEND_DEV + 1}`,
+    `http://127.0.0.1:${PORTS.BACKEND}`,
   ];
   
   // Combine all allowed origins
   const allowedOrigins = [
+    ...dynamicOrigins,
     ...commonDevOrigins,
-    ...envAllowedOrigins,
     process.env.VITE_FRONTEND_URL,
     process.env.VITE_API_URL?.replace('/api', ''),
   ].filter(Boolean);

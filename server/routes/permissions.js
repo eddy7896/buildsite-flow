@@ -12,8 +12,26 @@ const { Pool } = require('pg');
 
 // Helper to get agency database connection
 async function getAgencyDb(agencyDatabase) {
-  const { host, port, user, password } = parseDatabaseUrl();
-  const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
+  if (!agencyDatabase || typeof agencyDatabase !== 'string') {
+    throw new Error('Agency database name is required');
+  }
+  
+  const dbConfig = parseDatabaseUrl();
+  
+  // Validate all required fields are present
+  if (!dbConfig.host || !dbConfig.user || dbConfig.password === undefined || !dbConfig.port) {
+    throw new Error('Invalid database configuration: missing required connection parameters');
+  }
+  
+  // URL-encode password to handle special characters
+  const encodedPassword = encodeURIComponent(dbConfig.password);
+  const agencyDbUrl = `postgresql://${dbConfig.user}:${encodedPassword}@${dbConfig.host}:${dbConfig.port}/${agencyDatabase}`;
+  
+  // Validate connection string is not undefined
+  if (!agencyDbUrl || agencyDbUrl.includes('undefined')) {
+    throw new Error('Failed to construct valid database connection string');
+  }
+  
   return new Pool({ connectionString: agencyDbUrl, max: 1 });
 }
 

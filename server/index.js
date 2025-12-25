@@ -6,10 +6,76 @@
 // Load environment variables from .env file (must be first)
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
+/**
+ * Validate required secrets on startup
+ * Prevents server from starting with default or missing secrets
+ * 
+ * Note: In Docker, environment variables are set by docker-compose.yml
+ * In local development, they come from .env file via dotenv
+ */
+function validateRequiredSecrets() {
+  // Check all possible environment variable names
+  const postgresPassword = process.env.POSTGRES_PASSWORD || 
+                          process.env.DATABASE_URL?.match(/:(.+?)@/)?.[1] ||
+                          process.env.VITE_DATABASE_URL?.match(/:(.+?)@/)?.[1];
+  
+  const jwtSecret = process.env.VITE_JWT_SECRET || 
+                   process.env.JWT_SECRET;
+
+  const required = {
+    POSTGRES_PASSWORD: postgresPassword,
+    VITE_JWT_SECRET: jwtSecret,
+  };
+
+  const missing = [];
+  const weak = [];
+  const defaultValues = [
+    'admin',
+    'your-super-secret-jwt-key-change-this-in-production',
+    'change-this-in-production',
+  ];
+
+  for (const [key, value] of Object.entries(required)) {
+    if (!value || value.trim() === '') {
+      missing.push(key);
+    } else if (value.length < 32) {
+      weak.push(key);
+    } else if (defaultValues.some(defaultVal => value.includes(defaultVal))) {
+      weak.push(`${key} (appears to be using default value)`);
+    }
+  }
+
+  if (missing.length > 0) {
+    // Use console.error here because logger might not be initialized yet
+    console.error('❌ CRITICAL: Missing required secrets:', missing.join(', '));
+    console.error('   Please set these in your .env file or docker-compose.yml');
+    console.error('   Generate secrets with: openssl rand -base64 32');
+    console.error('');
+    console.error('   For Docker: Set in .env file and docker-compose.yml will use them');
+    console.error('   For local: Set in .env file in project root');
+    process.exit(1);
+  }
+
+  if (weak.length > 0) {
+    // Use console.error here because logger might not be initialized yet
+    console.error('❌ CRITICAL: Weak or default secrets detected:', weak.join(', '));
+    console.error('   Secrets must be at least 32 characters and not use default values');
+    console.error('   Generate strong secrets with: openssl rand -base64 32');
+    process.exit(1);
+  }
+
+  logger.info('All required secrets validated');
+}
+
+// Validate secrets before starting server
+validateRequiredSecrets();
+
 const express = require('express');
 const http = require('http');
+const logger = require('./utils/logger');
 const { configureMiddleware } = require('./config/middleware');
 const { errorHandler } = require('./middleware/errorHandler');
+const requestLogger = require('./middleware/requestLogger');
 const { PORT, DATABASE_URL } = require('./config/constants');
 const { getRedisClient, isRedisAvailable } = require('./config/redis');
 
@@ -49,12 +115,20 @@ const workflowsRoutes = require('./routes/workflows');
 const integrationsRoutes = require('./routes/integrations');
 const settingsRoutes = require('./routes/settings');
 const pageCatalogRoutes = require('./routes/pageCatalog');
+const schemaAdminRoutes = require('./routes/schemaAdmin');
 
 // Create Express app
 const app = express();
 
 // Configure middleware
 configureMiddleware(app);
+
+// Request logging (after CORS, before routes)
+app.use(requestLogger);
+
+// Apply general API rate limiting (after CORS but before routes)
+const { apiLimiter } = require('./middleware/rateLimiter');
+app.use('/api', apiLimiter);
 
 // Health check route
 app.use('/health', healthRoutes);
@@ -94,6 +168,8 @@ app.use('/api/workflows', workflowsRoutes);
 app.use('/api/integrations', integrationsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/system/page-catalog', pageCatalogRoutes);
+app.use('/health', schemaAdminRoutes); // Health check routes (no /api prefix)
+app.use('/admin', schemaAdminRoutes); // Admin routes (no /api prefix)
 
 // Global error handler (must be last)
 app.use(errorHandler);
@@ -103,12 +179,12 @@ async function initializeRedis() {
   try {
     const available = await isRedisAvailable();
     if (available) {
-      console.log('✅ Redis cache initialized');
+      logger.info('Redis cache initialized');
     } else {
-      console.log('⚠️  Redis not available, using in-memory cache fallback');
+      logger.warn('Redis not available, using in-memory cache fallback');
     }
   } catch (error) {
-    console.warn('⚠️  Redis initialization warning:', error.message);
+    logger.warn('Redis initialization warning', { error: error.message });
   }
 }
 
@@ -121,7 +197,7 @@ function initializeBackups() {
   // Schedule daily backups
   cron.schedule(BACKUP_SCHEDULE, async () => {
     try {
-      console.log('[Backup] Starting scheduled backup...');
+      logger.info('Starting scheduled backup');
       const dbConfig = parseDatabaseUrl();
       const dbName = dbConfig.database || 'buildflow_db';
       await createBackup(dbName, 'full');
@@ -129,14 +205,14 @@ function initializeBackups() {
       // Clean up old backups
       const deleted = await cleanupOldBackups();
       if (deleted > 0) {
-        console.log(`[Backup] Cleaned up ${deleted} old backup(s)`);
+        logger.info('Cleaned up old backups', { count: deleted });
       }
     } catch (error) {
-      console.error('[Backup] Scheduled backup failed:', error);
+      logger.error('Scheduled backup failed', { error: error.message, stack: error.stack });
     }
   });
   
-  console.log(`✅ Automated backups scheduled (${BACKUP_SCHEDULE})`);
+  logger.info('Automated backups scheduled', { schedule: BACKUP_SCHEDULE });
 }
 
 // Create HTTP server for Socket.io
@@ -151,13 +227,16 @@ global.io = io;
 
 // Start server
 server.listen(PORT, '0.0.0.0', async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log('   Ensure VITE_API_URL points at this host/port for frontend calls.');
+  logger.info('Server started', {
+    port: PORT,
+    environment: process.env.NODE_ENV || 'development',
+  });
+  
   try {
     const dbHostInfo = DATABASE_URL.split('@')[1] || DATABASE_URL;
-    console.log(`📊 Database: ${dbHostInfo}`);
-  } catch {
-    console.log(`📊 Database URL: ${DATABASE_URL}`);
+    logger.info('Database connected', { host: dbHostInfo });
+  } catch (error) {
+    logger.warn('Database connection info unavailable', { error: error.message });
   }
   
   // Initialize Redis
@@ -170,20 +249,36 @@ server.listen(PORT, '0.0.0.0', async () => {
   const { initializeScheduledReports } = require('./services/scheduledReportService');
   initializeScheduledReports();
   
-  console.log('✅ WebSocket server initialized');
+  logger.info('WebSocket server initialized');
 });
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, closing Redis connection...');
+  logger.info('SIGTERM received, shutting down gracefully...');
   const { closeRedisConnection } = require('./config/redis');
   await closeRedisConnection();
+  logger.info('Shutdown complete');
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  console.log('SIGINT received, closing Redis connection...');
+  logger.info('SIGINT received, shutting down gracefully...');
   const { closeRedisConnection } = require('./config/redis');
   await closeRedisConnection();
+  logger.info('Shutdown complete');
   process.exit(0);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception', { error: error.message, stack: error.stack });
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection', { 
+    reason: reason?.message || reason, 
+    stack: reason?.stack,
+  });
 });

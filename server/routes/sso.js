@@ -11,6 +11,7 @@ const ssoService = require('../services/ssoService');
 const { generateToken, formatUserResponse } = require('../services/authService');
 const { Pool } = require('pg');
 const { parseDatabaseUrl } = require('../utils/poolManager');
+const { getFrontendUrl } = require('../config/ports');
 
 /**
  * GET /api/sso/providers
@@ -252,7 +253,11 @@ router.get('/oauth/:provider/callback', asyncHandler(async (req, res) => {
   const formattedUser = formatUserResponse(userData.user, userData.profile, userData.roles);
 
   // Redirect to frontend with token
-  const frontendRedirect = redirectUri || `${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/callback`;
+  // Use FRONTEND_URL or build from port configuration
+  const isDevelopment = process.env.NODE_ENV !== 'production' || 
+                        process.env.VITE_APP_ENVIRONMENT === 'development';
+  const defaultFrontendUrl = getFrontendUrl(isDevelopment);
+  const frontendRedirect = redirectUri || `${process.env.FRONTEND_URL || defaultFrontendUrl}/auth/callback`;
   const redirectUrl = new URL(frontendRedirect);
   redirectUrl.searchParams.set('token', token);
   redirectUrl.searchParams.set('user', JSON.stringify(formattedUser));

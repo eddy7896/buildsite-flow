@@ -5,6 +5,7 @@
 const cors = require('cors');
 const express = require('express');
 const { JSON_LIMIT } = require('./constants');
+const { buildCorsOrigins, PORTS } = require('./ports');
 
 /**
  * Build CORS options from environment variables.
@@ -24,45 +25,59 @@ function buildCorsOptions() {
   const isDevelopment = process.env.NODE_ENV !== 'production' || 
                         process.env.VITE_APP_ENVIRONMENT === 'development';
   
+  // Build CORS origins dynamically from port configuration
+  const dynamicOrigins = buildCorsOrigins(isDevelopment);
+  
   // Common development origins (Vite, React, etc.) - always allow localhost for local dev/testing
+  // These are now built dynamically from port configuration
   const commonDevOrigins = [
-    'http://localhost:5173',  // Vite default
-    'http://localhost:5174',  // Vite alternate
-    'http://localhost:3000',  // React default
-    'http://localhost:3001',  // React alternate
+    `http://localhost:${PORTS.FRONTEND_DEV}`,  // Vite default
+    `http://localhost:${PORTS.FRONTEND_DEV + 1}`,  // Vite alternate
+    `http://localhost:${PORTS.BACKEND}`,  // Backend default
+    `http://localhost:${PORTS.BACKEND + 1}`,  // Backend alternate
     'http://localhost:8080',  // Vue/other
     'http://localhost:8081',  // Vue alternate
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:5174',
-    'http://127.0.0.1:3000',
+    `http://127.0.0.1:${PORTS.FRONTEND_DEV}`,
+    `http://127.0.0.1:${PORTS.FRONTEND_DEV + 1}`,
+    `http://127.0.0.1:${PORTS.BACKEND}`,
   ];
 
-  // Helper to check if origin is localhost or private IP
+  // Helper to check if origin is localhost (strict check - only specific ports)
   const isLocalhost = (origin) => {
     if (!origin) return false;
     try {
       const url = new URL(origin);
       const hostname = url.hostname.toLowerCase();
-      return hostname === 'localhost' || 
-             hostname === '127.0.0.1' || 
-             hostname.startsWith('192.168.') || 
+      const port = url.port || (url.protocol === 'https:' ? '443' : '80');
+      
+      // Only allow specific localhost ports for development
+      const allowedLocalhostPorts = [
+        '5173', // Vite default
+        '5174', // Vite alternate
+        '3000', // Backend
+        '3001', // Backend alternate
+        '8080', // Alternative dev server
+        '8081', // Alternative dev server
+        '80',   // HTTP default
+        '443',  // HTTPS default
+      ];
+      
+      // Strict localhost check - only allow if port is in whitelist
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return allowedLocalhostPorts.includes(port) || isDevelopment;
+      }
+      
+      // In production, don't allow private IP ranges
+      if (!isDevelopment) {
+        return false;
+      }
+      
+      // In development only, allow private IPs
+      return hostname.startsWith('192.168.') || 
              hostname.startsWith('10.') ||
-             hostname.startsWith('172.16.') ||
-             hostname.startsWith('172.17.') ||
-             hostname.startsWith('172.18.') ||
-             hostname.startsWith('172.19.') ||
-             hostname.startsWith('172.20.') ||
-             hostname.startsWith('172.21.') ||
-             hostname.startsWith('172.22.') ||
-             hostname.startsWith('172.23.') ||
-             hostname.startsWith('172.24.') ||
-             hostname.startsWith('172.25.') ||
-             hostname.startsWith('172.26.') ||
-             hostname.startsWith('172.27.') ||
-             hostname.startsWith('172.28.') ||
-             hostname.startsWith('172.29.') ||
-             hostname.startsWith('172.30.') ||
-             hostname.startsWith('172.31.');
+             (hostname.startsWith('172.') && 
+              parseInt(hostname.split('.')[1] || '0', 10) >= 16 && 
+              parseInt(hostname.split('.')[1] || '0', 10) <= 31);
     } catch {
       return false;
     }
@@ -105,11 +120,14 @@ function buildCorsOptions() {
     }
   };
 
+  // Merge dynamic origins with environment origins
+  const allOrigins = [...new Set([...dynamicOrigins, ...allowedOrigins, ...commonDevOrigins])];
+  
   // In development, allow all if no explicit origins, or merge with common dev origins
-  const allowAll = isDevelopment && allowedOrigins.length === 0;
-  const finalAllowedOrigins = isDevelopment && allowedOrigins.length > 0
-    ? [...new Set([...allowedOrigins, ...commonDevOrigins])]
-    : allowedOrigins;
+  const allowAll = isDevelopment && allOrigins.length === 0;
+  const finalAllowedOrigins = isDevelopment && allOrigins.length > 0
+    ? allOrigins
+    : allOrigins.length > 0 ? allOrigins : allowedOrigins;
 
   /** @type {cors.CorsOptions} */
   const corsOptions = {

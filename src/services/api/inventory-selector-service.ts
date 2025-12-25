@@ -12,7 +12,7 @@
  * - Performance optimized with proper indexing
  */
 
-import { selectRecords } from './postgresql-service';
+import { selectRecords, selectOne } from './postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 
 /**
@@ -147,7 +147,6 @@ export async function getProductsForSelection(
         let categoryName: string | null = null;
         if (product.category_id) {
           try {
-            const { selectOne } = await import('./postgresql-service');
             const category = await selectOne('product_categories', { id: product.category_id });
             if (category) {
               categoryName = category.name || null;
@@ -226,7 +225,6 @@ export async function getProductById(
   }
 
   try {
-    const { selectOne } = await import('./postgresql-service');
     const product = await selectOne('products', {
       id: productId,
       agency_id: agencyId
@@ -240,8 +238,7 @@ export async function getProductById(
     let categoryName: string | null = null;
     if (product.category_id) {
       try {
-        const { selectOne: selectOneCategory } = await import('./postgresql-service');
-        const category = await selectOneCategory('product_categories', { id: product.category_id });
+        const category = await selectOne('product_categories', { id: product.category_id });
         if (category) {
           categoryName = category.name || null;
         }

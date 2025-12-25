@@ -326,23 +326,44 @@ router.get(
   authenticate,
   requireSuperAdmin,
   asyncHandler(async (req, res) => {
-    const client = await pool.connect();
+    let client;
+    try {
+      client = await pool.connect();
+    } catch (connectError) {
+      console.error('[System] Failed to get database connection:', connectError);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'DATABASE_CONNECTION_ERROR',
+          message: 'Failed to connect to database',
+          details: connectError.message,
+        },
+        message: 'Failed to load system metrics',
+      });
+    }
 
     try {
       // Agencies summary
-      const agenciesResult = await client.query(
-        `SELECT 
-           id,
-           name,
-           domain,
-           subscription_plan,
-           max_users,
-           is_active,
-           created_at
-         FROM public.agencies
-         ORDER BY created_at DESC`
-      );
-      const agencies = agenciesResult.rows || [];
+      let agencies = [];
+      try {
+        const agenciesResult = await client.query(
+          `SELECT 
+             id,
+             name,
+             domain,
+             subscription_plan,
+             max_users,
+             is_active,
+             created_at
+           FROM public.agencies
+           ORDER BY created_at DESC`
+        );
+        agencies = agenciesResult.rows || [];
+      } catch (agenciesError) {
+        console.error('[System] Error fetching agencies:', agenciesError);
+        // Continue with empty agencies array
+        agencies = [];
+      }
 
       // Total users - aggregate from all agency databases
       // Note: profiles table exists in agency databases, not main database
@@ -452,17 +473,22 @@ router.get(
       });
     } catch (error) {
       console.error('[System] Error computing system metrics:', error);
+      console.error('[System] Error stack:', error.stack);
+      console.error('[System] Error code:', error.code);
       return res.status(500).json({
         success: false,
         error: {
           code: 'INTERNAL_ERROR',
           message: 'Failed to load system metrics',
           details: error.message,
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
         },
         message: 'Failed to load system metrics',
       });
     } finally {
-      client.release();
+      if (client) {
+        client.release();
+      }
     }
   })
 );

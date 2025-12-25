@@ -71,12 +71,15 @@ router.post('/setup', authenticate, requireAgencyContext, asyncHandler(async (re
     });
   }
 
+  let agencyPool;
+  let agencyClient;
+
   try {
     // Connect to agency database
     const { host, port, user, password } = parseDatabaseUrl();
     const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-    const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
-    const agencyClient = await agencyPool.connect();
+    agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+    agencyClient = await agencyPool.connect();
 
     try {
       // Ensure 2FA columns exist
@@ -126,11 +129,16 @@ router.post('/setup', authenticate, requireAgencyContext, asyncHandler(async (re
         message: '2FA setup initiated. Scan QR code and verify with a token to enable.',
       });
     } finally {
-      agencyClient.release();
-      await agencyPool.end();
+      if (agencyClient) {
+        agencyClient.release();
+      }
+      if (agencyPool) {
+        await agencyPool.end();
+      }
     }
   } catch (error) {
     console.error('[2FA] Setup error:', error);
+    console.error('[2FA] Setup error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to setup 2FA',
@@ -438,12 +446,23 @@ router.get('/status', authenticate, requireAgencyContext, asyncHandler(async (re
   const userId = req.user.id;
   const agencyDatabase = req.user.agencyDatabase;
 
-    try {
-      // Connect to agency database
-      const { host, port, user, password } = parseDatabaseUrl();
-      const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-      const agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
-      const agencyClient = await agencyPool.connect();
+  if (!agencyDatabase) {
+    return res.status(403).json({
+      success: false,
+      error: 'Agency context required',
+      message: 'Agency context is required for 2FA status',
+    });
+  }
+
+  let agencyPool;
+  let agencyClient;
+
+  try {
+    // Connect to agency database
+    const { host, port, user, password } = parseDatabaseUrl();
+    const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
+    agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+    agencyClient = await agencyPool.connect();
 
     try {
       // Ensure 2FA columns exist
@@ -472,11 +491,16 @@ router.get('/status', authenticate, requireAgencyContext, asyncHandler(async (re
         },
       });
     } finally {
-      agencyClient.release();
-      await agencyPool.end();
+      if (agencyClient) {
+        agencyClient.release();
+      }
+      if (agencyPool) {
+        await agencyPool.end();
+      }
     }
   } catch (error) {
     console.error('[2FA] Status error:', error);
+    console.error('[2FA] Status error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get 2FA status',

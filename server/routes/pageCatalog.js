@@ -568,9 +568,13 @@ router.get(
   requireSuperAdmin,
   asyncHandler(async (req, res) => {
     const { status, agency_id } = req.query;
+    const { parsePagination, buildPaginatedResponse } = require('../utils/paginationHelper');
+    const { page, limit, offset } = parsePagination(req.query, { defaultLimit: 50, maxLimit: 100 });
+    
     const client = await pool.connect();
 
     try {
+      // Build main query with pagination
       let query = `
         SELECT 
           apr.*,
@@ -604,12 +608,43 @@ router.get(
       }
 
       query += ` ORDER BY apr.created_at DESC`;
+      
+      // Add pagination
+      paramCount++;
+      query += ` LIMIT $${paramCount}`;
+      params.push(limit);
+      paramCount++;
+      query += ` OFFSET $${paramCount}`;
+      params.push(offset);
 
       const result = await client.query(query, params);
+      
+      // Get total count for pagination
+      let countQuery = `
+        SELECT COUNT(*) as total
+        FROM public.agency_page_requests apr
+        WHERE 1=1
+      `;
+      const countParams = [];
+      let countParamCount = 0;
+      
+      if (status) {
+        countParamCount++;
+        countQuery += ` AND apr.status = $${countParamCount}`;
+        countParams.push(status);
+      }
+      
+      if (agency_id) {
+        countParamCount++;
+        countQuery += ` AND apr.agency_id = $${countParamCount}`;
+        countParams.push(agency_id);
+      }
+      
+      const countResult = await client.query(countQuery, countParams);
+      const total = parseInt(countResult.rows[0].total, 10);
 
-      res.json({
-        success: true,
-        data: result.rows.map(row => ({
+      res.json(buildPaginatedResponse(
+        result.rows.map(row => ({
           id: row.id,
           agency_id: row.agency_id,
           agency_name: row.agency_name,
@@ -627,8 +662,9 @@ router.get(
           reviewed_at: row.reviewed_at,
           created_at: row.created_at,
           updated_at: row.updated_at
-        }))
-      });
+        })),
+        { page, limit, total }
+      ));
     } finally {
       client.release();
     }

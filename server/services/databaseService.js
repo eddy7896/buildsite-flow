@@ -20,10 +20,12 @@ async function executeQuery(sql, params, agencyDatabase, userId, retryCount = 0)
   const MAX_RETRIES = 2;
   const RETRY_DELAY = 1000; // 1 second
 
-  // Auto-repair schema if needed
-  if (agencyDatabase) {
-    await ensureAgencySchema(agencyDatabase);
-  }
+  // NOTE: Schema validation is NO LONGER called on every query for performance.
+  // It's only called:
+  // - On agency creation
+  // - On application startup
+  // - On manual admin trigger
+  // - When a query fails with schema-related error (see error handling below)
 
   const targetPool = getAgencyPool(agencyDatabase);
   const trimmedSql = sql.trim();
@@ -60,6 +62,77 @@ async function executeQuery(sql, params, agencyDatabase, userId, retryCount = 0)
       return await targetPool.query(trimmedSql, params);
     }
   } catch (error) {
+    // Check if error is schema-related (table/function doesn't exist)
+    // ONLY these specific PostgreSQL error codes indicate schema issues
+    const isSchemaError = error.code === '42P01' || // undefined_table
+                          error.code === '42883' ||  // undefined_function
+                          error.code === '42704';    // undefined_object
+    
+    // CRITICAL: Only attempt schema repair for ACTUAL schema errors
+    // Do NOT attempt repair for connection errors, permission errors, or other issues
+    if (isSchemaError && agencyDatabase && retryCount === 0 && process.env.DISABLE_SCHEMA_CHECKS !== 'true') {
+      // Circuit breaker: Track recent schema repair attempts per agency
+      const circuitBreakerKey = `schema_repair_${agencyDatabase}`;
+      const now = Date.now();
+      const recentAttempts = global.schemaRepairAttempts || new Map();
+      
+      // Get last attempt time for this agency
+      const lastAttempt = recentAttempts.get(circuitBreakerKey) || 0;
+      const timeSinceLastAttempt = now - lastAttempt;
+      
+      // Only attempt repair if at least 30 seconds have passed since last attempt
+      // This prevents schema validation loops
+      const MIN_RETRY_INTERVAL = 30000; // 30 seconds
+      
+      if (timeSinceLastAttempt < MIN_RETRY_INTERVAL) {
+        console.warn(`[API] Schema repair skipped: Too soon since last attempt (${Math.round(timeSinceLastAttempt/1000)}s ago). Circuit breaker active.`);
+        // Throw original error without attempting repair
+        throw error;
+      }
+      
+      // Record this attempt
+      if (!global.schemaRepairAttempts) {
+        global.schemaRepairAttempts = new Map();
+      }
+      global.schemaRepairAttempts.set(circuitBreakerKey, now);
+      
+      console.log(`[API] Schema error detected (${error.code}), attempting schema repair...`);
+      try {
+        // Force schema validation/repair with timeout protection
+        const repairPromise = ensureAgencySchema(agencyDatabase, { force: true });
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Schema repair timeout')), 30000)
+        );
+        
+        await Promise.race([repairPromise, timeoutPromise]);
+        
+        // Retry the query once after repair
+        return executeQuery(sql, params, agencyDatabase, userId, retryCount + 1);
+      } catch (schemaError) {
+        // Safely extract error message
+        const schemaErrorMessage = schemaError?.message || String(schemaError) || 'Unknown schema error';
+        const schemaErrorCode = schemaError?.code;
+        
+        // Only log if it's not a timeout (timeouts are expected)
+        if (!schemaErrorMessage.includes('timeout')) {
+          console.warn(`[API] Schema repair failed:`, schemaErrorMessage, schemaErrorCode ? `(code: ${schemaErrorCode})` : '');
+        }
+        
+        // If schema repair itself fails, don't retry again for this agency for a while
+        // This prevents infinite loops
+        // Mark as failed in circuit breaker to prevent immediate retries
+        if (!global.schemaRepairAttempts) {
+          global.schemaRepairAttempts = new Map();
+        }
+        // Set a longer cooldown for failed repairs (5 minutes)
+        global.schemaRepairAttempts.set(circuitBreakerKey, now + (5 * 60 * 1000));
+        
+        console.warn(`[API] Schema repair failed for ${agencyDatabase}, will not retry for 5 minutes`);
+        
+        // Fall through to throw original error (not the schema error, to avoid masking the real issue)
+      }
+    }
+
     // Retry on connection timeout or connection errors
     const isConnectionError = 
       error.message?.includes('timeout') ||

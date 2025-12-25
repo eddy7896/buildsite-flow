@@ -80,6 +80,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { selectRecords } from '@/services/api/postgresql-service';
+import { getAgencyId } from '@/utils/agencyUtils';
 import {
   PieChart,
   Pie,
@@ -347,7 +349,6 @@ export default function ProjectManagement() {
 
   const fetchResources = useCallback(async () => {
     try {
-      const { selectRecords } = await import('@/services/api/postgresql-service');
       const { getAgencyId } = await import('@/utils/agencyUtils');
       const agencyId = await getAgencyId(profile, user?.id);
       

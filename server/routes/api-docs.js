@@ -5,6 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
+const { getBackendUrl } = require('../config/ports');
 
 /**
  * GET /api-docs
@@ -22,7 +23,7 @@ router.get('/', (req, res) => {
     },
     servers: [
       {
-        url: process.env.API_URL || 'http://localhost:3000',
+        url: process.env.API_URL || getBackendUrl(process.env.NODE_ENV !== 'production'),
         description: 'API Server',
       },
     ],

@@ -15,6 +15,7 @@ import { PermissionSettings } from '@/components/permissions/PermissionSettings'
 import * as permissionsService from '@/services/permissions';
 import { countRecords } from '@/services/api/postgresql-service';
 import { toast } from 'sonner';
+import { logError, logWarn } from '@/utils/consoleLogger';
 
 const AdvancedPermissions = () => {
   const { userRole } = useAuth();

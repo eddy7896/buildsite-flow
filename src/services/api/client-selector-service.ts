@@ -12,7 +12,7 @@
  * - Performance optimized with proper indexing
  */
 
-import { selectRecords } from './postgresql-service';
+import { selectRecords, selectOne } from './postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 
 /**
@@ -188,7 +188,6 @@ export async function getClientById(
   }
 
   try {
-    const { selectOne } = await import('./postgresql-service');
     const client = await selectOne('clients', {
       id: clientId,
       agency_id: agencyId

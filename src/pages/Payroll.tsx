@@ -561,7 +561,6 @@ const Payroll = () => {
 
     setBulkActionLoading(true);
     try {
-      const { updateRecord } = await import('@/services/api/postgresql-service');
       
       const updates = Array.from(selectedRecords).map(id => 
         updateRecord('payroll', { status: 'approved' }, { id }, user?.id)
@@ -600,7 +599,6 @@ const Payroll = () => {
 
     setBulkActionLoading(true);
     try {
-      const { updateRecord } = await import('@/services/api/postgresql-service');
       
       const updates = Array.from(selectedRecords).map(id => 
         updateRecord('payroll', { 

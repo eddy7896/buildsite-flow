@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/database';
-import { selectRecords } from '@/services/api/postgresql-service';
+import { selectRecords, updateRecord } from '@/services/api/postgresql-service';
 import JobFormDialog from '@/components/JobFormDialog';
 import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 import JobCostItemsDialog from '@/components/JobCostItemsDialog';
@@ -138,7 +138,6 @@ const JobCosting = () => {
           return sum + (parseFloat(item.total_cost?.toString() || '0') || 0);
         }, 0);
 
-        const { updateRecord } = await import('@/services/api/postgresql-service');
         await updateRecord('jobs', { actual_cost: totalCost }, { id: selectedJobForCosts.id }, user?.id);
 
         // Update the selected job in state

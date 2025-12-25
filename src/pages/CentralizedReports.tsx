@@ -17,6 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
 import { useAppStore } from '@/stores/appStore';
 import { pgClient } from '@/integrations/postgresql/client';
+import { selectOne } from '@/services/api/postgresql-service';
 
 // Report Template Interface
 interface ReportTemplate {
@@ -279,7 +280,6 @@ const CentralizedReports = () => {
     setLoading(prev => ({ ...prev, custom: true }));
     try {
       // Get profile ID first
-      const { selectOne } = await import('@/services/api/postgresql-service');
       const profileData = await selectOne('profiles', { user_id: userId });
       
       if (profileData?.id) {
@@ -336,7 +336,6 @@ const CentralizedReports = () => {
     setLoading(prev => ({ ...prev, generating: true }));
     try {
       // Get profile ID
-      const { selectOne } = await import('@/services/api/postgresql-service');
       const profileData = await selectOne('profiles', { user_id: userId });
       
       if (!profileData?.id) {
@@ -636,7 +635,6 @@ const CentralizedReports = () => {
     }
 
     try {
-      const { selectOne } = await import('@/services/api/postgresql-service');
       const profileData = await selectOne('profiles', { user_id: userId });
       
       if (!profileData?.id) {
