@@ -131,37 +131,56 @@ export function useAgencyPageRequests() {
   const [requests, setRequests] = useState<AgencyPageRequest[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const getAuthToken = useCallback(() => {
+    // Try both token keys for compatibility
+    return localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
+  }, []);
+
   const fetchRequests = useCallback(async () => {
     if (!user) return;
+
+    const token = getAuthToken();
+    if (!token) {
+      console.warn('[useAgencyPageRequests] No authentication token found');
+      return;
+    }
 
     setLoading(true);
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/system/page-catalog/agencies/me/page-requests`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
 
+      if (response.status === 401) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Authentication failed. Please log in again.');
+      }
+
       if (!response.ok) {
-        throw new Error('Failed to fetch page requests');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Failed to fetch page requests: ${response.statusText}`);
       }
 
       const data = await response.json();
       if (data.success) {
-        setRequests(data.data);
+        setRequests(data.data || []);
+      } else {
+        throw new Error(data.error?.message || 'Failed to fetch page requests');
       }
     } catch (error) {
       logError('Error fetching page requests:', error);
       toast({
         title: 'Error',
-        description: 'Failed to fetch page requests',
+        description: error instanceof Error ? error.message : 'Failed to fetch page requests',
         variant: 'destructive'
       });
     } finally {
       setLoading(false);
     }
-  }, [user, toast]);
+  }, [user, toast, getAuthToken]);
 
   useEffect(() => {
     fetchRequests();
@@ -170,11 +189,21 @@ export function useAgencyPageRequests() {
   const requestPage = useCallback(async (pageId: string, reason?: string) => {
     if (!user) return;
 
+    const token = getAuthToken();
+    if (!token) {
+      toast({
+        title: 'Error',
+        description: 'Authentication token not found',
+        variant: 'destructive'
+      });
+      throw new Error('Authentication token not found');
+    }
+
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/system/page-catalog/agencies/me/page-requests`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -183,9 +212,14 @@ export function useAgencyPageRequests() {
         })
       });
 
+      if (response.status === 401) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Authentication failed. Please log in again.');
+      }
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || 'Failed to request page');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Failed to request page');
       }
 
       const data = await response.json();
@@ -196,6 +230,8 @@ export function useAgencyPageRequests() {
         });
         await fetchRequests();
         return data.data;
+      } else {
+        throw new Error(data.error?.message || 'Failed to request page');
       }
     } catch (error: any) {
       toast({
@@ -205,7 +241,7 @@ export function useAgencyPageRequests() {
       });
       throw error;
     }
-  }, [user, fetchRequests, toast]);
+  }, [user, fetchRequests, toast, getAuthToken]);
 
   return {
     requests,

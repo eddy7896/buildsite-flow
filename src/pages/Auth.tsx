@@ -11,7 +11,7 @@ import { TwoFactorVerification } from '@/components/TwoFactorVerification';
 import { verifyTwoFactor } from '@/services/api/twoFactor-service';
 import { loginUser } from '@/services/api/auth-postgresql';
 import { 
-  Loader2, Building, CheckCircle2, ArrowRight, KeyRound, Mail,
+  Loader2, CheckCircle2, ArrowRight, KeyRound, Mail,
   Shield, BarChart3, Users, Briefcase, Eye, EyeOff
 } from 'lucide-react';
 
@@ -58,9 +58,11 @@ const Auth = () => {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="relative">
-            <div className="w-16 h-16 rounded-lg bg-primary flex items-center justify-center mx-auto">
-              <Building className="h-8 w-8 text-primary-foreground" />
-            </div>
+            <img 
+              src="/images/landing/logo.png" 
+              alt="BuildFlow Logo" 
+              className="h-16 w-auto object-contain mx-auto"
+            />
             <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-card rounded-full flex items-center justify-center border-2 border-background">
               <Loader2 className="h-3 w-3 animate-spin text-primary" />
             </div>
@@ -163,9 +165,11 @@ const Auth = () => {
           {/* Logo & Tagline */}
           <div className="mb-16">
             <div className="flex items-center gap-3 mb-8">
-              <div className="w-14 h-14 rounded-lg bg-primary flex items-center justify-center">
-                <Building className="h-7 w-7 text-primary-foreground" />
-              </div>
+              <img 
+                src="/images/landing/logo.png" 
+                alt="BuildFlow Logo" 
+                className="h-14 w-auto object-contain"
+              />
               <div>
                 <h1 className="text-3xl font-semibold text-foreground tracking-tight">
                   Build<span className="text-primary">Flow</span>
@@ -232,9 +236,11 @@ const Auth = () => {
         <div className="w-full max-w-md mx-auto">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-10">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-lg bg-primary mb-4">
-              <Building className="h-7 w-7 text-primary-foreground" />
-            </div>
+            <img 
+              src="/images/landing/logo.png" 
+              alt="BuildFlow Logo" 
+              className="h-14 w-auto object-contain mx-auto mb-4"
+            />
             <h1 className="text-2xl font-semibold text-foreground">
               Build<span className="text-primary">Flow</span>
             </h1>

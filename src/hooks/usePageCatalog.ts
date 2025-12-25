@@ -3,7 +3,7 @@
  * Manages page catalog operations (super admin only)
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { getApiBaseUrl } from '@/config/api';
 import { useAuth } from './useAuth';
 import { useToast } from './use-toast';
@@ -28,11 +28,38 @@ export function usePageCatalog(options: UsePageCatalogOptions = {}) {
     total: 0,
     totalPages: 0
   });
+  
+  // Prevent multiple simultaneous requests
+  const fetchingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const getAuthToken = useCallback(() => {
+    // Try both token keys for compatibility
+    return localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
+  }, []);
 
   const fetchPages = useCallback(async () => {
-    if (!user) return;
+    // Don't fetch if no user or already fetching
+    if (!user || fetchingRef.current) {
+      return;
+    }
 
+    const token = getAuthToken();
+    if (!token) {
+      console.warn('[usePageCatalog] No authentication token found');
+      return;
+    }
+
+    // Cancel any ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    // Create new abort controller
+    abortControllerRef.current = new AbortController();
+    fetchingRef.current = true;
     setLoading(true);
+
     try {
       const params = new URLSearchParams();
       if (options.category) params.append('category', options.category);
@@ -45,52 +72,88 @@ export function usePageCatalog(options: UsePageCatalogOptions = {}) {
         `${getApiBaseUrl()}/api/system/page-catalog?${params.toString()}`,
         {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
-          }
+          },
+          signal: abortControllerRef.current.signal
         }
       );
 
+      if (response.status === 401) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Authentication failed. Please log in again.');
+      }
+
       if (!response.ok) {
-        throw new Error('Failed to fetch pages');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Failed to fetch pages: ${response.statusText}`);
       }
 
       const data = await response.json();
       if (data.success) {
-        setPages(data.data);
+        setPages(data.data || []);
         if (data.pagination) {
           setPagination(data.pagination);
         }
+      } else {
+        throw new Error(data.error?.message || 'Failed to fetch page catalog');
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Don't show error for aborted requests
+      if (error.name === 'AbortError') {
+        return;
+      }
+      
       console.error('Error fetching pages:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch page catalog',
-        variant: 'destructive'
-      });
+      
+      // Only show toast for non-aborted errors
+      if (error.message) {
+        toast({
+          title: 'Error',
+          description: error.message,
+          variant: 'destructive'
+        });
+      }
     } finally {
+      fetchingRef.current = false;
       setLoading(false);
     }
-  }, [user, options, toast]);
+  }, [user, options.category, options.is_active, options.search, options.page, options.limit, getAuthToken, toast]);
 
   useEffect(() => {
     fetchPages();
+    
+    // Cleanup: abort request on unmount
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [fetchPages]);
 
   const createPage = useCallback(async (pageData: Partial<PageCatalog>) => {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found');
+    }
+
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/system/page-catalog`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(pageData)
       });
 
+      if (response.status === 401) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Authentication failed. Please log in again.');
+      }
+
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.error?.message || 'Failed to create page');
       }
 
@@ -102,6 +165,8 @@ export function usePageCatalog(options: UsePageCatalogOptions = {}) {
         });
         await fetchPages();
         return data.data;
+      } else {
+        throw new Error(data.error?.message || 'Failed to create page');
       }
     } catch (error: any) {
       toast({
@@ -111,21 +176,31 @@ export function usePageCatalog(options: UsePageCatalogOptions = {}) {
       });
       throw error;
     }
-  }, [fetchPages, toast]);
+  }, [fetchPages, toast, getAuthToken]);
 
   const updatePage = useCallback(async (id: string, updates: Partial<PageCatalog>) => {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found');
+    }
+
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/system/page-catalog/${id}`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(updates)
       });
 
+      if (response.status === 401) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Authentication failed. Please log in again.');
+      }
+
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.error?.message || 'Failed to update page');
       }
 
@@ -137,6 +212,8 @@ export function usePageCatalog(options: UsePageCatalogOptions = {}) {
         });
         await fetchPages();
         return data.data;
+      } else {
+        throw new Error(data.error?.message || 'Failed to update page');
       }
     } catch (error: any) {
       toast({
@@ -146,20 +223,30 @@ export function usePageCatalog(options: UsePageCatalogOptions = {}) {
       });
       throw error;
     }
-  }, [fetchPages, toast]);
+  }, [fetchPages, toast, getAuthToken]);
 
   const deletePage = useCallback(async (id: string) => {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found');
+    }
+
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/system/page-catalog/${id}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
 
+      if (response.status === 401) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Authentication failed. Please log in again.');
+      }
+
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.error?.message || 'Failed to delete page');
       }
 
@@ -170,6 +257,8 @@ export function usePageCatalog(options: UsePageCatalogOptions = {}) {
           description: 'Page deactivated successfully'
         });
         await fetchPages();
+      } else {
+        throw new Error(data.error?.message || 'Failed to delete page');
       }
     } catch (error: any) {
       toast({
@@ -179,27 +268,37 @@ export function usePageCatalog(options: UsePageCatalogOptions = {}) {
       });
       throw error;
     }
-  }, [fetchPages, toast]);
+  }, [fetchPages, toast, getAuthToken]);
 
   const createRecommendationRule = useCallback(async (
     pageId: string,
     rule: Partial<PageRecommendationRule>
   ) => {
+    const token = getAuthToken();
+    if (!token) {
+      throw new Error('Authentication token not found');
+    }
+
     try {
       const response = await fetch(
         `${getApiBaseUrl()}/api/system/page-catalog/${pageId}/recommendation-rules`,
         {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify(rule)
         }
       );
 
+      if (response.status === 401) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Authentication failed. Please log in again.');
+      }
+
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => ({}));
         throw new Error(error.error?.message || 'Failed to create recommendation rule');
       }
 
@@ -210,6 +309,8 @@ export function usePageCatalog(options: UsePageCatalogOptions = {}) {
           description: 'Recommendation rule created successfully'
         });
         return data.data;
+      } else {
+        throw new Error(data.error?.message || 'Failed to create recommendation rule');
       }
     } catch (error: any) {
       toast({
@@ -219,7 +320,7 @@ export function usePageCatalog(options: UsePageCatalogOptions = {}) {
       });
       throw error;
     }
-  }, [toast]);
+  }, [toast, getAuthToken]);
 
   return {
     pages,

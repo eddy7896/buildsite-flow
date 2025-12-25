@@ -93,9 +93,54 @@ router.get('/logs', authenticate, requireRole(['super_admin', 'ceo', 'admin']), 
     params.push(offset);
 
     const result = await client.query(query, params);
-    const countResult = await client.query(
-      query.replace(/SELECT \*/, 'SELECT COUNT(*)').replace(/ORDER BY.*LIMIT.*OFFSET.*/, '')
-    );
+    
+    // Build count query separately with same filters
+    let countQuery = 'SELECT COUNT(*) as count FROM public.audit_logs WHERE 1=1';
+    const countParams = [];
+    let countParamCount = 0;
+
+    if (table_name) {
+      countParamCount++;
+      countQuery += ` AND table_name = $${countParamCount}`;
+      countParams.push(table_name);
+    }
+
+    if (action) {
+      countParamCount++;
+      countQuery += ` AND action = $${countParamCount}`;
+      countParams.push(action);
+    }
+
+    if (user_id) {
+      countParamCount++;
+      countQuery += ` AND user_id = $${countParamCount}`;
+      countParams.push(user_id);
+    }
+
+    if (start_date) {
+      countParamCount++;
+      countQuery += ` AND created_at >= $${countParamCount}`;
+      countParams.push(start_date);
+    }
+
+    if (end_date) {
+      countParamCount++;
+      countQuery += ` AND created_at <= $${countParamCount}`;
+      countParams.push(end_date);
+    }
+
+    if (search) {
+      countParamCount++;
+      countQuery += ` AND (
+        table_name ILIKE $${countParamCount} OR
+        action ILIKE $${countParamCount} OR
+        CAST(old_values AS TEXT) ILIKE $${countParamCount} OR
+        CAST(new_values AS TEXT) ILIKE $${countParamCount}
+      )`;
+      countParams.push(`%${search}%`);
+    }
+
+    const countResult = await client.query(countQuery, countParams);
 
     res.json({
       success: true,

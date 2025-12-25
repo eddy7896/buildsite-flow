@@ -47,7 +47,20 @@ export default function PageRequestManagement() {
   const [costOverride, setCostOverride] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
 
+  const getAuthToken = () => {
+    // Try both token keys for compatibility
+    return localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
+  };
+
   const fetchRequests = async () => {
+    if (!user) return;
+    
+    const token = getAuthToken();
+    if (!token) {
+      console.warn('[PageRequestManagement] No authentication token found');
+      return;
+    }
+
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -59,25 +72,33 @@ export default function PageRequestManagement() {
         `${getApiBaseUrl()}/api/system/page-catalog/page-requests?${params.toString()}`,
         {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           }
         }
       );
 
+      if (response.status === 401) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Authentication failed. Please log in again.');
+      }
+
       if (!response.ok) {
-        throw new Error('Failed to fetch requests');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `Failed to fetch requests: ${response.statusText}`);
       }
 
       const data = await response.json();
       if (data.success) {
-        setRequests(data.data);
+        setRequests(data.data || []);
+      } else {
+        throw new Error(data.error?.message || 'Failed to fetch page requests');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching requests:', error);
       toast({
         title: 'Error',
-        description: 'Failed to fetch page requests',
+        description: error.message || 'Failed to fetch page requests',
         variant: 'destructive'
       });
     } finally {
@@ -95,13 +116,23 @@ export default function PageRequestManagement() {
   const handleApprove = async () => {
     if (!selectedRequest) return;
 
+    const token = getAuthToken();
+    if (!token) {
+      toast({
+        title: 'Error',
+        description: 'Authentication token not found',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
       const response = await fetch(
         `${getApiBaseUrl()}/api/system/page-catalog/page-requests/${selectedRequest.id}/approve`,
         {
           method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -110,9 +141,14 @@ export default function PageRequestManagement() {
         }
       );
 
+      if (response.status === 401) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Authentication failed. Please log in again.');
+      }
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || 'Failed to approve request');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Failed to approve request');
       }
 
       toast({
@@ -135,13 +171,23 @@ export default function PageRequestManagement() {
   const handleReject = async () => {
     if (!selectedRequest) return;
 
+    const token = getAuthToken();
+    if (!token) {
+      toast({
+        title: 'Error',
+        description: 'Authentication token not found',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
       const response = await fetch(
         `${getApiBaseUrl()}/api/system/page-catalog/page-requests/${selectedRequest.id}/reject`,
         {
           method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
@@ -150,9 +196,14 @@ export default function PageRequestManagement() {
         }
       );
 
+      if (response.status === 401) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Authentication failed. Please log in again.');
+      }
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error?.message || 'Failed to reject request');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || 'Failed to reject request');
       }
 
       toast({

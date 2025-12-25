@@ -7,7 +7,7 @@ const express = require('express');
 const router = express.Router();
 const { asyncHandler } = require('../middleware/errorHandler');
 const { pool } = require('../config/database');
-const { authenticate, requireSuperAdmin, requireAdmin } = require('../middleware/authMiddleware');
+const { authenticate, requireSuperAdmin, requireAdmin, requireRole } = require('../middleware/authMiddleware');
 const { getRecommendedPages, previewRecommendations } = require('../services/pageRecommendationService');
 
 // ============================================================================
@@ -17,11 +17,12 @@ const { getRecommendedPages, previewRecommendations } = require('../services/pag
 /**
  * GET /api/system/page-catalog
  * List all pages in catalog with optional filters
+ * Requires admin or super_admin role
  */
 router.get(
   '/',
   authenticate,
-  requireSuperAdmin,
+  requireRole(['super_admin', 'admin', 'ceo']),
   asyncHandler(async (req, res) => {
     const { category, is_active, search, page = 1, limit = 50 } = req.query;
     const client = await pool.connect();
@@ -561,15 +562,16 @@ router.post(
 /**
  * GET /api/system/page-requests
  * List all page requests
+ * Requires admin or super_admin role
  */
 router.get(
   '/page-requests',
   authenticate,
-  requireSuperAdmin,
+  requireRole(['super_admin', 'admin', 'ceo']),
   asyncHandler(async (req, res) => {
-    const { status, agency_id } = req.query;
-    const { parsePagination, buildPaginatedResponse } = require('../utils/paginationHelper');
-    const { page, limit, offset } = parsePagination(req.query, { defaultLimit: 50, maxLimit: 100 });
+    const { status, agency_id, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { buildPaginatedResponse } = require('../utils/paginationHelper');
     
     const client = await pool.connect();
 
@@ -663,7 +665,7 @@ router.get(
           created_at: row.created_at,
           updated_at: row.updated_at
         })),
-        { page, limit, total }
+        { page: parseInt(page), limit: parseInt(limit), total }
       ));
     } finally {
       client.release();

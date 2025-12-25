@@ -7,11 +7,12 @@ const rateLimit = require('express-rate-limit');
 
 /**
  * General API rate limiter
- * 100 requests per 15 minutes per IP
+ * 300 requests per 15 minutes per IP (increased for normal app usage)
+ * Authenticated users get higher limits
  */
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window
+  max: 300, // 300 requests per window (increased from 100)
   message: {
     success: false,
     error: 'Too many requests',
@@ -20,8 +21,21 @@ const apiLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
   skip: (req) => {
-    // Skip rate limiting for health checks
-    return req.path === '/health' || req.path === '/api/health';
+    // Skip rate limiting for health checks and system-health endpoints
+    const path = req.path || req.url || '';
+    const fullPath = path.startsWith('/') ? path : `/${path}`;
+    
+    // Skip for health endpoints
+    if (fullPath === '/health' || fullPath === '/api/health') {
+      return true;
+    }
+    
+    // Skip for system-health endpoints (monitoring needs frequent updates)
+    if (fullPath.includes('/system-health')) {
+      return true;
+    }
+    
+    return false;
   },
   // Use IP from X-Forwarded-For header if behind proxy
   keyGenerator: (req) => {

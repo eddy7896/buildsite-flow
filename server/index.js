@@ -130,6 +130,7 @@ configureMiddleware(app);
 app.use(requestLogger);
 
 // Apply general API rate limiting (after CORS but before routes)
+// Note: system-health endpoints are excluded from rate limiting in rateLimiter.js
 const { apiLimiter } = require('./middleware/rateLimiter');
 app.use('/api', apiLimiter);
 

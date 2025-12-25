@@ -378,15 +378,14 @@ export function AppSidebar() {
                   />
                 </div>
               ) : (
-                <div className={cn(
-                  "bg-primary rounded-lg flex items-center justify-center flex-shrink-0",
-                  collapsed && !isMobile ? "h-10 w-10" : "h-10 w-10 sm:h-12 sm:w-12"
-                )}>
-                  <Building className={cn(
-                    "text-primary-foreground",
-                    collapsed && !isMobile ? "h-5 w-5" : "h-5 w-5 sm:h-6 sm:w-6"
-                  )} />
-                </div>
+                <img
+                  src="/images/landing/logo.png"
+                  alt="BuildFlow Logo"
+                  className={cn(
+                    "rounded-lg object-contain flex-shrink-0",
+                    collapsed && !isMobile ? "h-10 w-10" : "h-10 w-10 sm:h-12 sm:w-12"
+                  )}
+                />
               )}
               {(!collapsed || isMobile) && (
                 <div className="flex flex-col min-w-0 flex-1">
