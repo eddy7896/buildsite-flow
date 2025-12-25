@@ -12,6 +12,8 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
  * 
  * Note: In Docker, environment variables are set by docker-compose.yml
  * In local development, they come from .env file via dotenv
+ * 
+ * Note: Uses console.log because this runs before logger is initialized
  */
 function validateRequiredSecrets() {
   // Check all possible environment variable names
@@ -46,7 +48,7 @@ function validateRequiredSecrets() {
   }
 
   if (missing.length > 0) {
-    // Use console.error here because logger might not be initialized yet
+    // Use console.error here because logger is not initialized yet
     console.error('❌ CRITICAL: Missing required secrets:', missing.join(', '));
     console.error('   Please set these in your .env file or docker-compose.yml');
     console.error('   Generate secrets with: openssl rand -base64 32');
@@ -57,14 +59,15 @@ function validateRequiredSecrets() {
   }
 
   if (weak.length > 0) {
-    // Use console.error here because logger might not be initialized yet
+    // Use console.error here because logger is not initialized yet
     console.error('❌ CRITICAL: Weak or default secrets detected:', weak.join(', '));
     console.error('   Secrets must be at least 32 characters and not use default values');
     console.error('   Generate strong secrets with: openssl rand -base64 32');
     process.exit(1);
   }
 
-  logger.info('All required secrets validated');
+  // Use console.log here because logger is not initialized yet
+  console.log('✅ All required secrets validated');
 }
 
 // Validate secrets before starting server
