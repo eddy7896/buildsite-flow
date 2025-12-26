@@ -429,6 +429,127 @@ async function initializeMainDatabase() {
       } else {
         logger.info('✅ page_catalog table verified');
       }
+      
+      // Ensure system_settings table exists
+      const systemSettingsCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'system_settings'
+        );
+      `);
+      
+      if (!systemSettingsCheck.rows[0].exists) {
+        logger.warn('system_settings table missing - running migration...');
+        const fs = require('fs');
+        const path = require('path');
+        const migrationPath = path.join(__dirname, '..', 'database', 'migrations', '12_system_settings_schema.sql');
+        
+        if (fs.existsSync(migrationPath)) {
+          const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
+          await client.query(migrationSQL);
+          logger.info('✅ system_settings table created from migration');
+        } else {
+          logger.warn('system_settings migration file not found, creating basic table...');
+          // Create system_settings table
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS public.system_settings (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              system_name TEXT NOT NULL DEFAULT 'BuildFlow ERP',
+              system_tagline TEXT,
+              system_description TEXT,
+              logo_url TEXT,
+              favicon_url TEXT,
+              login_logo_url TEXT,
+              email_logo_url TEXT,
+              meta_title TEXT,
+              meta_description TEXT,
+              meta_keywords TEXT,
+              og_image_url TEXT,
+              og_title TEXT,
+              og_description TEXT,
+              twitter_card_type TEXT DEFAULT 'summary_large_image',
+              twitter_site TEXT,
+              twitter_creator TEXT,
+              google_analytics_id TEXT,
+              google_tag_manager_id TEXT,
+              facebook_pixel_id TEXT,
+              custom_tracking_code TEXT,
+              ad_network_enabled BOOLEAN DEFAULT false,
+              ad_network_code TEXT,
+              ad_placement_header BOOLEAN DEFAULT false,
+              ad_placement_sidebar BOOLEAN DEFAULT false,
+              ad_placement_footer BOOLEAN DEFAULT false,
+              support_email TEXT,
+              support_phone TEXT,
+              support_address TEXT,
+              facebook_url TEXT,
+              twitter_url TEXT,
+              linkedin_url TEXT,
+              instagram_url TEXT,
+              youtube_url TEXT,
+              terms_of_service_url TEXT,
+              privacy_policy_url TEXT,
+              cookie_policy_url TEXT,
+              maintenance_mode BOOLEAN DEFAULT false,
+              maintenance_message TEXT,
+              default_language TEXT DEFAULT 'en',
+              default_timezone TEXT DEFAULT 'UTC',
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              created_by UUID REFERENCES public.users(id),
+              updated_by UUID REFERENCES public.users(id)
+            );
+          `);
+          
+          // Create unique constraint
+          await client.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_system_settings_single 
+            ON public.system_settings((1));
+          `);
+          
+          // Create trigger function if it doesn't exist
+          await client.query(`
+            CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+            RETURNS TRIGGER AS $$
+            BEGIN
+                NEW.updated_at = now();
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+          `);
+          
+          // Create trigger
+          await client.query(`
+            DROP TRIGGER IF EXISTS update_system_settings_updated_at ON public.system_settings;
+            CREATE TRIGGER update_system_settings_updated_at
+                BEFORE UPDATE ON public.system_settings
+                FOR EACH ROW
+                EXECUTE FUNCTION public.update_updated_at_column();
+          `);
+          
+          // Insert default settings
+          await client.query(`
+            INSERT INTO public.system_settings (system_name, system_tagline, system_description)
+            VALUES ('BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations');
+          `);
+          
+          logger.info('✅ Basic system_settings table created with default values');
+        }
+      } else {
+        // Ensure default settings exist even if table exists
+        const settingsCount = await client.query('SELECT COUNT(*) as count FROM public.system_settings');
+        if (parseInt(settingsCount.rows[0].count) === 0) {
+          logger.warn('system_settings table is empty, inserting default settings...');
+          await client.query(`
+            INSERT INTO public.system_settings (system_name, system_tagline, system_description)
+            VALUES ('BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations');
+          `);
+          logger.info('✅ Default system settings inserted');
+        } else {
+          logger.info('✅ system_settings table verified');
+        }
+      }
     } finally {
       client.release();
     }
