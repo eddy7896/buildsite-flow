@@ -13,6 +13,7 @@ import { SupportTicketsWidget } from '@/components/system/SupportTicketsWidget';
 import { RealTimeUsageWidget } from '@/components/system/RealTimeUsageWidget';
 import PlanManagement from '@/components/system/PlanManagement';
 import { AgencySettings } from '@/components/system/AgencySettings';
+import { SystemSettings } from '@/components/system/SystemSettings';
 import PageCatalogManagement from '@/components/system/PageCatalogManagement';
 import PageRequestManagement from '@/components/system/PageRequestManagement';
 import { RefreshCw, AlertTriangle, CheckCircle, TrendingUp, LogOut } from 'lucide-react';
@@ -265,6 +266,7 @@ const SystemDashboard = () => {
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-6">
+            <SystemSettings />
             <AgencySettings agencies={agencies} onRefresh={refreshMetrics} />
             <PlanManagement />
             <PageCatalogManagement />

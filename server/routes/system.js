@@ -2535,6 +2535,279 @@ router.post(
   })
 );
 
+/**
+ * Ensure system_settings table exists
+ */
+async function ensureSystemSettingsSchema(client) {
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS public.system_settings (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      system_name TEXT NOT NULL DEFAULT 'BuildFlow ERP',
+      system_tagline TEXT,
+      system_description TEXT,
+      logo_url TEXT,
+      favicon_url TEXT,
+      login_logo_url TEXT,
+      email_logo_url TEXT,
+      meta_title TEXT,
+      meta_description TEXT,
+      meta_keywords TEXT,
+      og_image_url TEXT,
+      og_title TEXT,
+      og_description TEXT,
+      twitter_card_type TEXT DEFAULT 'summary_large_image',
+      twitter_site TEXT,
+      twitter_creator TEXT,
+      google_analytics_id TEXT,
+      google_tag_manager_id TEXT,
+      facebook_pixel_id TEXT,
+      custom_tracking_code TEXT,
+      ad_network_enabled BOOLEAN DEFAULT false,
+      ad_network_code TEXT,
+      ad_placement_header BOOLEAN DEFAULT false,
+      ad_placement_sidebar BOOLEAN DEFAULT false,
+      ad_placement_footer BOOLEAN DEFAULT false,
+      support_email TEXT,
+      support_phone TEXT,
+      support_address TEXT,
+      facebook_url TEXT,
+      twitter_url TEXT,
+      linkedin_url TEXT,
+      instagram_url TEXT,
+      youtube_url TEXT,
+      terms_of_service_url TEXT,
+      privacy_policy_url TEXT,
+      cookie_policy_url TEXT,
+      maintenance_mode BOOLEAN DEFAULT false,
+      maintenance_message TEXT,
+      default_language TEXT DEFAULT 'en',
+      default_timezone TEXT DEFAULT 'UTC',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      created_by UUID REFERENCES public.users(id),
+      updated_by UUID REFERENCES public.users(id)
+    )
+  `);
+
+  // Create unique constraint to ensure only one system settings record exists
+  await client.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_system_settings_single 
+    ON public.system_settings((1))
+  `);
+
+  // Create updated_at trigger function if it doesn't exist
+  await client.query(`
+    CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        NEW.updated_at = now();
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+  `);
+
+  // Create trigger for updated_at
+  await client.query(`
+    DROP TRIGGER IF EXISTS update_system_settings_updated_at ON public.system_settings;
+    CREATE TRIGGER update_system_settings_updated_at
+        BEFORE UPDATE ON public.system_settings
+        FOR EACH ROW
+        EXECUTE FUNCTION public.update_updated_at_column();
+  `);
+
+  // Insert default system settings if none exist
+  await client.query(`
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM public.system_settings LIMIT 1) THEN
+            INSERT INTO public.system_settings (system_name, system_tagline, system_description)
+            VALUES ('BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations');
+        END IF;
+    END $$;
+  `);
+}
+
+/**
+ * GET /api/system/settings
+ * Get system settings (super admin only)
+ */
+router.get(
+  '/settings',
+  authenticate,
+  requireSuperAdmin,
+  asyncHandler(async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await ensureSystemSettingsSchema(client);
+
+      const result = await client.query(
+        `SELECT * FROM public.system_settings ORDER BY created_at DESC LIMIT 1`
+      );
+
+      if (result.rows.length === 0) {
+        // Create default settings if none exist
+        const insertResult = await client.query(
+          `INSERT INTO public.system_settings (system_name, system_tagline, system_description)
+           VALUES ('BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations')
+           RETURNING *`
+        );
+        return res.json({
+          success: true,
+          data: {
+            settings: insertResult.rows[0],
+          },
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          settings: result.rows[0],
+        },
+      });
+    } catch (error) {
+      console.error('[System] Error fetching system settings:', error);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to fetch system settings',
+          details: error.message,
+        },
+      });
+    } finally {
+      client.release();
+    }
+  })
+);
+
+/**
+ * PUT /api/system/settings
+ * Update system settings (super admin only)
+ */
+router.put(
+  '/settings',
+  authenticate,
+  requireSuperAdmin,
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+    const updates = req.body || {};
+
+    if (!updates || Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'No fields to update',
+        },
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await ensureSystemSettingsSchema(client);
+
+      // Build dynamic update query
+      const allowedFields = [
+        'system_name', 'system_tagline', 'system_description',
+        'logo_url', 'favicon_url', 'login_logo_url', 'email_logo_url',
+        'meta_title', 'meta_description', 'meta_keywords',
+        'og_image_url', 'og_title', 'og_description',
+        'twitter_card_type', 'twitter_site', 'twitter_creator',
+        'google_analytics_id', 'google_tag_manager_id', 'facebook_pixel_id', 'custom_tracking_code',
+        'ad_network_enabled', 'ad_network_code',
+        'ad_placement_header', 'ad_placement_sidebar', 'ad_placement_footer',
+        'support_email', 'support_phone', 'support_address',
+        'facebook_url', 'twitter_url', 'linkedin_url', 'instagram_url', 'youtube_url',
+        'terms_of_service_url', 'privacy_policy_url', 'cookie_policy_url',
+        'maintenance_mode', 'maintenance_message',
+        'default_language', 'default_timezone'
+      ];
+
+      const updateFields = [];
+      const params = [];
+      let paramIndex = 1;
+
+      for (const field of allowedFields) {
+        if (updates[field] !== undefined) {
+          updateFields.push(`${field} = $${paramIndex}`);
+          params.push(updates[field]);
+          paramIndex++;
+        }
+      }
+
+      if (updateFields.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'No valid fields to update',
+          },
+        });
+      }
+
+      // Add updated_by
+      updateFields.push(`updated_by = $${paramIndex}`);
+      params.push(userId);
+      paramIndex++;
+
+      // Ensure a record exists first (insert default if needed)
+      const checkResult = await client.query(
+        `SELECT id FROM public.system_settings LIMIT 1`
+      );
+
+      if (checkResult.rows.length === 0) {
+        // Insert default record first
+        await client.query(
+          `INSERT INTO public.system_settings (system_name, system_tagline, system_description, created_by, updated_by)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT DO NOTHING`,
+          ['BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations', userId, userId]
+        );
+      }
+
+      // Update existing settings
+      const result = await client.query(
+        `UPDATE public.system_settings
+         SET ${updateFields.join(', ')}
+         WHERE id = (SELECT id FROM public.system_settings LIMIT 1)
+         RETURNING *`,
+        params
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'NOT_FOUND',
+            message: 'System settings not found',
+          },
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          settings: result.rows[0],
+        },
+        message: 'System settings updated successfully',
+      });
+    } catch (error) {
+      console.error('[System] Error updating system settings:', error);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Failed to update system settings',
+          details: error.message,
+        },
+      });
+    } finally {
+      client.release();
+    }
+  })
+);
+
 module.exports = router;
 
 
