@@ -7,12 +7,13 @@ const rateLimit = require('express-rate-limit');
 
 /**
  * General API rate limiter
- * 300 requests per 15 minutes per IP (increased for normal app usage)
- * Authenticated users get higher limits
+ * 1000 requests per 15 minutes per IP (increased for dashboard usage)
+ * Dashboard makes many queries (notifications, projects, etc.)
+ * OPTIONS requests don't count (CORS preflight)
  */
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // 300 requests per window (increased from 100)
+  max: 1000, // 1000 requests per window (increased for dashboard usage)
   message: {
     success: false,
     error: 'Too many requests',
@@ -21,6 +22,11 @@ const apiLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
   skip: (req) => {
+    // Skip rate limiting for OPTIONS requests (CORS preflight - don't count)
+    if (req.method === 'OPTIONS') {
+      return true;
+    }
+    
     // Skip rate limiting for health checks and system-health endpoints
     const path = req.path || req.url || '';
     const fullPath = path.startsWith('/') ? path : `/${path}`;
@@ -41,6 +47,8 @@ const apiLimiter = rateLimit({
   keyGenerator: (req) => {
     return req.headers['x-forwarded-for']?.split(',')[0] || req.ip || req.connection.remoteAddress;
   },
+  // Skip successful requests for certain endpoints (reduce false positives)
+  skipSuccessfulRequests: false, // Count all requests to be safe
 });
 
 /**
