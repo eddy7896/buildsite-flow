@@ -1,11 +1,11 @@
 /**
  * Service Unavailable / 404 Error Page
  * Shows friendly error page with early-man.gif when services are down
+ * Full-screen layout matching backend design
  */
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { RefreshCw, Home, WifiOff } from 'lucide-react';
+import { RefreshCw, Home } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface ServiceUnavailableProps {
@@ -42,69 +42,59 @@ export function ServiceUnavailable({
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
-      <Card className="w-full max-w-2xl shadow-lg">
-        <CardHeader className="text-center pb-4">
-          <div className="flex justify-center mb-6">
-            <img 
-              src="/early-man.gif" 
-              alt="Early man working on connections" 
-              className="w-64 h-64 object-contain"
-              onError={(e) => {
-                // Fallback if image fails to load
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          </div>
-          <CardTitle className="text-3xl font-bold text-gray-800 mb-2">
-            {title}
-          </CardTitle>
-          <CardDescription className="text-lg text-gray-600">
-            {description}
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-start">
-              <WifiOff className="w-5 h-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
-              <div className="text-sm text-blue-800">
-                <p className="font-semibold mb-1">What happened?</p>
-                <p className="text-blue-700">
-                  The backend services (Docker containers) are currently down or restarting. 
-                  This usually happens during maintenance or deployment. Don't worry, we're working on it!
-                </p>
-              </div>
-            </div>
-          </div>
+    <div className="fixed inset-0 bg-background flex items-center justify-center p-4 overflow-auto">
+      <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center min-h-full py-12">
+        {/* Large animated GIF */}
+        <div className="flex justify-center mb-8">
+          <img 
+            src="/early-man.gif" 
+            alt="Early man working on connections" 
+            className="w-[400px] h-[400px] md:w-[500px] md:h-[500px] object-contain"
+            onError={(e) => {
+              // Fallback if image fails to load
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
-            {showRetry && (
-              <Button 
-                onClick={handleRetry} 
-                className="flex-1"
-                size="lg"
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Try Again
-              </Button>
-            )}
+        {/* Title */}
+        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-4 text-center">
+          {title}
+        </h1>
+
+        {/* Description */}
+        <p className="text-lg md:text-xl lg:text-2xl text-muted-foreground mb-12 text-center max-w-2xl">
+          {description}
+        </p>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+          {showRetry && (
             <Button 
-              onClick={handleGoHome} 
-              variant="outline"
-              className="flex-1"
+              onClick={handleRetry} 
+              className="flex-1 h-12 text-base"
               size="lg"
             >
-              <Home className="w-4 h-4 mr-2" />
-              Go Home
+              <RefreshCw className="w-5 h-5 mr-2" />
+              Try Again
             </Button>
-          </div>
+          )}
+          <Button 
+            onClick={handleGoHome} 
+            variant="outline"
+            className="flex-1 h-12 text-base"
+            size="lg"
+          >
+            <Home className="w-5 h-5 mr-2" />
+            Go Home
+          </Button>
+        </div>
 
-          <div className="text-center text-sm text-gray-500 pt-4 border-t">
-            <p>If this problem persists, please contact support or try again in a few minutes.</p>
-          </div>
-        </CardContent>
-      </Card>
+        {/* Footer message */}
+        <p className="text-sm text-muted-foreground mt-8 text-center">
+          If this problem persists, please contact support or try again in a few minutes.
+        </p>
+      </div>
     </div>
   );
 }
