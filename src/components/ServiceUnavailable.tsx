@@ -49,7 +49,7 @@ export function ServiceUnavailable({
           <img 
             src="/early-man.gif" 
             alt="Early man working on connections" 
-            className="w-[400px] h-[400px] md:w-[500px] md:h-[500px] object-contain"
+            className="w-[500px] h-[500px] md:w-[600px] md:h-[600px] lg:w-[700px] lg:h-[700px] object-contain"
             onError={(e) => {
               // Fallback if image fails to load
               (e.target as HTMLImageElement).style.display = 'none';
