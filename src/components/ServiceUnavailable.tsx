@@ -21,15 +21,8 @@ export function ServiceUnavailable({
   showRetry = true,
   onRetry
 }: ServiceUnavailableProps) {
-  // Use navigate if available (inside Router), otherwise use window.location
-  let navigate: ((path: string) => void) | null = null;
-  try {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    navigate = useNavigate();
-  } catch {
-    // Not inside Router context, will use window.location instead
-    navigate = null;
-  }
+  // useNavigate will work if component is inside Router, otherwise we'll use window.location
+  const navigate = useNavigate();
 
   const handleRetry = () => {
     if (onRetry) {
@@ -40,9 +33,10 @@ export function ServiceUnavailable({
   };
 
   const handleGoHome = () => {
-    if (navigateFn) {
-      navigateFn('/');
-    } else {
+    try {
+      navigate('/');
+    } catch {
+      // Fallback if navigate fails (not in Router context)
       window.location.href = '/';
     }
   };
