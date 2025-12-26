@@ -62,7 +62,9 @@ router.get('/', asyncHandler(async (req, res) => {
     };
   }
 
-  const statusCode = health.status === 'ok' ? 200 : 503;
+  // Return 200 if database is connected (even if Redis is down)
+  // This allows the container to be considered healthy as long as DB works
+  const statusCode = health.services.database?.status === 'connected' ? 200 : 503;
   res.status(statusCode).json(health);
 }));
 
