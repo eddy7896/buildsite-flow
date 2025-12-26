@@ -45,7 +45,7 @@ export function ServiceUnavailable({
     <div className="fixed inset-0 bg-background flex items-center justify-center p-4 overflow-auto">
       <div className="w-full max-w-4xl mx-auto flex flex-col items-center justify-center min-h-full py-12">
         {/* Large animated GIF */}
-        <div className="flex justify-center mb-4">
+        <div className="flex justify-center mb-1">
           <img 
             src="/early-man.gif" 
             alt="Early man working on connections" 
@@ -58,7 +58,7 @@ export function ServiceUnavailable({
         </div>
 
         {/* Title */}
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-4 text-center">
+        <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-4 text-center -mt-2">
           {title}
         </h1>
 
