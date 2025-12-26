@@ -1,3 +1,7 @@
+# Unified Docker Compose Configuration
+# Works for all environments (development, production, VPS)
+# Resource limits can be overridden via environment variables
+
 services:
   # PostgreSQL Database
   postgres:
@@ -6,11 +10,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.4'  # Reduced for 1 CPU servers
-          memory: 512M
+          cpus: ${POSTGRES_CPUS:-0.4}
+          memory: ${POSTGRES_MEMORY:-512M}
         reservations:
-          cpus: '0.1'
-          memory: 256M
+          cpus: ${POSTGRES_CPUS_RESERVED:-0.1}
+          memory: ${POSTGRES_MEMORY_RESERVED:-256M}
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
@@ -37,11 +41,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.2'  # Reduced for 1 CPU servers
-          memory: 256M
+          cpus: ${REDIS_CPUS:-0.2}
+          memory: ${REDIS_MEMORY:-256M}
         reservations:
-          cpus: '0.05'
-          memory: 64M
+          cpus: ${REDIS_CPUS_RESERVED:-0.05}
+          memory: ${REDIS_MEMORY_RESERVED:-64M}
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -66,11 +70,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.3'  # Reduced for 1 CPU servers
-          memory: 512M
+          cpus: ${BACKEND_CPUS:-0.3}
+          memory: ${BACKEND_MEMORY:-512M}
         reservations:
-          cpus: '0.1'
-          memory: 256M
+          cpus: ${BACKEND_CPUS_RESERVED:-0.1}
+          memory: ${BACKEND_MEMORY_RESERVED:-256M}
     environment:
       # Database
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
@@ -82,33 +86,32 @@ services:
       # Redis
       REDIS_HOST: redis
       REDIS_PORT: ${REDIS_PORT:-6379}
-      REDIS_PASSWORD: ""
-      REDIS_DB: 0
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
       
       # API Configuration
       VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-${BACKEND_PORT:-3000}}
       BACKEND_PORT: ${BACKEND_PORT:-${PORT:-3000}}
       
       # Authentication
-      VITE_JWT_SECRET: ${VITE_JWT_SECRET:-your-secret-key-change-this}
+      VITE_JWT_SECRET: ${VITE_JWT_SECRET:-f8KQxR2ZpL9M4wYcE7HVaTnJ5D6sAUB}
       
       # File Storage
       VITE_FILE_STORAGE_PATH: /app/storage
       FILE_STORAGE_PATH: /app/storage
       
       # Application
-      VITE_APP_NAME: Drena - Agency Management Platform
-      VITE_APP_VERSION: 1.0.0
-      VITE_APP_ENVIRONMENT: production
+      VITE_APP_NAME: ${VITE_APP_NAME:-Drena - Agency Management Platform}
+      VITE_APP_VERSION: ${VITE_APP_VERSION:-1.0.0}
+      VITE_APP_ENVIRONMENT: ${VITE_APP_ENVIRONMENT:-production}
       
-      # Frontend URL for CORS (production)
+      # Frontend URL for CORS
       FRONTEND_URL: ${FRONTEND_URL:-http://dezignbuild.site}
-      # CORS - Allow dev and prod origins (uses .env file)
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:8080,http://localhost:80,http://72.61.243.152,http://72.61.243.152:80,http://72.61.243.152:3000,http://dezignbuild.site,http://www.dezignbuild.site,https://dezignbuild.site,https://www.dezignbuild.site}
       
-      # Email (configure as needed)
+      # Email (optional)
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
@@ -141,28 +144,25 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
-        VITE_DATABASE_URL: ${VITE_DATABASE_URL:-}  # Empty string is fine - frontend doesn't use DB directly
+        VITE_DATABASE_URL: ${VITE_DATABASE_URL:-}
         VITE_APP_NAME: ${VITE_APP_NAME:-Drena - Agency Management Platform}
         VITE_APP_VERSION: ${VITE_APP_VERSION:-1.0.0}
         VITE_APP_ENVIRONMENT: ${VITE_APP_ENVIRONMENT:-production}
-      # Build memory limit (reduced for 1 CPU servers)
-      shm_size: '1gb'
+      shm_size: ${FRONTEND_SHM_SIZE:-1gb}
     image: dezign-frontend:latest
     container_name: frontend
     deploy:
       resources:
         limits:
-          cpus: '0.1'  # Reduced for 1 CPU servers
-          memory: 256M
+          cpus: ${FRONTEND_CPUS:-0.1}
+          memory: ${FRONTEND_MEMORY:-256M}
         reservations:
-          cpus: '0.05'
-          memory: 128M
+          cpus: ${FRONTEND_CPUS_RESERVED:-0.05}
+          memory: ${FRONTEND_MEMORY_RESERVED:-128M}
     environment:
-      # Note: These env vars are only for runtime reference, build-time vars are in build.args
       VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
       VITE_APP_NAME: ${VITE_APP_NAME:-Drena - Agency Management Platform}
       VITE_APP_ENVIRONMENT: ${VITE_APP_ENVIRONMENT:-production}
-      # Backend port for nginx proxy configuration
       BACKEND_PORT: ${BACKEND_PORT:-${PORT:-3000}}
     ports:
       - "${FRONTEND_PORT:-80}:80"
