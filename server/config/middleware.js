@@ -42,7 +42,7 @@ function buildCorsOptions() {
     `http://127.0.0.1:${PORTS.BACKEND}`,
   ];
 
-  // Helper to check if origin is localhost (strict check - only specific ports)
+  // Helper to check if origin is localhost or IP address (for VPS deployments)
   const isLocalhost = (origin) => {
     if (!origin) return false;
     try {
@@ -67,7 +67,14 @@ function buildCorsOptions() {
         return allowedLocalhostPorts.includes(port) || isDevelopment;
       }
       
-      // In production, don't allow private IP ranges
+      // Allow IP addresses (for VPS deployments without domain)
+      // Match IPv4 pattern (e.g., 72.61.243.152)
+      const ipv4Pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+      if (ipv4Pattern.test(hostname)) {
+        return true; // Always allow IP addresses
+      }
+      
+      // In production, don't allow private IP ranges (unless it's explicitly an IP)
       if (!isDevelopment) {
         return false;
       }
