@@ -143,12 +143,16 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        # CRITICAL: VITE_API_URL must be set in Environment Variables before build
+        # This value is embedded into the JavaScript bundle at build time
         VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
         VITE_DATABASE_URL: ${VITE_DATABASE_URL:-}
         VITE_APP_NAME: ${VITE_APP_NAME:-Drena - Agency Management Platform}
         VITE_APP_VERSION: ${VITE_APP_VERSION:-1.0.0}
         VITE_APP_ENVIRONMENT: ${VITE_APP_ENVIRONMENT:-production}
       shm_size: ${FRONTEND_SHM_SIZE:-1gb}
+      # Force rebuild if VITE_API_URL changes (remove no_cache after first rebuild)
+      # no_cache: true
     image: dezign-frontend:latest
     container_name: frontend
     deploy:
@@ -190,3 +194,4 @@ volumes:
     driver: local
   backend_storage:
     driver: local
+

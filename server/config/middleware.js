@@ -226,16 +226,42 @@ function configureMiddleware(app) {
   // CORS middleware
   app.use(cors(buildCorsOptions()));
 
-  // Handle preflight OPTIONS requests explicitly
+  // Handle preflight OPTIONS requests explicitly with error handling
   app.options('*', (req, res) => {
-    const origin = req.headers.origin;
-    if (origin) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Agency-Database, X-Requested-With, X-API-Key');
-      res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+    try {
+      const origin = req.headers.origin;
+      
+      // Use CORS middleware to validate origin
+      const corsOptions = buildCorsOptions();
+      corsOptions.origin(origin, (err, allowed) => {
+        if (err || !allowed) {
+          // Origin not allowed, but still respond to OPTIONS (some browsers need this)
+          res.setHeader('Access-Control-Allow-Origin', origin || '*');
+          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Agency-Database, X-Requested-With, X-API-Key');
+          return res.sendStatus(403); // Forbidden, but valid CORS response
+        }
+        
+        // Origin allowed, set CORS headers
+        if (origin) {
+          res.setHeader('Access-Control-Allow-Origin', origin);
+          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Agency-Database, X-Requested-With, X-API-Key');
+          res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+        }
+        res.sendStatus(204);
+      });
+    } catch (error) {
+      // Error handling for OPTIONS requests - always respond, never crash
+      console.error('[CORS] Error handling OPTIONS request:', error);
+      const origin = req.headers.origin;
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Agency-Database, X-Requested-With, X-API-Key');
+      }
+      res.sendStatus(204); // Always respond, even on error
     }
-    res.sendStatus(204);
   });
 
   // JSON body parser with 50MB limit for base64 encoded images
