@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ROUTES, ERROR_TYPES, RETRY_CONFIG } from '@/constants';
+import { ServiceUnavailable } from './ServiceUnavailable';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -108,15 +109,20 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   renderErrorContent() {
     const { errorType, errorMessage, retryCount } = this.state;
 
+    // For network errors (Docker/backend down), show the friendly early-man page
+    if (errorType === 'network') {
+      return (
+        <ServiceUnavailable
+          title="Service Temporarily Unavailable"
+          description="Unable to connect to the server. The early man is working hard to reconnect everything!"
+          showRetry={retryCount < 3}
+          onRetry={this.handleRetry}
+        />
+      );
+    }
+
+    // For other errors, show the standard error UI
     const errorConfig = {
-      network: {
-        icon: WifiOff,
-        title: 'Connection Problem',
-        description: 'Unable to connect to the server. Please check your internet connection.',
-        color: 'text-orange-600',
-        bgColor: 'bg-orange-50',
-        borderColor: 'border-orange-200'
-      },
       auth: {
         icon: Shield,
         title: 'Authentication Required',
