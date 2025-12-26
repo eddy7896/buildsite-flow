@@ -128,7 +128,7 @@ services:
       - buildflow-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/health', (r) => {let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{process.exit(r.statusCode === 200 ? 0 : 1)});}).on('error', (e)=>{console.error(e); process.exit(1)}); setTimeout(()=>process.exit(1), 5000);\""]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 10s
       timeout: 5s
       retries: 10

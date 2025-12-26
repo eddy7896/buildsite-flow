@@ -57,6 +57,9 @@ COPY --from=builder /app/config ./config
 COPY --from=builder /app/utils ./utils
 COPY --from=builder /app/graphql ./graphql
 
+# Install wget for health checks
+RUN apk add --no-cache wget
+
 # Create non-root user and directories
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
@@ -68,10 +71,9 @@ USER nodejs
 
 EXPOSE 3000
 
-# Health check (uses PORT environment variable)
-# Simple check - just verify server is responding
+# Health check - use wget (simpler and more reliable)
 HEALTHCHECK --interval=10s --timeout=5s --start-period=180s --retries=10 \
-  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/health', (r) => {let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{process.exit(r.statusCode === 200 ? 0 : 1)});}).on('error', (e)=>{console.error(e); process.exit(1)}); setTimeout(()=>process.exit(1), 5000);"
+  CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
 
 # Start the application
 CMD ["node", "index.js"]
