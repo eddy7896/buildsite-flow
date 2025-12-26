@@ -2758,21 +2758,46 @@ router.put(
 
       if (checkResult.rows.length === 0) {
         // Insert default record first
-        await client.query(
-          `INSERT INTO public.system_settings (system_name, system_tagline, system_description, created_by, updated_by)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT DO NOTHING`,
-          ['BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations', userId, userId]
-        );
+        try {
+          await client.query(
+            `INSERT INTO public.system_settings (system_name, system_tagline, system_description, created_by, updated_by)
+             VALUES ($1, $2, $3, $4, $5)`,
+            ['BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations', userId, userId]
+          );
+        } catch (insertError) {
+          // If insert fails due to unique constraint, that's okay - record might have been created
+          if (!insertError.message.includes('unique') && !insertError.message.includes('duplicate')) {
+            throw insertError;
+          }
+        }
       }
 
-      // Update existing settings
+      // Update existing settings - use the id from check or get it again
+      let settingsId;
+      if (checkResult.rows.length > 0) {
+        settingsId = checkResult.rows[0].id;
+      } else {
+        // Get the id after insert
+        const idResult = await client.query(`SELECT id FROM public.system_settings LIMIT 1`);
+        if (idResult.rows.length === 0) {
+          return res.status(500).json({
+            success: false,
+            error: {
+              code: 'INTERNAL_ERROR',
+              message: 'Failed to create or find system settings record',
+            },
+          });
+        }
+        settingsId = idResult.rows[0].id;
+      }
+
+      // Update existing settings using the id
       const result = await client.query(
         `UPDATE public.system_settings
          SET ${updateFields.join(', ')}
-         WHERE id = (SELECT id FROM public.system_settings LIMIT 1)
+         WHERE id = $${paramIndex}
          RETURNING *`,
-        params
+        [...params, settingsId]
       );
 
       if (result.rows.length === 0) {

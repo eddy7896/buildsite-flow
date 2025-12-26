@@ -28,16 +28,46 @@ router.get(
     const client = await pool.connect();
     
     try {
+      // Check if tables exist
+      const tablesCheck = await client.query(`
+        SELECT 
+          EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'agency_page_assignments') as has_assignments,
+          EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'page_recommendation_rules') as has_rules
+      `);
+      
+      const hasAssignments = tablesCheck.rows[0]?.has_assignments || false;
+      const hasRules = tablesCheck.rows[0]?.has_rules || false;
+      
       let query = `
         SELECT 
-          pc.*,
-          COUNT(DISTINCT apa.agency_id) as assigned_agencies_count,
-          COUNT(DISTINCT prr.id) as recommendation_rules_count
-        FROM public.page_catalog pc
-        LEFT JOIN public.agency_page_assignments apa ON pc.id = apa.page_id AND apa.status = 'active'
-        LEFT JOIN public.page_recommendation_rules prr ON pc.id = prr.page_id
-        WHERE 1=1
+          pc.*
       `;
+      
+      if (hasAssignments) {
+        query += `, COUNT(DISTINCT apa.agency_id) as assigned_agencies_count`;
+      } else {
+        query += `, 0 as assigned_agencies_count`;
+      }
+      
+      if (hasRules) {
+        query += `, COUNT(DISTINCT prr.id) as recommendation_rules_count`;
+      } else {
+        query += `, 0 as recommendation_rules_count`;
+      }
+      
+      query += `
+        FROM public.page_catalog pc
+      `;
+      
+      if (hasAssignments) {
+        query += ` LEFT JOIN public.agency_page_assignments apa ON pc.id = apa.page_id AND apa.status = 'active'`;
+      }
+      
+      if (hasRules) {
+        query += ` LEFT JOIN public.page_recommendation_rules prr ON pc.id = prr.page_id`;
+      }
+      
+      query += ` WHERE 1=1`;
       const params = [];
       let paramCount = 0;
 
