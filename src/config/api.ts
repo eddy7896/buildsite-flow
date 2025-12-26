@@ -11,15 +11,34 @@ function isLocalhostHost(hostname: string): boolean {
  * Parse VITE_API_URL into a URL object if possible.
  */
 function getEnvApiUrl(): URL | null {
-  const raw = env.VITE_API_URL;
-  if (!raw || typeof raw !== 'string') return null;
   try {
-    const url = new URL(raw);
-    return url;
+    const raw = env.VITE_API_URL;
+    if (!raw || typeof raw !== 'string') return null;
+    
+    // Validate the string is not empty
+    if (raw.trim() === '') return null;
+    
+    try {
+      const url = new URL(raw);
+      // Validate the URL object was created correctly
+      if (!url || typeof url !== 'object') return null;
+      // Ensure searchParams exists (some environments might have issues)
+      if (url.searchParams === undefined) {
+        console.warn('[API Config] URL object missing searchParams, using fallback');
+        return null;
+      }
+      return url;
+    } catch (urlError) {
+      // Invalid URL format - will fall back to default
+      if (typeof window !== 'undefined' && window.console) {
+        console.warn('[API Config] Invalid VITE_API_URL value:', raw, urlError);
+      }
+      return null;
+    }
   } catch (error) {
-    // Invalid URL format - will fall back to default
+    // Catch any errors accessing env.VITE_API_URL
     if (typeof window !== 'undefined' && window.console) {
-      console.warn('[API Config] Invalid VITE_API_URL value:', raw, error);
+      console.warn('[API Config] Error accessing VITE_API_URL:', error);
     }
     return null;
   }
@@ -60,19 +79,24 @@ export function getApiRoot(): string {
     // Browser on LAN IP or real domain (PRODUCTION)
     // In production, always prefer VITE_API_URL if it's set and valid
     if (envIsValid && envUrl) {
-      // Ensure the URL includes /api if not already present
-      let apiUrl = envUrl.toString().replace(/\/$/, '');
-      if (!apiUrl.endsWith('/api')) {
-        // If VITE_API_URL doesn't end with /api, add it
-        apiUrl = `${apiUrl}${apiUrl.endsWith('/') ? '' : '/'}api`;
+      try {
+        // Ensure the URL includes /api if not already present
+        let apiUrl = envUrl.toString().replace(/\/$/, '');
+        if (!apiUrl.endsWith('/api')) {
+          // If VITE_API_URL doesn't end with /api, add it
+          apiUrl = `${apiUrl}${apiUrl.endsWith('/') ? '' : '/'}api`;
+        }
+        
+        // Log in development for debugging
+        if (import.meta.env.DEV || hostname === 'localhost') {
+          console.log('[API Config] Using VITE_API_URL:', apiUrl);
+        }
+        
+        return apiUrl;
+      } catch (urlError) {
+        console.warn('[API Config] Error converting URL to string:', urlError);
+        // Fall through to default behavior
       }
-      
-      // Log in development for debugging
-      if (import.meta.env.DEV || hostname === 'localhost') {
-        console.log('[API Config] Using VITE_API_URL:', apiUrl);
-      }
-      
-      return apiUrl;
     }
 
     // VITE_API_URL is missing or invalid, but browser is on a real domain.
@@ -94,11 +118,16 @@ export function getApiRoot(): string {
 
   // Non-browser / SSR fallback – use env when possible
   if (envUrl) {
-    let apiUrl = envUrl.toString().replace(/\/$/, '');
-    if (!apiUrl.endsWith('/api')) {
-      apiUrl = `${apiUrl}${apiUrl.endsWith('/') ? '' : '/'}api`;
+    try {
+      let apiUrl = envUrl.toString().replace(/\/$/, '');
+      if (!apiUrl.endsWith('/api')) {
+        apiUrl = `${apiUrl}${apiUrl.endsWith('/') ? '' : '/'}api`;
+      }
+      return apiUrl;
+    } catch (urlError) {
+      console.warn('[API Config] Error converting URL to string in SSR fallback:', urlError);
+      // Fall through to default
     }
-    return apiUrl;
   }
 
   // Last-resort default - use environment variable or fallback to 3000

@@ -229,6 +229,196 @@ const io = initializeWebSocket(server);
 // Make io available globally for services
 global.io = io;
 
+// Initialize main database schema on startup
+async function initializeMainDatabase() {
+  try {
+    const { pool } = require('./config/database');
+    const client = await pool.connect();
+    
+    try {
+      // Check if agencies table exists
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'agencies'
+        );
+      `);
+      
+      if (!tableCheck.rows[0].exists) {
+        logger.warn('Main database schema missing - agencies table not found. Running migrations...');
+        
+        // Run core schema migration
+        const fs = require('fs');
+        const path = require('path');
+        const migrationPath = path.join(__dirname, '..', 'database', 'migrations', '01_core_schema.sql');
+        
+        if (fs.existsSync(migrationPath)) {
+          const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
+          await client.query(migrationSQL);
+          logger.info('✅ Main database schema initialized from migrations');
+        } else {
+          // Fallback: Create agencies table directly
+          await client.query(`
+            CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+            CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+            
+            CREATE TABLE IF NOT EXISTS public.agencies (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              name TEXT NOT NULL,
+              domain TEXT UNIQUE,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              is_active BOOLEAN NOT NULL DEFAULT true,
+              subscription_plan TEXT DEFAULT 'basic',
+              max_users INTEGER DEFAULT 50,
+              database_name TEXT UNIQUE,
+              owner_user_id UUID
+            );
+            
+            CREATE INDEX IF NOT EXISTS idx_agencies_created_at ON public.agencies(created_at);
+            CREATE INDEX IF NOT EXISTS idx_agencies_database_name ON public.agencies(database_name);
+            CREATE INDEX IF NOT EXISTS idx_agencies_domain ON public.agencies(domain);
+            CREATE INDEX IF NOT EXISTS idx_agencies_is_active ON public.agencies(is_active);
+          `);
+          logger.info('✅ Main database agencies table created');
+        }
+      } else {
+        logger.info('✅ Main database schema verified');
+      }
+      
+      // Ensure notifications table exists
+      const notificationsCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'notifications'
+        );
+      `);
+      
+      if (!notificationsCheck.rows[0].exists) {
+        const { ensureNotificationsTable } = require('./utils/schema/miscSchema');
+        await ensureNotificationsTable(client);
+        logger.info('✅ Notifications table created in main database');
+      }
+      
+      // Ensure page_catalog table exists (needed for page recommendations)
+      const pageCatalogCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'page_catalog'
+        );
+      `);
+      
+      if (!pageCatalogCheck.rows[0].exists) {
+        logger.warn('page_catalog table missing - running migration...');
+        const fs = require('fs');
+        const path = require('path');
+        const migrationPath = path.join(__dirname, '..', 'database', 'migrations', '10_page_catalog_schema.sql');
+        
+        if (fs.existsSync(migrationPath)) {
+          const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
+          await client.query(migrationSQL);
+          logger.info('✅ page_catalog table created from migration');
+          
+          // Also seed the catalog if seed file exists
+          const seedPath = path.join(__dirname, '..', 'database', 'migrations', '11_seed_page_catalog.sql');
+          if (fs.existsSync(seedPath)) {
+            const seedSQL = fs.readFileSync(seedPath, 'utf8');
+            await client.query(seedSQL);
+            logger.info('✅ page_catalog seeded with initial data');
+          }
+        } else {
+          logger.warn('page_catalog migration file not found, creating basic table...');
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS public.page_catalog (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              path TEXT NOT NULL UNIQUE,
+              title TEXT NOT NULL,
+              description TEXT,
+              icon TEXT,
+              category TEXT NOT NULL,
+              base_cost NUMERIC(12,2) NOT NULL DEFAULT 0,
+              is_active BOOLEAN NOT NULL DEFAULT true,
+              requires_approval BOOLEAN NOT NULL DEFAULT false,
+              metadata JSONB DEFAULT '{}'::jsonb,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_page_catalog_category ON public.page_catalog(category);
+            CREATE INDEX IF NOT EXISTS idx_page_catalog_is_active ON public.page_catalog(is_active);
+            CREATE INDEX IF NOT EXISTS idx_page_catalog_path ON public.page_catalog(path);
+          `);
+          logger.info('✅ Basic page_catalog table created');
+        }
+        
+        // Seed page_catalog if empty
+        const countResult = await client.query('SELECT COUNT(*) as count FROM public.page_catalog');
+        if (parseInt(countResult.rows[0].count) === 0) {
+          logger.warn('page_catalog table is empty, seeding basic pages...');
+          await client.query(`
+            INSERT INTO public.page_catalog (path, title, description, icon, category, base_cost, is_active, requires_approval) VALUES
+            ('/dashboard', 'Main Dashboard', 'Main dashboard for all users', 'BarChart3', 'dashboard', 0, true, false),
+            ('/agency', 'Agency Dashboard', 'Agency dashboard', 'Building2', 'dashboard', 0, true, false),
+            ('/employee-management', 'Employee Management', 'Employee management and administration', 'Users', 'management', 0, true, false),
+            ('/project-management', 'Project Management', 'Project management interface', 'FolderKanban', 'projects', 0, true, false),
+            ('/projects', 'Projects', 'Projects overview', 'Briefcase', 'projects', 0, true, false),
+            ('/invoices', 'Invoices', 'Invoice management', 'FileText', 'finance', 0, true, false),
+            ('/clients', 'Clients', 'Client management', 'Users', 'management', 0, true, false),
+            ('/crm', 'CRM', 'Customer relationship management', 'ContactRound', 'management', 0, true, false),
+            ('/attendance', 'Attendance', 'Employee attendance tracking', 'Calendar', 'hr', 0, true, false),
+            ('/leave-requests', 'Leave Requests', 'Employee leave management', 'CalendarDays', 'hr', 0, true, false),
+            ('/financial-management', 'Financial Management', 'Financial operations', 'DollarSign', 'finance', 0, true, false),
+            ('/inventory', 'Inventory', 'Inventory management', 'Package', 'inventory', 0, true, false),
+            ('/procurement', 'Procurement', 'Procurement management', 'ShoppingCart', 'procurement', 0, true, false),
+            ('/reports', 'Reports', 'Business reports and analytics', 'FileBarChart', 'reports', 0, true, false),
+            ('/analytics', 'Analytics', 'Data analytics and insights', 'TrendingUp', 'reports', 0, true, false)
+            ON CONFLICT (path) DO NOTHING;
+          `);
+          logger.info('✅ page_catalog seeded with basic pages');
+        }
+      }
+      
+      // Seed page_catalog if empty (check regardless of whether table was just created)
+      const countResult = await client.query('SELECT COUNT(*) as count FROM public.page_catalog');
+      if (parseInt(countResult.rows[0].count) === 0) {
+        logger.warn('page_catalog table is empty, seeding basic pages...');
+        await client.query(`
+          INSERT INTO public.page_catalog (path, title, description, icon, category, base_cost, is_active, requires_approval) VALUES
+          ('/dashboard', 'Main Dashboard', 'Main dashboard for all users', 'BarChart3', 'dashboard', 0, true, false),
+          ('/agency', 'Agency Dashboard', 'Agency dashboard', 'Building2', 'dashboard', 0, true, false),
+          ('/employee-management', 'Employee Management', 'Employee management and administration', 'Users', 'management', 0, true, false),
+          ('/project-management', 'Project Management', 'Project management interface', 'FolderKanban', 'projects', 0, true, false),
+          ('/projects', 'Projects', 'Projects overview', 'Briefcase', 'projects', 0, true, false),
+          ('/invoices', 'Invoices', 'Invoice management', 'FileText', 'finance', 0, true, false),
+          ('/clients', 'Clients', 'Client management', 'Users', 'management', 0, true, false),
+          ('/crm', 'CRM', 'Customer relationship management', 'ContactRound', 'management', 0, true, false),
+          ('/attendance', 'Attendance', 'Employee attendance tracking', 'Calendar', 'hr', 0, true, false),
+          ('/leave-requests', 'Leave Requests', 'Employee leave management', 'CalendarDays', 'hr', 0, true, false),
+          ('/financial-management', 'Financial Management', 'Financial operations', 'DollarSign', 'finance', 0, true, false),
+          ('/inventory', 'Inventory', 'Inventory management', 'Package', 'inventory', 0, true, false),
+          ('/procurement', 'Procurement', 'Procurement management', 'ShoppingCart', 'procurement', 0, true, false),
+          ('/reports', 'Reports', 'Business reports and analytics', 'FileBarChart', 'reports', 0, true, false),
+          ('/analytics', 'Analytics', 'Data analytics and insights', 'TrendingUp', 'reports', 0, true, false)
+          ON CONFLICT (path) DO NOTHING;
+        `);
+        logger.info('✅ page_catalog seeded with basic pages');
+      } else {
+        logger.info('✅ page_catalog table verified');
+      }
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    logger.error('Failed to initialize main database schema', { 
+      error: error.message,
+      stack: error.stack 
+    });
+    // Don't exit - let the server start and handle errors at runtime
+  }
+}
+
 // Start server
 server.listen(PORT, '0.0.0.0', async () => {
   logger.info('Server started', {
@@ -242,6 +432,9 @@ server.listen(PORT, '0.0.0.0', async () => {
   } catch (error) {
     logger.warn('Database connection info unavailable', { error: error.message });
   }
+  
+  // Initialize main database schema
+  await initializeMainDatabase();
   
   // Initialize Redis
   await initializeRedis();

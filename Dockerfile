@@ -4,7 +4,7 @@ FROM node:20-alpine AS builder
 
 ARG VITE_API_URL
 ARG VITE_DATABASE_URL=
-ARG VITE_APP_NAME=BuildFlow Agency Management
+ARG VITE_APP_NAME=Drena - Agency Management Platform
 ARG VITE_APP_VERSION=1.0.0
 ARG VITE_APP_ENVIRONMENT=production
 ENV VITE_API_URL=${VITE_API_URL}

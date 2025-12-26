@@ -38,6 +38,31 @@ router.post('/query', asyncHandler(async (req, res) => {
     console.error('[API] Error message:', error.message);
     console.error('[API] Error detail:', error.detail);
 
+    // Handle missing notifications table in MAIN database (not agency database)
+    if (error.code === '42P01' && error.message.includes('notifications') && !agencyDatabase) {
+      console.log('[API] Notifications table missing in main database, creating...');
+      try {
+        const { pool } = require('../config/database');
+        const client = await pool.connect();
+        try {
+          const { ensureNotificationsTable } = require('../utils/schema/miscSchema');
+          await ensureNotificationsTable(client);
+          console.log('[API] ✅ Notifications table created in main database, retrying query...');
+          
+          // Retry the query
+          const retryResult = await executeQuery(sql, params, agencyDatabase, userId);
+          return res.json({
+            rows: retryResult.rows,
+            rowCount: retryResult.rowCount,
+          });
+        } finally {
+          client.release();
+        }
+      } catch (repairError) {
+        console.error('[API] Failed to repair notifications table:', repairError);
+      }
+    }
+
     // Handle missing database (3D000 = database does not exist)
     if (error.code === '3D000' && agencyDatabase) {
       console.log(`[API] Database does not exist: ${agencyDatabase}`);
@@ -158,7 +183,12 @@ router.post('/query', asyncHandler(async (req, res) => {
             }
             // Holidays and company events - repair misc schema
             else if (['holidays', 'company_events', 'calendar_settings', 'notifications'].includes(missingTable)) {
-              const { ensureMiscSchema } = require('../utils/schema/miscSchema');
+              const { ensureMiscSchema, ensureNotificationsTable } = require('../utils/schema/miscSchema');
+              // Explicitly ensure notifications table first
+              if (missingTable === 'notifications') {
+                await ensureNotificationsTable(agencyClient);
+                console.log(`[API] ✅ Notifications table explicitly created`);
+              }
               await ensureMiscSchema(agencyClient);
               console.log(`[API] ✅ Miscellaneous schema repair completed for ${missingTable}, retrying query...`);
             }
@@ -227,6 +257,10 @@ router.post('/query', asyncHandler(async (req, res) => {
             } else if (missingTable === 'documents') {
               const { ensureDocumentsTable } = require('../utils/schema/miscSchema');
               await ensureDocumentsTable(agencyClient);
+              console.log(`[API] ✅ Explicitly created ${missingTable} table`);
+            } else if (missingTable === 'notifications') {
+              const { ensureNotificationsTable } = require('../utils/schema/miscSchema');
+              await ensureNotificationsTable(agencyClient);
               console.log(`[API] ✅ Explicitly created ${missingTable} table`);
             } else {
               throw new Error(`Table ${missingTable} was not created`);

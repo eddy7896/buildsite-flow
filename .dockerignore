@@ -1,106 +1,57 @@
-# Optimized .dockerignore for Frontend
-# Excludes unnecessary files from build context for faster builds
-
 # Dependencies
 node_modules
 npm-debug.log
 yarn-error.log
-yarn.lock
-.pnpm-store
-.pnpm-debug.log
 
 # Build outputs
 dist
 build
 .next
 out
-.vite
-.parcel-cache
 
-# Environment files (keep .env.example if needed)
-.env*
-!.env.example
+# Environment files
+.env.local
+.env.development
+.env.test
+.env.production.local
 
-# IDE and Editor files
+# IDE
 .vscode
 .idea
 *.swp
 *.swo
 *~
-.project
-.classpath
-.settings
 
-# OS files
+# OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
-Desktop.ini
 
 # Git
 .git
 .gitignore
 .gitattributes
-.gitmodules
 
-# Docker files (prevent recursion)
+# Docker
 Dockerfile*
 docker-compose*.yml
-docker-compose*.yaml
 .dockerignore
 
-# Documentation (not needed in image)
+# Documentation
 docs
 *.md
 !README.md
 
 # Tests
-__tests__
-**/__tests__
-*.test.*
-*.spec.*
 coverage
 .nyc_output
-.jest
-jest.config.*
+*.test.js
+*.spec.js
 
 # Logs
 logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
 
-# Temporary files
-tmp
-temp
+# Misc
 .cache
 .temp
-
-# Database files
-*.db
-*.sqlite
-*.sqlite3
-
-# Misc development files
-.cursor
-.cursorignore
-scripts
-.eslintcache
-.stylelintcache
-
-# CI/CD (not needed in image)
-.github
-.gitlab-ci.yml
-.travis.yml
-.circleci
-Jenkinsfile
-
-# Local development
-.local
-*.local
+tmp

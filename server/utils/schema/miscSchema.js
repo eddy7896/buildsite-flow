@@ -21,30 +21,54 @@
  * Ensure notifications table exists
  */
 async function ensureNotificationsTable(client) {
-  await client.query(`
-    CREATE TABLE IF NOT EXISTS public.notifications (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-      type TEXT NOT NULL DEFAULT 'in_app',
-      category TEXT NOT NULL DEFAULT 'system',
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      metadata JSONB,
-      priority TEXT NOT NULL DEFAULT 'normal',
-      action_url TEXT,
-      read_at TIMESTAMP WITH TIME ZONE,
-      sent_at TIMESTAMP WITH TIME ZONE,
-      expires_at TIMESTAMP WITH TIME ZONE,
-      agency_id UUID NOT NULL,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  // First check if table exists
+  const tableExists = await client.query(`
+    SELECT EXISTS (
+      SELECT FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name = 'notifications'
     );
   `);
 
-  // Add agency_id column if it doesn't exist (for existing tables)
+  if (!tableExists.rows[0].exists) {
+    // Create table with agency_id as nullable initially
+    await client.query(`
+      CREATE TABLE public.notifications (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL DEFAULT 'in_app',
+        category TEXT NOT NULL DEFAULT 'system',
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        metadata JSONB,
+        priority TEXT NOT NULL DEFAULT 'normal',
+        action_url TEXT,
+        read_at TIMESTAMP WITH TIME ZONE,
+        sent_at TIMESTAMP WITH TIME ZONE,
+        expires_at TIMESTAMP WITH TIME ZONE,
+        agency_id UUID,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+  }
+
+  // Check if agency_id column exists and handle it
+  // NOTE: Only reference agencies table if it exists (main database only)
+  // In agency databases, agencies table doesn't exist, so skip those operations
   await client.query(`
     DO $$
+    DECLARE
+      agencies_table_exists BOOLEAN;
     BEGIN
+      -- Check if agencies table exists (main database only)
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'agencies'
+      ) INTO agencies_table_exists;
+      
+      -- Add agency_id column if it doesn't exist
       IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' 
@@ -52,20 +76,59 @@ async function ensureNotificationsTable(client) {
         AND column_name = 'agency_id'
       ) THEN
         ALTER TABLE public.notifications ADD COLUMN agency_id UUID;
-        -- Set default agency_id for existing records (will need to be updated based on user's agency)
-        UPDATE public.notifications SET agency_id = (
-          SELECT agency_id FROM public.profiles WHERE profiles.user_id = notifications.user_id LIMIT 1
-        ) WHERE agency_id IS NULL;
-        -- If still null, set to default (shouldn't happen in production)
-        UPDATE public.notifications SET agency_id = '00000000-0000-0000-0000-000000000000' WHERE agency_id IS NULL;
-        ALTER TABLE public.notifications ALTER COLUMN agency_id SET NOT NULL;
       END IF;
+      
+      -- Only try to populate agency_id if we're in main database (agencies table exists)
+      IF agencies_table_exists THEN
+        -- Update existing records with agency_id from profiles (main database only)
+        BEGIN
+          UPDATE public.notifications n
+          SET agency_id = (
+            SELECT p.agency_id 
+            FROM public.profiles p 
+            WHERE p.user_id = n.user_id 
+            LIMIT 1
+          )
+          WHERE n.agency_id IS NULL 
+          AND EXISTS (SELECT 1 FROM public.profiles p WHERE p.user_id = n.user_id);
+        EXCEPTION WHEN OTHERS THEN
+          -- If profiles table doesn't exist (agency database), skip
+          NULL;
+        END;
+        
+        -- Set default for any remaining nulls (main database only)
+        BEGIN
+          UPDATE public.notifications 
+          SET agency_id = COALESCE(
+            (SELECT id FROM public.agencies LIMIT 1),
+            '00000000-0000-0000-0000-000000000000'::UUID
+          )
+          WHERE agency_id IS NULL;
+        EXCEPTION WHEN OTHERS THEN
+          -- If agencies table doesn't exist, skip
+          NULL;
+        END;
+        
+        -- Make agency_id NOT NULL if we have agencies (main database only)
+        IF EXISTS (SELECT 1 FROM public.agencies LIMIT 1) THEN
+          BEGIN
+            ALTER TABLE public.notifications ALTER COLUMN agency_id SET NOT NULL;
+          EXCEPTION WHEN OTHERS THEN
+            -- If it fails, it might already be NOT NULL or have nulls, skip
+            NULL;
+          END;
+        END IF;
+      END IF;
+      -- In agency databases, agency_id remains nullable (no agencies table exists there)
     END $$;
   `);
 
-  // Create index for agency_id
+  // Create indexes
   await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id);
     CREATE INDEX IF NOT EXISTS idx_notifications_agency_id ON public.notifications(agency_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_read_at ON public.notifications(read_at);
+    CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(created_at);
   `);
 }
 

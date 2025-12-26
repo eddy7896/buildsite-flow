@@ -1,8 +1,11 @@
+# Production Docker Compose Configuration for Drena
+# Optimized for production deployment with security and performance best practices
+
 services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: postgres
+    container_name: drena-postgres
     deploy:
       resources:
         limits:
@@ -18,22 +21,26 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./database/backups:/backups
       - ./database/migrations:/docker-entrypoint-initdb.d
     ports:
-      - "${POSTGRES_PORT:-5432}:${POSTGRES_PORT:-5432}"
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - buildflow-network
+      - drena-network
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
 
   # Redis Cache
   redis:
     image: redis:7-alpine
-    container_name: buildflow-redis
+    container_name: drena-redis
     deploy:
       resources:
         limits:
@@ -42,27 +49,45 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
-    command: redis-server --appendonly yes
+    command: >
+      sh -c "
+      if [ -n \"$${REDIS_PASSWORD}\" ]; then
+        redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\"
+      else
+        redis-server --appendonly yes
+      fi
+      "
     volumes:
       - redis_data:/data
     ports:
-      - "${REDIS_PORT:-6379}:${REDIS_PORT:-6379}"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: >
+        sh -c "
+        if [ -n \"$${REDIS_PASSWORD}\" ]; then
+          redis-cli -a \"$${REDIS_PASSWORD}\" ping
+        else
+          redis-cli ping
+        fi
+        "
       interval: 10s
       timeout: 3s
       retries: 5
     networks:
-      - buildflow-network
+      - drena-network
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
 
   # Backend API Server
   backend:
     build:
       context: ./server
       dockerfile: Dockerfile
-    image: dezign-backend:latest
-    container_name: backend
+      args:
+        PORT: ${PORT:-3000}
+    image: drena-backend:latest
+    container_name: drena-backend
     deploy:
       resources:
         limits:
@@ -74,22 +99,22 @@ services:
     environment:
       # Database
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      VITE_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT:-5432}/buildflow_db
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:${POSTGRES_PORT:-5432}/buildflow_db
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      VITE_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/buildflow_db
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/buildflow_db
+      POSTGRES_PORT: 5432
+      DATABASE_PORT: 5432
       
       # Redis
       REDIS_HOST: redis
       REDIS_PORT: ${REDIS_PORT:-6379}
-      REDIS_PASSWORD: ""
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_DB: 0
       
       # API Configuration
-      VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
+      VITE_API_URL: ${VITE_API_URL}
       NODE_ENV: production
-      PORT: ${PORT:-${BACKEND_PORT:-3000}}
-      BACKEND_PORT: ${BACKEND_PORT:-${PORT:-3000}}
+      PORT: ${PORT:-3000}
+      BACKEND_PORT: ${PORT:-3000}
       
       # Authentication
       VITE_JWT_SECRET: ${VITE_JWT_SECRET}
@@ -103,13 +128,12 @@ services:
       VITE_APP_VERSION: 1.0.0
       VITE_APP_ENVIRONMENT: production
       
-      # Frontend URL for CORS (production)
-      FRONTEND_URL: ${FRONTEND_URL:-http://dezignbuild.site}
-      # CORS - Allow dev and prod origins (uses .env file)
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:8080,http://localhost:80,http://72.61.243.152,http://72.61.243.152:80,http://72.61.243.152:3000,http://dezignbuild.site,http://www.dezignbuild.site,https://dezignbuild.site,https://www.dezignbuild.site}
+      # Frontend URL for CORS
+      FRONTEND_URL: ${FRONTEND_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
       
-      # Email (configure as needed)
-      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-}
+      # Email Configuration
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-smtp}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
       SMTP_USER: ${SMTP_USER:-}
@@ -117,38 +141,40 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
     volumes:
       - backend_storage:/app/storage
+      - backend_logs:/app/logs
     ports:
-      - "${BACKEND_PORT:-${PORT:-3000}}:${BACKEND_PORT:-${PORT:-3000}}"
+      - "${PORT:-3000}:3000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     networks:
-      - buildflow-network
+      - drena-network
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
-      interval: 10s
-      timeout: 5s
+      interval: 30s
+      timeout: 10s
       retries: 3
       start_period: 60s
 
-  # Frontend (React + Vite)
+  # Frontend (React + Vite + Nginx)
   frontend:
     build:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
-        VITE_DATABASE_URL: ${VITE_DATABASE_URL:-}  # Empty string is fine - frontend doesn't use DB directly
-        VITE_APP_NAME: ${VITE_APP_NAME:-Drena - Agency Management Platform}
-        VITE_APP_VERSION: ${VITE_APP_VERSION:-1.0.0}
-        VITE_APP_ENVIRONMENT: ${VITE_APP_ENVIRONMENT:-production}
-      # Increase build memory limit to prevent SIGSEGV
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_DATABASE_URL: ${VITE_DATABASE_URL:-}
+        VITE_APP_NAME: Drena - Agency Management Platform
+        VITE_APP_VERSION: 1.0.0
+        VITE_APP_ENVIRONMENT: production
       shm_size: '2gb'
-    image: dezign-frontend:latest
-    container_name: frontend
+    image: drena-frontend:latest
+    container_name: drena-frontend
     deploy:
       resources:
         limits:
@@ -158,20 +184,21 @@ services:
           cpus: '0.25'
           memory: 128M
     environment:
-      # Note: These env vars are only for runtime reference, build-time vars are in build.args
-      VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
-      VITE_APP_NAME: ${VITE_APP_NAME:-Drena - Agency Management Platform}
-      VITE_APP_ENVIRONMENT: ${VITE_APP_ENVIRONMENT:-production}
-      # Backend port for nginx proxy configuration
-      BACKEND_PORT: ${BACKEND_PORT:-${PORT:-3000}}
+      VITE_API_URL: ${VITE_API_URL}
+      VITE_APP_NAME: Drena - Agency Management Platform
+      VITE_APP_ENVIRONMENT: production
+      BACKEND_PORT: ${PORT:-3000}
     ports:
       - "${FRONTEND_PORT:-80}:80"
+      - "${FRONTEND_HTTPS_PORT:-443}:443"
     depends_on:
       backend:
         condition: service_healthy
     networks:
-      - buildflow-network
+      - drena-network
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
       interval: 30s
@@ -180,13 +207,21 @@ services:
       start_period: 10s
 
 networks:
-  buildflow-network:
+  drena-network:
     driver: bridge
+    name: drena-network
 
 volumes:
   postgres_data:
     driver: local
+    name: drena-postgres-data
   redis_data:
     driver: local
+    name: drena-redis-data
   backend_storage:
     driver: local
+    name: drena-backend-storage
+  backend_logs:
+    driver: local
+    name: drena-backend-logs
+

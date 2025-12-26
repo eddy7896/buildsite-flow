@@ -60,10 +60,24 @@ async function ensureTwoFactorColumns(client) {
  * Requires authentication
  */
 router.post('/setup', authenticate, requireAgencyContext, asyncHandler(async (req, res) => {
+  // Validate user and agency context
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required',
+      message: 'User not authenticated',
+    });
+  }
+
   const userId = req.user.id;
-  const agencyDatabase = req.user.agencyDatabase;
+  const agencyDatabase = req.user.agencyDatabase || req.headers['x-agency-database'];
 
   if (!agencyDatabase) {
+    console.error('[2FA] Setup error: Agency context missing', {
+      userId,
+      hasUser: !!req.user,
+      headers: Object.keys(req.headers),
+    });
     return res.status(403).json({
       success: false,
       error: 'Agency context required',
@@ -76,10 +90,39 @@ router.post('/setup', authenticate, requireAgencyContext, asyncHandler(async (re
 
   try {
     // Connect to agency database
-    const { host, port, user, password } = parseDatabaseUrl();
+    let dbConfig;
+    try {
+      dbConfig = parseDatabaseUrl();
+      if (!dbConfig || !dbConfig.host || !dbConfig.user) {
+        throw new Error('Invalid database configuration');
+      }
+    } catch (dbConfigError) {
+      console.error('[2FA] Setup error: Failed to parse database URL:', dbConfigError);
+      return res.status(500).json({
+        success: false,
+        error: 'Database configuration error',
+        message: 'Failed to connect to database',
+      });
+    }
+
+    const { host, port, user, password } = dbConfig;
     const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
-    agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
-    agencyClient = await agencyPool.connect();
+    
+    try {
+      agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
+      agencyClient = await agencyPool.connect();
+    } catch (connectionError) {
+      console.error('[2FA] Setup error: Failed to connect to agency database:', {
+        error: connectionError.message,
+        stack: connectionError.stack,
+        agencyDatabase,
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Database connection error',
+        message: `Failed to connect to agency database: ${connectionError.message}`,
+      });
+    }
 
     try {
       // Ensure 2FA columns exist
@@ -443,10 +486,24 @@ router.post('/disable', authenticate, requireAgencyContext, asyncHandler(async (
  * Requires authentication
  */
 router.get('/status', authenticate, requireAgencyContext, asyncHandler(async (req, res) => {
+  // Validate user and agency context
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required',
+      message: 'User not authenticated',
+    });
+  }
+
   const userId = req.user.id;
-  const agencyDatabase = req.user.agencyDatabase;
+  const agencyDatabase = req.user.agencyDatabase || req.headers['x-agency-database'];
 
   if (!agencyDatabase) {
+    console.error('[2FA] Status error: Agency context missing', {
+      userId,
+      hasUser: !!req.user,
+      headers: Object.keys(req.headers),
+    });
     return res.status(403).json({
       success: false,
       error: 'Agency context required',

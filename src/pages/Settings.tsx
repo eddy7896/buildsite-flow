@@ -231,18 +231,27 @@ const Settings = () => {
   
   // Fetch 2FA status
   const fetch2FAStatus = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setTwoFactorEnabled(false);
+      return;
+    }
     
+    setLoading2FA(true);
     try {
       const response = await getTwoFactorStatus();
-      if (response.success) {
-        setTwoFactorEnabled(response.data.enabled);
-        setTwoFactorVerifiedAt(response.data.verifiedAt);
+      if (response && response.success) {
+        setTwoFactorEnabled(response.data?.enabled || false);
+        setTwoFactorVerifiedAt(response.data?.verifiedAt || null);
+      } else {
+        setTwoFactorEnabled(false);
       }
     } catch (error) {
       console.error('Error fetching 2FA status:', error);
-      // If 2FA is not set up, status will be false
+      // If 2FA is not set up or there's an error, status will be false
       setTwoFactorEnabled(false);
+      setTwoFactorVerifiedAt(null);
+    } finally {
+      setLoading2FA(false);
     }
   };
 
