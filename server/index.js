@@ -323,7 +323,7 @@ async function initializeMainDatabase() {
         if (fs.existsSync(migrationPath)) {
           const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
           await client.query(migrationSQL);
-          logger.info('✅ page_catalog table created from migration');
+          logger.info('✅ page_catalog tables created from migration');
           
           // Also seed the catalog if seed file exists
           const seedPath = path.join(__dirname, '..', 'database', 'migrations', '11_seed_page_catalog.sql');
@@ -333,7 +333,8 @@ async function initializeMainDatabase() {
             logger.info('✅ page_catalog seeded with initial data');
           }
         } else {
-          logger.warn('page_catalog migration file not found, creating basic table...');
+          logger.warn('page_catalog migration file not found, creating basic tables...');
+          // Create page_catalog table
           await client.query(`
             CREATE TABLE IF NOT EXISTS public.page_catalog (
               id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -353,7 +354,25 @@ async function initializeMainDatabase() {
             CREATE INDEX IF NOT EXISTS idx_page_catalog_is_active ON public.page_catalog(is_active);
             CREATE INDEX IF NOT EXISTS idx_page_catalog_path ON public.page_catalog(path);
           `);
-          logger.info('✅ Basic page_catalog table created');
+          
+          // Create page_recommendation_rules table
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS public.page_recommendation_rules (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              page_id UUID NOT NULL REFERENCES public.page_catalog(id) ON DELETE CASCADE,
+              industry TEXT[],
+              company_size TEXT[],
+              primary_focus TEXT[],
+              business_goals TEXT[],
+              priority INTEGER NOT NULL DEFAULT 5 CHECK (priority >= 1 AND priority <= 10),
+              is_required BOOLEAN NOT NULL DEFAULT false,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            CREATE INDEX IF NOT EXISTS idx_page_recommendation_rules_page_id ON public.page_recommendation_rules(page_id);
+            CREATE INDEX IF NOT EXISTS idx_page_recommendation_rules_priority ON public.page_recommendation_rules(priority);
+          `);
+          logger.info('✅ Basic page_catalog and page_recommendation_rules tables created');
         }
         
         // Seed page_catalog if empty
