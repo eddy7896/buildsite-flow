@@ -84,6 +84,7 @@ const { getRedisClient, isRedisAvailable } = require('./config/redis');
 
 // Import routes
 const healthRoutes = require('./routes/health');
+const simpleHealthRoutes = require('./routes/health-simple');
 const filesRoutes = require('./routes/files');
 const databaseRoutes = require('./routes/database');
 const authRoutes = require('./routes/auth');
@@ -134,8 +135,10 @@ app.use(requestLogger);
 const { apiLimiter } = require('./middleware/rateLimiter');
 app.use('/api', apiLimiter);
 
-// Health check route
-app.use('/health', healthRoutes);
+// Simple health check route (for Docker health checks - responds immediately)
+app.use('/health', simpleHealthRoutes);
+// Detailed health check route (for monitoring - checks services)
+app.use('/health/detailed', healthRoutes);
 
 // API routes
 app.use('/api/files', filesRoutes);

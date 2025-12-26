@@ -69,8 +69,9 @@ USER nodejs
 EXPOSE 3000
 
 # Health check (uses PORT environment variable)
-HEALTHCHECK --interval=15s --timeout=10s --start-period=120s --retries=5 \
-  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))"
+# Simple check - just verify server is responding
+HEALTHCHECK --interval=10s --timeout=5s --start-period=180s --retries=10 \
+  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 3000) + '/health', (r) => {let data=''; r.on('data', d=>data+=d); r.on('end', ()=>{process.exit(r.statusCode === 200 ? 0 : 1)});}).on('error', (e)=>{console.error(e); process.exit(1)}); setTimeout(()=>process.exit(1), 5000);"
 
 # Start the application
 CMD ["node", "index.js"]
