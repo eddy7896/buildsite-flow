@@ -65,6 +65,20 @@ class HttpDatabaseClient {
           errorData = { error: errorText };
         }
 
+        // Handle rate limiting (429) - retry with exponential backoff
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('Retry-After') || '5';
+          const retryDelay = parseInt(retryAfter) * 1000; // Convert to milliseconds
+          
+          console.warn(`[HTTP DB] Rate limit exceeded, retrying after ${retryAfter}s...`);
+          
+          // Wait before retrying (max 3 retries)
+          await new Promise(resolve => setTimeout(resolve, Math.min(retryDelay, 10000)));
+          
+          // Retry the request once
+          return this.makeRequest<T>(endpoint, method, body, useMainDatabase);
+        }
+
         // Handle missing agency database - clear auth and redirect to login
         // Only logout for database-level errors (3D000), NOT for column/table errors (42703, 42P01, 42P10)
         const isDatabaseNotFound = errorData.code === 'AGENCY_DB_NOT_FOUND' || errorData.code === '3D000';
