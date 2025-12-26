@@ -24,7 +24,8 @@ class HttpDatabaseClient {
     endpoint: string,
     method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'POST',
     body?: any,
-    useMainDatabase: boolean = false
+    useMainDatabase: boolean = false,
+    retryCount: number = 0
   ): Promise<QueryResult<T>> {
     try {
       const url = `${this.baseUrl}/database${endpoint}`;
@@ -65,18 +66,18 @@ class HttpDatabaseClient {
           errorData = { error: errorText };
         }
 
-        // Handle rate limiting (429) - retry with exponential backoff
-        if (response.status === 429) {
+        // Handle rate limiting (429) - retry with exponential backoff (max 2 retries)
+        if (response.status === 429 && retryCount < 2) {
           const retryAfter = response.headers.get('Retry-After') || '5';
           const retryDelay = parseInt(retryAfter) * 1000; // Convert to milliseconds
           
-          console.warn(`[HTTP DB] Rate limit exceeded, retrying after ${retryAfter}s...`);
+          console.warn(`[HTTP DB] Rate limit exceeded, retrying after ${retryAfter}s... (attempt ${retryCount + 1}/2)`);
           
-          // Wait before retrying (max 3 retries)
+          // Wait before retrying (max 10 seconds)
           await new Promise(resolve => setTimeout(resolve, Math.min(retryDelay, 10000)));
           
-          // Retry the request once
-          return this.makeRequest<T>(endpoint, method, body, useMainDatabase);
+          // Retry the request with incremented retry count
+          return this.makeRequest<T>(endpoint, method, body, useMainDatabase, retryCount + 1);
         }
 
         // Handle missing agency database - clear auth and redirect to login
