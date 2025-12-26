@@ -102,9 +102,12 @@ async function handleJsonResponse<T>(response: Response): Promise<T> {
   }
 
   if (!parsed.success) {
-    const errorResponse = parsed as { success: false; error?: string; message?: string };
-    const message = errorResponse.error || errorResponse.message || 'Request failed';
-    throw new Error(message);
+    const errorResponse = parsed as ApiErrorShape;
+    const message = errorResponse.error?.message || errorResponse.error || errorResponse.message || 'Request failed';
+    const error = new Error(message);
+    (error as any).code = errorResponse.error?.code;
+    (error as any).details = errorResponse.error?.details;
+    throw error;
   }
 
   return parsed.data;
@@ -114,65 +117,75 @@ async function handleJsonResponse<T>(response: Response): Promise<T> {
  * Fetch system settings
  */
 export async function fetchSystemSettings(): Promise<SystemSettings> {
-  const endpoint = getApiEndpoint('/system/settings');
+  const endpoint = getApiEndpoint('/api/system/settings');
 
-  const response = await fetch(endpoint, {
-    method: 'GET',
-    headers: {
-      ...getAuthHeaders(),
-      'Accept': 'application/json',
-    },
-    mode: 'cors',
-    credentials: 'omit',
-    cache: 'no-cache',
-  });
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'no-cache',
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    let errorMessage = `Failed to load system settings (status ${response.status})`;
-    try {
-      const errorData = JSON.parse(errorText);
-      errorMessage = errorData.error?.message || errorData.message || errorMessage;
-    } catch {
-      // Use default error message
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `Failed to load system settings (status ${response.status})`;
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error?.message || errorData.error || errorData.message || errorMessage;
+      } catch {
+        // Use default error message
+      }
+      throw new Error(errorMessage);
     }
-    throw new Error(errorMessage);
-  }
 
-  const data = await handleJsonResponse<{ settings: SystemSettings }>(response);
-  return data.settings;
+    const data = await handleJsonResponse<{ settings: SystemSettings }>(response);
+    return data.settings;
+  } catch (error: any) {
+    // Handle network errors
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Unable to connect to the server. Please check your connection and try again.');
+    }
+    throw error;
+  }
 }
 
 /**
  * Update system settings
  */
 export async function updateSystemSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
-  const endpoint = getApiEndpoint('/system/settings');
+  const endpoint = getApiEndpoint('/api/system/settings');
 
-  const response = await fetch(endpoint, {
-    method: 'PUT',
-    headers: {
-      ...getAuthHeaders(),
-      'Accept': 'application/json',
-    },
-    mode: 'cors',
-    credentials: 'omit',
-    body: JSON.stringify(settings),
-  });
+  try {
+    const response = await fetch(endpoint, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      mode: 'cors',
+      credentials: 'omit',
+      body: JSON.stringify(settings),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    let errorMessage = `Failed to update system settings (status ${response.status})`;
-    try {
-      const errorData = JSON.parse(errorText);
-      errorMessage = errorData.error?.message || errorData.message || errorMessage;
-    } catch {
-      // Use default error message
+    if (!response.ok) {
+      const errorText = await response.text();
+      let errorMessage = `Failed to update system settings (status ${response.status})`;
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error?.message || errorData.error || errorData.message || errorMessage;
+      } catch {
+        // Use default error message
+      }
+      throw new Error(errorMessage);
     }
-    throw new Error(errorMessage);
-  }
 
-  const data = await handleJsonResponse<{ settings: SystemSettings }>(response);
-  return data.settings;
+    const data = await handleJsonResponse<{ settings: SystemSettings }>(response);
+    return data.settings;
+  } catch (error: any) {
+    // Handle network errors
+    if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
+      throw new Error('Unable to connect to the server. Please check your connection and try again.');
+    }
+    throw error;
+  }
 }
 
