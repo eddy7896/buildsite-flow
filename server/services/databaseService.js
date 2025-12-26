@@ -712,9 +712,26 @@ async function repairMissingColumn(agencyDatabase, tableName, columnName) {
         }
       }
     } else {
-      // For any other missing column, run full schema repair
-      console.log(`[API] Running full schema repair for ${tableName}.${columnName}...`);
-      await createAgencySchema(agencyClient);
+      // For any other missing column, try lightweight ALTER TABLE first
+      console.log(`[API] Adding generic ${columnName} column to ${tableName} table (lightweight)...`);
+      try {
+        // Try adding as TEXT first (most common type)
+        await agencyClient.query(`ALTER TABLE public.${tableName} ADD COLUMN IF NOT EXISTS ${columnName} TEXT`);
+        console.log(`[API] ✅ Added ${columnName} column to ${tableName} table as TEXT`);
+      } catch (addError) {
+        if (addError.message.includes('already exists') || addError.message.includes('duplicate')) {
+          console.log(`[API] ℹ️ Column ${columnName} already exists in ${tableName}`);
+        } else if (addError.message.includes('does not exist')) {
+          // Table doesn't exist, run full schema repair
+          console.log(`[API] Table ${tableName} does not exist, running full schema repair...`);
+          await createAgencySchema(agencyClient);
+        } else {
+          // For other errors, log but don't run expensive full repair
+          console.warn(`[API] ⚠️ Could not add ${columnName} to ${tableName}: ${addError.message}`);
+          console.warn(`[API] ⚠️ Skipping full schema repair to avoid resource waste. Column may need manual addition.`);
+          // Don't throw - let the query fail naturally if column is truly needed
+        }
+      }
     }
 
     // Verify the column was added
