@@ -102,7 +102,13 @@ async function getRecommendedPages(criteria) {
     } catch (queryError) {
       console.error('[Page Recommendations] Error checking table existence:', queryError);
       // If we can't check tables, assume they don't exist and return empty
-      if (client) client.release();
+      if (client) {
+        try {
+          client.release();
+        } catch (e) {
+          // Ignore release errors
+        }
+      }
       return {
         all: [],
         categorized: {
@@ -121,7 +127,13 @@ async function getRecommendedPages(criteria) {
 
     if (!tableCheck || !tableCheck.rows || tableCheck.rows.length === 0) {
       console.warn('[Page Recommendations] Could not check table existence');
-      if (client) client.release();
+      if (client) {
+        try {
+          client.release();
+        } catch (e) {
+          // Ignore release errors
+        }
+      }
       return {
         all: [],
         categorized: {
@@ -143,7 +155,13 @@ async function getRecommendedPages(criteria) {
     if (!catalog_exists) {
       console.warn('[Page Recommendations] page_catalog table does not exist');
       // Return empty recommendations if tables don't exist
-      if (client) client.release();
+      if (client) {
+        try {
+          client.release();
+        } catch (e) {
+          // Ignore release errors
+        }
+      }
       return {
         all: [],
         categorized: {
@@ -160,32 +178,100 @@ async function getRecommendedPages(criteria) {
       };
     }
 
+    // Check if page_recommendation_rules table exists, if not create it
+    if (!rules_exists) {
+      try {
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS public.page_recommendation_rules (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            page_id UUID NOT NULL REFERENCES public.page_catalog(id) ON DELETE CASCADE,
+            industry TEXT[],
+            company_size TEXT[],
+            primary_focus TEXT[],
+            business_goals TEXT[],
+            priority INTEGER NOT NULL DEFAULT 5 CHECK (priority >= 1 AND priority <= 10),
+            is_required BOOLEAN NOT NULL DEFAULT false,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_page_recommendation_rules_page_id ON public.page_recommendation_rules(page_id);
+        `);
+        await client.query(`
+          CREATE INDEX IF NOT EXISTS idx_page_recommendation_rules_priority ON public.page_recommendation_rules(priority);
+        `);
+        console.log('[Page Recommendations] Created page_recommendation_rules table');
+      } catch (createError) {
+        // Table might already exist or there's a constraint issue, continue anyway
+        console.warn('[Page Recommendations] Could not create page_recommendation_rules table:', createError.message);
+      }
+    }
+
     // Get all active pages with their recommendation rules
     let result;
     try {
-      result = await client.query(`
-        SELECT 
-          pc.id,
-          pc.path,
-          pc.title,
-          pc.description,
-          pc.icon,
-          pc.category,
-          pc.base_cost,
-          pc.requires_approval,
-          pc.metadata,
-          prr.id as rule_id,
-          prr.industry,
-          prr.company_size,
-          prr.primary_focus,
-          prr.business_goals,
-          prr.priority,
-          prr.is_required
-        FROM public.page_catalog pc
-        LEFT JOIN public.page_recommendation_rules prr ON pc.id = prr.page_id
-        WHERE pc.is_active = true
-        ORDER BY pc.category, pc.title
+      // Re-check if table exists after creation attempt
+      const finalTableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'page_recommendation_rules'
+        );
       `);
+      
+      const tableExists = finalTableCheck.rows[0]?.exists || false;
+      
+      if (tableExists) {
+        // Table exists, use LEFT JOIN
+        result = await client.query(`
+          SELECT 
+            pc.id,
+            pc.path,
+            pc.title,
+            pc.description,
+            pc.icon,
+            pc.category,
+            pc.base_cost,
+            pc.requires_approval,
+            pc.metadata,
+            prr.id as rule_id,
+            prr.industry,
+            prr.company_size,
+            prr.primary_focus,
+            prr.business_goals,
+            prr.priority,
+            prr.is_required
+          FROM public.page_catalog pc
+          LEFT JOIN public.page_recommendation_rules prr ON pc.id = prr.page_id
+          WHERE pc.is_active = true
+          ORDER BY pc.category, pc.title
+        `);
+      } else {
+        // Table doesn't exist, query without JOIN (fallback)
+        result = await client.query(`
+          SELECT 
+            pc.id,
+            pc.path,
+            pc.title,
+            pc.description,
+            pc.icon,
+            pc.category,
+            pc.base_cost,
+            pc.requires_approval,
+            pc.metadata,
+            NULL::UUID as rule_id,
+            NULL::TEXT[] as industry,
+            NULL::TEXT[] as company_size,
+            NULL::TEXT[] as primary_focus,
+            NULL::TEXT[] as business_goals,
+            NULL::INTEGER as priority,
+            NULL::BOOLEAN as is_required
+          FROM public.page_catalog pc
+          WHERE pc.is_active = true
+          ORDER BY pc.category, pc.title
+        `);
+      }
     } catch (queryError) {
       console.error('[Page Recommendations] Error querying pages:', queryError);
       console.error('[Page Recommendations] Query error details:', {
@@ -193,7 +279,6 @@ async function getRecommendedPages(criteria) {
         code: queryError.code,
         detail: queryError.detail
       });
-      if (client) client.release();
       throw new Error(`Database query failed: ${queryError.message}`);
     }
 
@@ -348,6 +433,18 @@ async function getRecommendedPages(criteria) {
       )
     };
 
+    // Release client before returning
+    if (client) {
+      try {
+        client.release();
+      } catch (releaseError) {
+        // Ignore double release errors
+        if (!releaseError.message.includes('already been released')) {
+          console.error('[Page Recommendations] Error releasing client:', releaseError);
+        }
+      }
+    }
+
     return {
       all: pages,
       categorized,
@@ -371,9 +468,15 @@ async function getRecommendedPages(criteria) {
     // Release client if it exists
     if (client) {
       try {
-        client.release();
+        // Check if client has already been released
+        if (!client._ending && !client._released) {
+          client.release();
+        }
       } catch (releaseError) {
-        console.error('[Page Recommendations] Error releasing client:', releaseError);
+        // Ignore double release errors
+        if (!releaseError.message.includes('already been released')) {
+          console.error('[Page Recommendations] Error releasing client:', releaseError);
+        }
       }
     }
     
