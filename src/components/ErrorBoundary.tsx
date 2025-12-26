@@ -34,6 +34,22 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     const errorMessage = error.message.toLowerCase();
     
+    // Don't show error boundary for module loading errors - these are usually network/build issues
+    // that should be handled by retrying or reloading, not by showing an error page
+    if (errorMessage.includes('loading dynamically imported module') ||
+        errorMessage.includes('disallowed mime type') ||
+        errorMessage.includes('failed to fetch dynamically imported module') ||
+        errorMessage.includes('error loading module')) {
+      // Return null to prevent error boundary from catching these
+      // The browser will handle retries automatically
+      console.warn('[Error Boundary] Module loading error (will retry):', error.message);
+      return {
+        hasError: false, // Don't show error boundary for module loading errors
+        errorType: 'unknown',
+        errorMessage: error.message
+      };
+    }
+    
     let errorType: ErrorBoundaryState['errorType'] = 'unknown';
     
     if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
