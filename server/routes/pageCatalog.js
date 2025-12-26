@@ -671,6 +671,29 @@ router.get(
     const client = await pool.connect();
 
     try {
+      // Check if agency_page_requests table exists
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'agency_page_requests'
+        );
+      `);
+      
+      if (!tableCheck.rows[0]?.exists) {
+        // Table doesn't exist, return empty result
+        return res.json({
+          success: true,
+          data: [],
+          pagination: {
+            page: parseInt(page),
+            limit: parseInt(limit),
+            total: 0,
+            totalPages: 0
+          }
+        });
+      }
+      
       // Build main query with pagination
       let query = `
         SELECT 
