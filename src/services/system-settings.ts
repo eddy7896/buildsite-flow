@@ -72,13 +72,19 @@ function getAuthHeaders() {
   }
 
   const token = window.localStorage.getItem('auth_token') || '';
+  const agencyDatabase = window.localStorage.getItem('agency_database') || '';
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   };
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  if (agencyDatabase) {
+    headers['X-Agency-Database'] = agencyDatabase;
   }
 
   return headers;
@@ -117,7 +123,7 @@ async function handleJsonResponse<T>(response: Response): Promise<T> {
  * Fetch system settings
  */
 export async function fetchSystemSettings(): Promise<SystemSettings> {
-  const endpoint = getApiEndpoint('/api/system/settings');
+  const endpoint = getApiEndpoint('/system/settings');
 
   try {
     const response = await fetch(endpoint, {
@@ -155,7 +161,7 @@ export async function fetchSystemSettings(): Promise<SystemSettings> {
  * Update system settings
  */
 export async function updateSystemSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
-  const endpoint = getApiEndpoint('/api/system/settings');
+  const endpoint = getApiEndpoint('/system/settings');
 
   try {
     const response = await fetch(endpoint, {
