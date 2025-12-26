@@ -1,6 +1,13 @@
-# BuildFlow Agency Management System
+# Drena - Agency Management Platform
 
 A comprehensive multi-tenant SaaS ERP platform for construction and agency management.
+
+> **📚 Documentation**: All project documentation is organized in the [`docs/`](./docs/) folder.
+> - [Deployment Guides](./docs/deployment/) - Production deployment and VPS setup
+> - [VPS Updates](./docs/deployment/vps/) - How to update on VPS
+> - [Bug Fixes](./docs/fixes/) - Fix documentation
+> - [Implementation Status](./docs/status/) - Status reports
+> - [Project Structure](./docs/PROJECT_STRUCTURE.md) - Complete project structure
 
 ## 🚀 Quick Start
 
@@ -347,8 +354,16 @@ VITE_API_URL=your-api-url
 
 ## 📚 Documentation
 
-For detailed documentation, see the `docs/` folder:
+All documentation is organized in the [`docs/`](./docs/) folder:
 
+### Quick Links
+- **[Deployment Guides](./docs/deployment/)** - Production deployment, VPS setup, Docker
+- **[VPS Updates](./docs/deployment/vps/)** - Update instructions for VPS
+- **[Bug Fixes](./docs/fixes/)** - All bug fix documentation
+- **[Implementation Status](./docs/status/)** - Progress and status reports
+- **[Project Structure](./docs/PROJECT_STRUCTURE.md)** - Complete project structure
+
+### Detailed Documentation
 - **[Architecture](docs/architecture.md)** - System architecture and design
 - **[Database](docs/database.md)** - Database structure and schema
 - **[API](docs/api.md)** - API documentation and usage
