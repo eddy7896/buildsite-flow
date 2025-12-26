@@ -358,7 +358,7 @@ async function getLockoutStatus(agencyDatabase, userId) {
     await agencyClient.query(`
       CREATE TABLE IF NOT EXISTS public.login_attempts (
         id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
         email TEXT NOT NULL,
         success BOOLEAN DEFAULT false,
         ip_address TEXT,
@@ -369,20 +369,48 @@ async function getLockoutStatus(agencyDatabase, userId) {
       CREATE INDEX IF NOT EXISTS idx_login_attempts_user_id ON public.login_attempts(user_id, attempted_at DESC);
       CREATE INDEX IF NOT EXISTS idx_login_attempts_email ON public.login_attempts(email, attempted_at DESC);
     `);
+    
+    // If table exists with NOT NULL constraint, alter it to allow NULL
+    try {
+      await agencyClient.query(`
+        ALTER TABLE public.login_attempts 
+        ALTER COLUMN user_id DROP NOT NULL;
+      `);
+    } catch (alterError) {
+      // Column might already be nullable or table doesn't exist yet, ignore
+      if (!alterError.message.includes('does not exist') && !alterError.message.includes('column "user_id" is not null')) {
+        console.warn('[Password Policy] Could not alter login_attempts.user_id:', alterError.message);
+      }
+    }
 
     const policy = await getPasswordPolicy(agencyDatabase);
     const lockoutDuration = policy.lockoutDuration || 30; // minutes
     const lockoutAttempts = policy.lockoutAttempts || 5;
 
     // Get recent failed attempts
-    const result = await agencyClient.query(
-      `SELECT COUNT(*) as count, MAX(attempted_at) as last_attempt
-       FROM public.login_attempts 
-       WHERE user_id = $1 
-       AND success = false 
-       AND attempted_at > NOW() - INTERVAL '${lockoutDuration} minutes'`,
-      [userId]
-    );
+    // If userId is provided, use it; otherwise check by email
+    let result;
+    if (userId) {
+      result = await agencyClient.query(
+        `SELECT COUNT(*) as count, MAX(attempted_at) as last_attempt
+         FROM public.login_attempts 
+         WHERE user_id = $1 
+         AND success = false 
+         AND attempted_at > NOW() - INTERVAL '${lockoutDuration} minutes'`,
+        [userId]
+      );
+    } else {
+      // For unknown users, check by email
+      result = await agencyClient.query(
+        `SELECT COUNT(*) as count, MAX(attempted_at) as last_attempt
+         FROM public.login_attempts 
+         WHERE email = $1 
+         AND (user_id IS NULL OR user_id IS NOT NULL)
+         AND success = false 
+         AND attempted_at > NOW() - INTERVAL '${lockoutDuration} minutes'`,
+        [email]
+      );
+    }
 
     const failedAttempts = parseInt(result.rows[0].count) || 0;
     const lastAttempt = result.rows[0].last_attempt;
@@ -438,11 +466,27 @@ async function recordLoginAttempt(agencyDatabase, userId, email, success, ipAddr
       CREATE INDEX IF NOT EXISTS idx_login_attempts_user_id ON public.login_attempts(user_id, attempted_at DESC);
       CREATE INDEX IF NOT EXISTS idx_login_attempts_email ON public.login_attempts(email, attempted_at DESC);
     `);
+    
+    // If table exists with NOT NULL constraint, alter it to allow NULL
+    try {
+      await agencyClient.query(`
+        ALTER TABLE public.login_attempts 
+        ALTER COLUMN user_id DROP NOT NULL;
+      `);
+    } catch (alterError) {
+      // Column might already be nullable or constraint doesn't exist, ignore
+      if (!alterError.message.includes('does not exist') && 
+          !alterError.message.includes('column "user_id" is not null') &&
+          !alterError.message.includes('constraint') &&
+          !alterError.message.includes('syntax error')) {
+        console.warn('[Password Policy] Could not alter login_attempts.user_id:', alterError.message);
+      }
+    }
 
     await agencyClient.query(
       `INSERT INTO public.login_attempts (user_id, email, success, ip_address, user_agent)
        VALUES ($1, $2, $3, $4, $5)`,
-      [userId, email, success, ipAddress, userAgent]
+      [userId || null, email, success, ipAddress, userAgent]
     );
 
     // Clean up old attempts (older than 30 days)
