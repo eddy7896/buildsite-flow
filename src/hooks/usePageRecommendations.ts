@@ -22,12 +22,27 @@ export function usePageRecommendations() {
   const [recommendations, setRecommendations] = useState<PageRecommendations | null>(null);
 
   const getRecommendations = useCallback(async (criteria: RecommendationCriteria) => {
+    // Validate criteria before making API call
+    if (!criteria.industry || !criteria.industry.trim() || 
+        !criteria.company_size || !criteria.company_size.trim() || 
+        !criteria.primary_focus || !criteria.primary_focus.trim()) {
+      console.warn('[Page Recommendations] Skipping API call - missing required criteria');
+      return {
+        all: [],
+        categorized: {
+          required: [],
+          recommended: [],
+          optional: []
+        }
+      };
+    }
+    
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.append('industry', criteria.industry);
-      params.append('company_size', criteria.company_size);
-      params.append('primary_focus', criteria.primary_focus);
+      params.append('industry', criteria.industry.trim());
+      params.append('company_size', criteria.company_size.trim());
+      params.append('primary_focus', criteria.primary_focus.trim());
       if (criteria.business_goals && criteria.business_goals.length > 0) {
         criteria.business_goals.forEach(goal => params.append('business_goals', goal));
       }

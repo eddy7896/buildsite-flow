@@ -66,14 +66,23 @@ export default function Step5PageSelection({
 
   // Fetch recommendations when step loads
   useEffect(() => {
-    if (formData.industry && formData.companySize && formData.primaryFocus) {
+    // Validate that all required fields are present and not empty
+    const hasValidCriteria = 
+      formData.industry && 
+      formData.industry.trim() !== '' &&
+      formData.companySize && 
+      formData.companySize.trim() !== '' &&
+      formData.primaryFocus && 
+      formData.primaryFocus.trim() !== '';
+    
+    if (hasValidCriteria) {
       const fetchRecs = async () => {
         try {
           setError(null);
           const recs = await getRecommendations({
-            industry: formData.industry,
-            company_size: formData.companySize,
-            primary_focus: formData.primaryFocus,
+            industry: formData.industry.trim(),
+            company_size: formData.companySize.trim(),
+            primary_focus: formData.primaryFocus.trim(),
             business_goals: formData.businessGoals || []
           });
           setRecommendations(recs);

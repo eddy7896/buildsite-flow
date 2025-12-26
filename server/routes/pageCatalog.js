@@ -377,17 +377,30 @@ router.get(
 
       const { industry, company_size, primary_focus, business_goals } = req.query;
 
-      if (!industry || !company_size || !primary_focus) {
-        return res.status(400).json({
-          success: false,
-          error: { message: 'industry, company_size, and primary_focus are required' }
+      // Validate that required fields are present and not empty
+      const industryTrimmed = industry?.trim();
+      const companySizeTrimmed = company_size?.trim();
+      const primaryFocusTrimmed = primary_focus?.trim();
+
+      if (!industryTrimmed || !companySizeTrimmed || !primaryFocusTrimmed) {
+        // Return empty recommendations instead of error for better UX
+        return res.json({
+          success: true,
+          data: {
+            all: [],
+            categorized: {
+              required: [],
+              recommended: [],
+              optional: []
+            }
+          }
         });
       }
 
       const criteria = {
-        industry,
-        companySize: company_size,
-        primaryFocus: primary_focus,
+        industry: industryTrimmed,
+        companySize: companySizeTrimmed,
+        primaryFocus: primaryFocusTrimmed,
         businessGoals: business_goals ? (Array.isArray(business_goals) ? business_goals : [business_goals]) : []
       };
 
