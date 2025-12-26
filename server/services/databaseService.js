@@ -531,10 +531,20 @@ async function repairMissingColumn(agencyDatabase, tableName, columnName) {
         } else if (columnName === 'agency_id') {
           await agencyClient.query('ALTER TABLE public.crm_activities ADD COLUMN IF NOT EXISTS agency_id UUID');
           await agencyClient.query('CREATE INDEX IF NOT EXISTS idx_crm_activities_agency_id ON public.crm_activities(agency_id)');
+        } else if (columnName === 'type') {
+          // Add 'type' column as alias for activity_type (for backward compatibility)
+          await agencyClient.query('ALTER TABLE public.crm_activities ADD COLUMN IF NOT EXISTS type TEXT');
+        } else if (columnName === 'title') {
+          // Add 'title' column as alias for subject (for backward compatibility)
+          await agencyClient.query('ALTER TABLE public.crm_activities ADD COLUMN IF NOT EXISTS title TEXT');
+        } else if (columnName === 'related_entity_type') {
+          await agencyClient.query('ALTER TABLE public.crm_activities ADD COLUMN IF NOT EXISTS related_entity_type TEXT');
+        } else if (columnName === 'related_entity_id') {
+          await agencyClient.query('ALTER TABLE public.crm_activities ADD COLUMN IF NOT EXISTS related_entity_id UUID');
         } else {
-          // For any other crm_activities column, run full schema repair
-          console.log(`[API] Running full schema repair for ${tableName}.${columnName}...`);
-          await createAgencySchema(agencyClient);
+          // For any other crm_activities column, just try to add it as TEXT (lightweight)
+          console.log(`[API] Adding generic ${columnName} column to ${tableName} table...`);
+          await agencyClient.query(`ALTER TABLE public.crm_activities ADD COLUMN IF NOT EXISTS ${columnName} TEXT`);
         }
         console.log(`[API] ✅ Added ${columnName} column to ${tableName} table`);
       } catch (addError) {

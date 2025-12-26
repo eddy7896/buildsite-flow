@@ -465,6 +465,46 @@ async function ensureCrmActivitiesTable(client) {
           ALTER TABLE public.crm_activities ADD COLUMN attachments JSONB;
         END IF;
 
+        -- Add type column (alias for activity_type, for backward compatibility)
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'crm_activities' 
+          AND column_name = 'type'
+        ) THEN
+          ALTER TABLE public.crm_activities ADD COLUMN type TEXT;
+        END IF;
+
+        -- Add title column (alias for subject, for backward compatibility)
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'crm_activities' 
+          AND column_name = 'title'
+        ) THEN
+          ALTER TABLE public.crm_activities ADD COLUMN title TEXT;
+        END IF;
+
+        -- Add related_entity_type column
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'crm_activities' 
+          AND column_name = 'related_entity_type'
+        ) THEN
+          ALTER TABLE public.crm_activities ADD COLUMN related_entity_type TEXT;
+        END IF;
+
+        -- Add related_entity_id column
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_schema = 'public' 
+          AND table_name = 'crm_activities' 
+          AND column_name = 'related_entity_id'
+        ) THEN
+          ALTER TABLE public.crm_activities ADD COLUMN related_entity_id UUID;
+        END IF;
+
         -- Create indexes
         CREATE INDEX IF NOT EXISTS idx_crm_activities_lead_id ON public.crm_activities(lead_id);
         CREATE INDEX IF NOT EXISTS idx_crm_activities_client_id ON public.crm_activities(client_id);
