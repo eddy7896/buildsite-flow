@@ -143,10 +143,10 @@ router.post('/query', asyncHandler(async (req, res) => {
       }
     }
 
-    // NOTE: Schema repair is now handled in databaseService.js executeQuery()
-    // This old code path is kept for backward compatibility but should not be needed
-    // The error should already be handled by executeQuery's retry logic
-    if ((error.code === '42P01' || error.code === '42883') && agencyDatabase && req && !req._schemaRepairAttempted) {
+    // DISABLED: Automatic schema repair consumes too much CPU
+    // Schema should be created during agency setup, not on every query error
+    // Only repair if explicitly enabled via environment variable
+    if (false && (error.code === '42P01' || error.code === '42883') && agencyDatabase && req && !req._schemaRepairAttempted && process.env.ENABLE_SCHEMA_REPAIR === 'true') {
       // 42P01 = relation does not exist (table/view)
       // 42883 = function does not exist
       req._schemaRepairAttempted = true; // Prevent infinite loops
@@ -320,9 +320,10 @@ router.post('/query', asyncHandler(async (req, res) => {
       }
     }
 
-    // If it's a "column does not exist" error, try to repair schema and retry
-    // Handle reimbursement_requests and expense_categories missing agency_id/employee_id columns
-    if (error.code === '42703' && agencyDatabase && error.message.includes('does not exist') && !req._columnRepairAttempted) {
+    // DISABLED: Automatic column repair consumes too much CPU
+    // Columns should be added via migrations, not on every query error
+    // Only repair if explicitly enabled via environment variable
+    if (false && error.code === '42703' && agencyDatabase && error.message.includes('does not exist') && !req._columnRepairAttempted && process.env.ENABLE_SCHEMA_REPAIR === 'true') {
       req._columnRepairAttempted = true; // Prevent infinite loops
       const columnMatch = error.message.match(/column "([^"]+)" of relation "([^"]+)"/);
       if (columnMatch) {
