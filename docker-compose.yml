@@ -17,7 +17,7 @@ services:
           memory: ${POSTGRES_MEMORY_RESERVED:-256M}
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-T0qSw1+UzLhLohHQi9WNE4T0W3t02YndRx3w5KtQPIE=}
       POSTGRES_DB: buildflow_db
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
@@ -77,9 +77,9 @@ services:
           memory: ${BACKEND_MEMORY_RESERVED:-256M}
     environment:
       # Database
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
-      VITE_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-admin}@postgres:${POSTGRES_PORT:-5432}/buildflow_db
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-admin}@postgres:${POSTGRES_PORT:-5432}/buildflow_db
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-T0qSw1+UzLhLohHQi9WNE4T0W3t02YndRx3w5KtQPIE=}
+      VITE_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-T0qSw1+UzLhLohHQi9WNE4T0W3t02YndRx3w5KtQPIE=}@postgres:${POSTGRES_PORT:-5432}/buildflow_db
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-T0qSw1+UzLhLohHQi9WNE4T0W3t02YndRx3w5KtQPIE=}@postgres:${POSTGRES_PORT:-5432}/buildflow_db
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       DATABASE_PORT: ${DATABASE_PORT:-5432}
       
@@ -96,7 +96,7 @@ services:
       BACKEND_PORT: ${BACKEND_PORT:-${PORT:-3000}}
       
       # Authentication
-      VITE_JWT_SECRET: ${VITE_JWT_SECRET:-f8KQxR2ZpL9M4wYcE7HVaTnJ5D6sAUB}
+      VITE_JWT_SECRET: ${VITE_JWT_SECRET:-7VEfW3OgaWRzOU85cGpVf60YCkusjOXZASouFPzI/gs=}
       
       # File Storage
       VITE_FILE_STORAGE_PATH: /app/storage
