@@ -90,15 +90,17 @@ async function createSession(agencyDatabase, userId, sessionData) {
     // Store in Redis for fast access
     if (await isRedisAvailable()) {
       const redisClient = await getRedisClient();
-      await redisClient.setEx(
-        `session:${tokenHash}`,
-        config.timeout,
-        JSON.stringify({
-          userId,
-          sessionId: result.rows[0].id,
-          lastActivity: new Date().toISOString(),
-        })
-      );
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.setex(
+          `session:${tokenHash}`,
+          config.timeout,
+          JSON.stringify({
+            userId,
+            sessionId: result.rows[0].id,
+            lastActivity: new Date().toISOString(),
+          })
+        );
+      }
     }
 
     return {
@@ -129,12 +131,14 @@ async function validateSession(agencyDatabase, token) {
   // Try Redis first
   if (await isRedisAvailable()) {
     const redisClient = await getRedisClient();
-    const cached = await redisClient.get(`session:${tokenHash}`);
-    if (cached) {
-      const sessionData = JSON.parse(cached);
-      // Update last activity
-      await updateSessionActivity(agencyDatabase, sessionData.sessionId);
-      return sessionData;
+    if (redisClient && redisClient.status === 'ready') {
+      const cached = await redisClient.get(`session:${tokenHash}`);
+      if (cached) {
+        const sessionData = JSON.parse(cached);
+        // Update last activity
+        await updateSessionActivity(agencyDatabase, sessionData.sessionId);
+        return sessionData;
+      }
     }
   }
 
@@ -287,7 +291,9 @@ async function revokeSession(agencyDatabase, sessionId, reason = 'manual') {
     // Remove from Redis
     if (await isRedisAvailable()) {
       const redisClient = await getRedisClient();
-      await redisClient.del(`session:${tokenHash}`);
+      if (redisClient && redisClient.status === 'ready') {
+        await redisClient.del(`session:${tokenHash}`);
+      }
     }
 
     return true;
@@ -339,8 +345,12 @@ async function revokeAllUserSessions(agencyDatabase, userId, excludeSessionId = 
     // Remove from Redis
     if (await isRedisAvailable()) {
       const redisClient = await getRedisClient();
-      for (const session of sessionsResult.rows) {
-        await redisClient.del(`session:${session.token_hash}`);
+      if (redisClient && redisClient.status === 'ready') {
+        for (const session of sessionsResult.rows) {
+          if (session.token_hash) {
+            await redisClient.del(`session:${session.token_hash}`);
+          }
+        }
       }
     }
 
@@ -478,8 +488,12 @@ async function cleanupExpiredSessions(agencyDatabase) {
     // Remove from Redis
     if (await isRedisAvailable()) {
       const redisClient = await getRedisClient();
-      for (const session of expiredResult.rows) {
-        await redisClient.del(`session:${session.token_hash}`);
+      if (redisClient && redisClient.status === 'ready') {
+        for (const session of expiredResult.rows) {
+          if (session.token_hash) {
+            await redisClient.del(`session:${session.token_hash}`);
+          }
+        }
       }
     }
 

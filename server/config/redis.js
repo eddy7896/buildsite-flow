@@ -1,18 +1,18 @@
 /**
  * Redis Configuration
- * Connection and caching setup for Redis
+ * Connection and caching setup for Redis using ioredis
  */
 
-let redis;
+let Redis;
 try {
-  redis = require('redis');
+  Redis = require('ioredis');
 } catch (error) {
   // Redis is optional - fallback to in-memory cache
-  redis = null;
+  Redis = null;
 }
 
-// If redis module is not available, export fallback functions
-if (!redis) {
+// If ioredis module is not available, export fallback functions
+if (!Redis) {
   module.exports = {
     getRedisClient: async () => null,
     isRedisAvailable: async () => false,
@@ -21,9 +21,9 @@ if (!redis) {
 } else {
   // Redis connection configuration
   const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
-  const REDIS_PORT = process.env.REDIS_PORT || 6379;
+  const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379', 10);
   const REDIS_PASSWORD = process.env.REDIS_PASSWORD || '';
-  const REDIS_DB = process.env.REDIS_DB || 0;
+  const REDIS_DB = parseInt(process.env.REDIS_DB || '0', 10);
 
   // Create Redis client
   let redisClient = null;
@@ -33,11 +33,11 @@ if (!redis) {
 
   /**
    * Get or create Redis client
-   * @returns {Promise<redis.RedisClientType>} Redis client instance
+   * @returns {Promise<Redis>} Redis client instance
    */
   async function getRedisClient() {
     // If we have a valid client, return it
-    if (redisClient && redisClient.isOpen) {
+    if (redisClient && redisClient.status === 'ready') {
       return redisClient;
     }
 
@@ -55,21 +55,22 @@ if (!redis) {
     lastConnectionAttempt = now;
 
     try {
-      const client = redis.createClient({
-        socket: {
-          host: REDIS_HOST,
-          port: REDIS_PORT,
-          reconnectStrategy: (retries) => {
-            // Don't retry if we've failed too many times
-            if (retries > 3) {
-              connectionFailed = true;
-              return false; // Stop retrying
-            }
-            return Math.min(retries * 100, 3000); // Exponential backoff, max 3s
-          },
-        },
+      const client = new Redis({
+        host: REDIS_HOST,
+        port: REDIS_PORT,
         password: REDIS_PASSWORD || undefined,
-        database: REDIS_DB,
+        db: REDIS_DB,
+        retryStrategy: (times) => {
+          // Don't retry if we've failed too many times
+          if (times > 3) {
+            connectionFailed = true;
+            return null; // Stop retrying
+          }
+          return Math.min(times * 100, 3000); // Exponential backoff, max 3s
+        },
+        maxRetriesPerRequest: 3,
+        enableReadyCheck: true,
+        lazyConnect: false,
       });
 
       // Error handling - only log once per connection attempt
@@ -98,20 +99,12 @@ if (!redis) {
         errorLogged = false;
       });
 
-      client.on('end', () => {
+      client.on('close', () => {
         if (!connectionFailed) {
-          console.log('[Redis] Connection ended');
+          console.log('[Redis] Connection closed');
         }
         redisClient = null;
       });
-
-      // Connect to Redis with timeout
-      await Promise.race([
-        client.connect(),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Connection timeout')), 2000)
-        )
-      ]);
       
       redisClient = client;
       connectionFailed = false;
@@ -131,7 +124,7 @@ if (!redis) {
    * Close Redis connection
    */
   async function closeRedisConnection() {
-    if (redisClient && redisClient.isOpen) {
+    if (redisClient && redisClient.status === 'ready') {
       await redisClient.quit();
       redisClient = null;
       console.log('[Redis] Connection closed');
@@ -163,16 +156,16 @@ if (!redis) {
 
     try {
       const client = await getRedisClient();
-      if (!client) {
+      if (!client || client.status !== 'ready') {
         cachedAvailability = false;
         availabilityCheckTime = now;
         return false;
       }
       
-      await client.ping();
-      cachedAvailability = true;
+      const result = await client.ping();
+      cachedAvailability = result === 'PONG';
       availabilityCheckTime = now;
-      return true;
+      return cachedAvailability;
     } catch (error) {
       cachedAvailability = false;
       availabilityCheckTime = now;

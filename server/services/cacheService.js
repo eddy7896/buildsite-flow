@@ -23,9 +23,11 @@ async function get(key) {
     // Try Redis first
     if (await isRedisAvailable()) {
       const client = await getRedisClient();
-      const value = await client.get(key);
-      if (value) {
-        return JSON.parse(value);
+      if (client && client.status === 'ready') {
+        const value = await client.get(key);
+        if (value) {
+          return JSON.parse(value);
+        }
       }
       return null;
     }
@@ -60,8 +62,10 @@ async function set(key, value, ttl = DEFAULT_TTL) {
     // Try Redis first
     if (await isRedisAvailable()) {
       const client = await getRedisClient();
-      await client.setEx(key, ttl, JSON.stringify(value));
-      return true;
+      if (client && client.status === 'ready') {
+        await client.setex(key, ttl, JSON.stringify(value));
+        return true;
+      }
     }
   } catch (error) {
     console.warn('[Cache] Redis set error, falling back to memory:', error.message);
@@ -88,8 +92,10 @@ async function del(key) {
     // Try Redis first
     if (await isRedisAvailable()) {
       const client = await getRedisClient();
-      await client.del(key);
-      return true;
+      if (client && client.status === 'ready') {
+        await client.del(key);
+        return true;
+      }
     }
   } catch (error) {
     console.warn('[Cache] Redis delete error, falling back to memory:', error.message);
@@ -113,10 +119,12 @@ async function delPattern(pattern) {
     // Try Redis first
     if (await isRedisAvailable()) {
       const client = await getRedisClient();
-      const keys = await client.keys(pattern);
-      if (keys.length > 0) {
-        await client.del(keys);
-        deleted = keys.length;
+      if (client && client.status === 'ready') {
+        const keys = await client.keys(pattern);
+        if (keys.length > 0) {
+          await client.del(...keys);
+          deleted = keys.length;
+        }
       }
       return deleted;
     }
@@ -145,8 +153,10 @@ async function clear() {
     // Try Redis first
     if (await isRedisAvailable()) {
       const client = await getRedisClient();
-      await client.flushDb();
-      return true;
+      if (client && client.status === 'ready') {
+        await client.flushdb();
+        return true;
+      }
     }
   } catch (error) {
     console.warn('[Cache] Redis clear error, falling back to memory:', error.message);
@@ -172,11 +182,14 @@ async function getStats() {
   try {
     if (await isRedisAvailable()) {
       const client = await getRedisClient();
-      const info = await client.info('stats');
-      stats.type = 'redis';
-      stats.redisAvailable = true;
-      // Parse Redis info (simplified)
-      stats.size = await client.dbSize();
+      if (client && client.status === 'ready') {
+        stats.type = 'redis';
+        stats.redisAvailable = true;
+        // Get database size
+        stats.size = await client.dbsize();
+      } else {
+        stats.size = memoryCache.size;
+      }
     } else {
       stats.size = memoryCache.size;
     }

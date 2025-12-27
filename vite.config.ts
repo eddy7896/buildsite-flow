@@ -4,6 +4,40 @@ import { fileURLToPath, URL } from 'node:url'
 
 // https://vitejs.dev/config/
 export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    css: true,
+    // Exclude server tests - they should be run separately with Node environment
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/server/**',
+      '**/*.config.*',
+    ],
+    // Increase memory limit for tests
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        singleThread: false,
+        isolate: true,
+      },
+    },
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'src/test/',
+        '**/*.d.ts',
+        '**/*.config.*',
+        '**/mockData',
+        'dist/',
+        'server/',
+      ],
+    },
+  },
   plugins: [react()],
   resolve: {
     alias: {

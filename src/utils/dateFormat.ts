@@ -1,4 +1,5 @@
 import { format, parseISO } from 'date-fns';
+import { formatInTimeZone, toZonedTime, zonedTimeToUtc } from 'date-fns-tz';
 
 export interface DateFormatConfig {
   format: string;
@@ -24,11 +25,15 @@ export function formatDate(
   try {
     const dateObj = typeof date === 'string' ? parseISO(date) : date;
     const fmt = dateFormat || DEFAULT_CONFIG.format;
+    const tz = timezone || DEFAULT_CONFIG.timezone;
 
     // Convert format string to date-fns format
     const dateFnsFormat = convertDateFormat(fmt);
 
-    // Format the date (timezone handling would require date-fns-tz, but we'll use local time for now)
+    // Format the date with timezone support
+    if (tz) {
+      return formatInTimeZone(dateObj, tz, dateFnsFormat);
+    }
     return format(dateObj, dateFnsFormat);
   } catch (error) {
     console.error('Error formatting date:', error);
@@ -47,6 +52,12 @@ export function formatTime(
 
   try {
     const dateObj = typeof date === 'string' ? parseISO(date) : date;
+    const tz = timezone || DEFAULT_CONFIG.timezone;
+
+    // Format the time with timezone support
+    if (tz) {
+      return formatInTimeZone(dateObj, tz, 'HH:mm');
+    }
     return format(dateObj, 'HH:mm');
   } catch (error) {
     console.error('Error formatting time:', error);
@@ -67,9 +78,14 @@ export function formatDateTime(
   try {
     const dateObj = typeof date === 'string' ? parseISO(date) : date;
     const fmt = dateFormat || DEFAULT_CONFIG.format;
+    const tz = timezone || DEFAULT_CONFIG.timezone;
 
     const dateFnsFormat = convertDateFormat(fmt);
 
+    // Format the datetime with timezone support
+    if (tz) {
+      return formatInTimeZone(dateObj, tz, `${dateFnsFormat} HH:mm`);
+    }
     return format(dateObj, `${dateFnsFormat} HH:mm`);
   } catch (error) {
     console.error('Error formatting datetime:', error);
@@ -94,9 +110,16 @@ function convertDateFormat(formatStr: string): string {
 }
 
 /**
- * Get current date
+ * Get current date in specified timezone
  */
 export function getCurrentDate(timezone?: string): Date {
+  const tz = timezone || DEFAULT_CONFIG.timezone;
+  if (tz) {
+    // Get current time in the specified timezone
+    const now = new Date();
+    const zonedDate = toZonedTime(now, tz);
+    return zonedDate;
+  }
   return new Date();
 }
 
@@ -123,12 +146,16 @@ export function isWorkingHours(
 ): boolean {
   try {
     const timeObj = typeof time === 'string' ? parseISO(time) : time;
+    const tz = timezone || DEFAULT_CONFIG.timezone;
+
+    // Convert to zoned time if timezone is specified
+    const zonedTime = tz ? toZonedTime(timeObj, tz) : timeObj;
 
     const [startHour, startMin] = startTime.split(':').map(Number);
     const [endHour, endMin] = endTime.split(':').map(Number);
 
-    const currentHour = timeObj.getHours();
-    const currentMin = timeObj.getMinutes();
+    const currentHour = zonedTime.getHours();
+    const currentMin = zonedTime.getMinutes();
 
     const startMinutes = startHour * 60 + startMin;
     const endMinutes = endHour * 60 + endMin;
