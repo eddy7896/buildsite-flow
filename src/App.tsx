@@ -6,11 +6,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
 import { AuthProvider } from "@/hooks/useAuth";
+import { ViewAsUserProvider } from "@/contexts/ViewAsUserContext";
 import { AppSidebar } from "@/components/AppSidebar";
 import { AgencyHeader } from "@/components/AgencyHeader";
 import { AuthRedirect } from "@/components/AuthRedirect";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ViewAsUserBanner } from "@/components/ViewAsUserBanner";
 // Note: Route permissions are now automatically checked by ProtectedRoute component
 // using routePermissions.ts. The requiredRole prop is optional and can be omitted
 // to use auto-detection from routePermissions.
@@ -123,6 +125,7 @@ const PageRequestCenter = React.lazy(() => import("./pages/PageRequestCenter"));
 // Lazy load component modules
 const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
 const AdvancedPermissions = React.lazy(() => import('./components/AdvancedPermissions'));
+const ViewAsUser = React.lazy(() => import('./pages/ViewAsUser'));
 const AdvancedDashboard = React.lazy(() => import('./components/analytics/AdvancedDashboard').then(m => ({ default: m.AdvancedDashboard })));
 const DocumentManager = React.lazy(() => import('./components/documents/DocumentManager').then(m => ({ default: m.DocumentManager })));
 const MessageCenter = React.lazy(() => import('./components/communication/MessageCenter').then(m => ({ default: m.MessageCenter })));
@@ -156,6 +159,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
         </div>
         </header>
         <div className="flex-1 p-3 sm:p-4 md:p-5 lg:p-6 overflow-auto">
+          <ViewAsUserBanner />
           {children}
         </div>
     </SidebarInset>
@@ -1253,6 +1257,17 @@ const AppContent = () => {
                 } 
               />
               
+              <Route 
+                path="/view-as-user" 
+                element={
+                  <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+                    <DashboardLayout>
+                      <SuspenseRoute><ViewAsUser /></SuspenseRoute>
+                    </DashboardLayout>
+                  </ProtectedRoute>
+                } 
+              />
+              
               <Route path="*" element={<SuspenseRoute><NotFound /></SuspenseRoute>} />
         </Routes>
       </BrowserRouter>
@@ -1268,7 +1283,9 @@ const App = () => {
         <Sonner />
         <ErrorBoundary>
           <AuthProvider>
-            <AppContent />
+            <ViewAsUserProvider>
+              <AppContent />
+            </ViewAsUserProvider>
           </AuthProvider>
         </ErrorBoundary>
       </TooltipProvider>

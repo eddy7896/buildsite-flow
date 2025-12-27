@@ -156,18 +156,18 @@ export const useAgencySettings = () => {
         }
       } else {
         // No settings found, use defaults
+        // Note: agency_id is not included - agency_settings table doesn't have this column
         setSettings({
           ...DEFAULT_SETTINGS,
-          agency_id: await getAgencyId(profile, user?.id) || undefined,
         } as AgencySettings);
       }
     } catch (err: any) {
       console.error('Error fetching agency settings:', err);
       setError(err.message || 'Failed to fetch agency settings');
       // Use defaults on error
+      // Note: agency_id is not included - agency_settings table doesn't have this column
       setSettings({
         ...DEFAULT_SETTINGS,
-        agency_id: await getAgencyId(profile, user?.id) || undefined,
       } as AgencySettings);
     } finally {
       setLoading(false);
@@ -178,12 +178,16 @@ export const useAgencySettings = () => {
     try {
       setError(null);
       
+      // Remove agency_id from newSettings if present - agency_settings table doesn't have this column
+      // Each agency has its own database, so agency is identified by database name, not a column
+      const { agency_id: _, ...settingsWithoutAgencyId } = newSettings;
+      
       // Only include fields that are actually provided (not undefined)
       const settingsToSave: any = {};
       
       // Copy only defined fields, but exclude large logo_url unless it's actually new
-      Object.keys(newSettings).forEach(key => {
-        const value = (newSettings as any)[key];
+      Object.keys(settingsWithoutAgencyId).forEach(key => {
+        const value = (settingsWithoutAgencyId as any)[key];
         
         // Special handling for logo_url: only include if it's a new/changed value
         // Don't send existing large base64 strings that haven't changed
@@ -218,19 +222,23 @@ export const useAgencySettings = () => {
       });
 
       // Ensure working_days is stored as JSON string if provided
-      if (newSettings.working_days !== undefined) {
-        settingsToSave.working_days = typeof newSettings.working_days === 'string' 
-          ? newSettings.working_days 
-          : JSON.stringify(newSettings.working_days || DEFAULT_SETTINGS.working_days);
+      if (settingsWithoutAgencyId.working_days !== undefined) {
+        settingsToSave.working_days = typeof settingsWithoutAgencyId.working_days === 'string' 
+          ? settingsWithoutAgencyId.working_days 
+          : JSON.stringify(settingsWithoutAgencyId.working_days || DEFAULT_SETTINGS.working_days);
       }
 
       // Also save as currency for backward compatibility if default_currency is provided
-      if (newSettings.default_currency) {
-        settingsToSave.currency = newSettings.default_currency;
-      } else if (newSettings.currency) {
-        settingsToSave.currency = newSettings.currency;
+      if (settingsWithoutAgencyId.default_currency) {
+        settingsToSave.currency = settingsWithoutAgencyId.default_currency;
+      } else if (settingsWithoutAgencyId.currency) {
+        settingsToSave.currency = settingsWithoutAgencyId.currency;
       }
 
+      // Final safety check: explicitly remove agency_id if it somehow got into settingsToSave
+      // agency_settings table doesn't have this column - each agency has its own database
+      delete settingsToSave.agency_id;
+      
       if (settings?.id) {
         // Update existing settings
         const updated = await updateRecord<AgencySettings>(
@@ -241,10 +249,7 @@ export const useAgencySettings = () => {
         setSettings(updated);
       } else {
         // Insert new settings
-        const inserted = await insertRecord<AgencySettings>('agency_settings', {
-          ...settingsToSave,
-          agency_id: await getAgencyId(profile, user?.id) || settings?.agency_id || undefined,
-        });
+        const inserted = await insertRecord<AgencySettings>('agency_settings', settingsToSave);
         setSettings(inserted);
       }
 

@@ -59,6 +59,14 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     description: 'Main dashboard for all users'
   },
 
+  // View As User (Admin only)
+  '/view-as-user': { 
+    path: '/view-as-user', 
+    requiredRoles: ['admin'], 
+    allowHigherRoles: true,
+    description: 'View dashboard as another user'
+  },
+
   // Employee Management
   '/employee-management': { 
     path: '/employee-management', 

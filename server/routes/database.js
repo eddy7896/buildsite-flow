@@ -15,7 +15,7 @@ const { parseDatabaseUrl } = require('../utils/poolManager');
  * Execute a single database query
  */
 router.post('/query', asyncHandler(async (req, res) => {
-  const { sql: originalSql, params: originalParams = [], userId } = req.body;
+  let { sql: originalSql, params: originalParams = [], userId } = req.body;
   const agencyDatabase = req.headers['x-agency-database'];
 
   // Validate SQL early
@@ -23,8 +23,70 @@ router.post('/query', asyncHandler(async (req, res) => {
     return res.status(400).json({ error: 'SQL query is required' });
   }
 
-  const sql = originalSql.trim();
-  const params = originalParams;
+  let sql = originalSql.trim();
+  let params = [...originalParams]; // Create a copy to modify
+
+  // Safety check: Remove agency_id from agency_settings INSERT/UPDATE queries
+  // agency_settings table doesn't have agency_id column - each agency has its own database
+  if (sql.includes('agency_settings') && sql.includes('INSERT INTO')) {
+    // Check if agency_id is present (case-insensitive)
+    if (sql.match(/\bagency_id\b/i)) {
+      console.log('[API] ⚠️ Detected agency_id in agency_settings INSERT, removing it...');
+      
+      // Match the full INSERT statement including RETURNING clause
+      const fullMatch = sql.match(/INSERT\s+INTO\s+([^(]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)\s*(RETURNING\s+\*)?/is);
+      
+      if (fullMatch) {
+        const tablePart = fullMatch[1].trim();
+        const columnsStr = fullMatch[2];
+        const valuesStr = fullMatch[3];
+        const returningClause = fullMatch[4] || '';
+        
+        // Parse columns and values
+        const columns = columnsStr.split(',').map(c => c.trim());
+        const values = valuesStr.split(',').map(v => v.trim());
+        
+        // Find agency_id index
+        const agencyIdIndex = columns.findIndex(c => c.toLowerCase() === 'agency_id');
+        
+        if (agencyIdIndex !== -1) {
+          console.log('[API] Found agency_id at column index:', agencyIdIndex);
+          console.log('[API] Original columns count:', columns.length);
+          console.log('[API] Original params count:', params.length);
+          
+          // Remove agency_id from columns
+          columns.splice(agencyIdIndex, 1);
+          
+          // Remove corresponding value placeholder
+          values.splice(agencyIdIndex, 1);
+          
+          // Rebuild the SQL
+          sql = `INSERT INTO ${tablePart} (${columns.join(',')}) VALUES (${values.join(',')})${returningClause}`;
+          
+          // Remove the corresponding parameter from params array
+          if (params.length > agencyIdIndex) {
+            params.splice(agencyIdIndex, 1);
+          }
+          
+          console.log('[API] ✅ Removed agency_id - New columns count:', columns.length);
+          console.log('[API] ✅ New params count:', params.length);
+        }
+      } else {
+        // Fallback: aggressive regex replacement
+        console.log('[API] ⚠️ Full match failed, using fallback regex');
+        sql = sql.replace(/,\s*agency_id\s*(?=,|\))/gi, '');
+        sql = sql.replace(/\(\s*agency_id\s*,/gi, '(');
+        sql = sql.replace(/,\s*agency_id\s*\)/gi, ')');
+        sql = sql.replace(/\(\s*agency_id\s*\)/gi, '()');
+      }
+    }
+  }
+  
+  // Remove agency_id from UPDATE statements
+  if (sql.includes('agency_settings') && sql.includes('UPDATE') && sql.includes('agency_id')) {
+    sql = sql.replace(/,\s*agency_id\s*=\s*\$?\d+/gi, '');
+    sql = sql.replace(/agency_id\s*=\s*\$?\d+\s*,/gi, '');
+  }
 
   try {
     const result = await executeQuery(sql, params, agencyDatabase, userId);

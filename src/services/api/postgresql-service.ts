@@ -289,6 +289,12 @@ export async function insertRecord<T = any>(
   userId?: string,
   agencyId?: string | null
 ): Promise<T> {
+  // Safety check: agency_settings table doesn't have agency_id column
+  // Each agency has its own database, so agency is identified by database name, not a column
+  if (table === 'agency_settings' && 'agency_id' in data) {
+    delete data.agency_id;
+  }
+
   // Automatically add agency_id if table requires it and it's not already set
   if (AGENCY_REQUIRED_TABLES.includes(table) && !data.agency_id && agencyId) {
     data.agency_id = agencyId;
@@ -327,6 +333,12 @@ export async function updateRecord<T = any>(
   where: Record<string, any>,
   userId?: string
 ): Promise<T> {
+  // Safety check: agency_settings table doesn't have agency_id column
+  // Each agency has its own database, so agency is identified by database name, not a column
+  if (table === 'agency_settings' && 'agency_id' in data) {
+    delete data.agency_id;
+  }
+
   const updateKeys = Object.keys(data);
   const updateValues = Object.values(data);
   const setClause = updateKeys.map((key, i) => `${key} = $${i + 1}`).join(',');

@@ -18,6 +18,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
     { path: '/system-health', title: 'System Health', icon: 'Activity', exists: true, category: 'system' },
     { path: '/email-testing', title: 'Email Testing', icon: 'Mail', exists: true, category: 'system' },
     { path: '/permissions', title: 'Permissions', icon: 'Shield', exists: true, category: 'system' },
+    { path: '/view-as-user', title: 'View As User', icon: 'Eye', exists: true, category: 'management' },
     { path: '/employee-management', title: 'Employee Management', icon: 'Users', exists: true, category: 'management' },
     { path: '/department-management', title: 'Department Management', icon: 'Building2', exists: true, category: 'management' },
     { path: '/role-requests', title: 'Role Requests', icon: 'UserCog', exists: true, category: 'management' },
@@ -160,6 +161,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Admin - Full operational access
   admin: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
+    { path: '/view-as-user', title: 'View As User', icon: 'Eye', exists: true, category: 'management' },
     { path: '/employee-management', title: 'Employee Management', icon: 'Users', exists: true, category: 'management' },
     { path: '/create-employee', title: 'Create Employee', icon: 'UserPlus', exists: true, category: 'management' },
     { path: '/department-management', title: 'Department Management', icon: 'Building2', exists: true, category: 'management' },

@@ -63,6 +63,7 @@ import {
   Server,
   Shield,
   Cog,
+  Eye,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -78,7 +79,7 @@ import {
   SidebarSeparator,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuthWithViewAs } from '@/hooks/useAuthWithViewAs';
 import { getApiBaseUrl } from '@/config/api';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getPagesForRole, type PageConfig } from '@/utils/rolePages';
@@ -153,6 +154,7 @@ const iconMap: Record<string, any> = {
   Database,
   Server,
   Cog,
+  Eye,
 };
 
 // Category configuration with icons and colors
@@ -174,7 +176,10 @@ const categoryConfig: Record<string, { label: string; icon: any; color: string; 
 
 export function AppSidebar() {
   const { state, setOpenMobile } = useSidebar();
-  const { userRole, loading, profile } = useAuth();
+  const auth = useAuthWithViewAs();
+  const effectiveRole = auth.userRole;
+  const loading = auth.loading;
+  const profile = auth.profile;
   const { settings: agencySettings } = useAgencySettings();
   const location = useLocation();
   const currentPath = location.pathname;
@@ -218,10 +223,10 @@ export function AppSidebar() {
       }
     };
 
-    if (!loading && userRole) {
+    if (!loading && effectiveRole) {
       checkSetup();
     }
-  }, [loading, userRole]);
+  }, [loading, effectiveRole]);
 
   // Auto-collapse sidebar on mobile when navigating
   useEffect(() => {
@@ -232,7 +237,7 @@ export function AppSidebar() {
 
   // Load accessible pages for non-super-admin users
   useEffect(() => {
-    if (userRole && userRole !== 'super_admin') {
+    if (effectiveRole && effectiveRole !== 'super_admin') {
       getAccessiblePagePaths().then(paths => {
         setAccessiblePagePaths(paths);
         setPagesLoaded(true);
@@ -244,10 +249,10 @@ export function AppSidebar() {
       setPagesLoaded(true);
       setAccessiblePagePaths([]); // Super admin has access to all
     }
-  }, [userRole]);
+  }, [effectiveRole]);
 
   // Don't show any navigation items if still loading or no role
-  if (loading || !userRole) {
+  if (loading || !effectiveRole) {
     return (
       <Sidebar className="w-14" collapsible="icon">
         <SidebarContent className="flex flex-col">
@@ -261,8 +266,8 @@ export function AppSidebar() {
     );
   }
 
-  // Get pages for the current role from rolePages mapping
-  const role = userRole as AppRole;
+  // Get pages for the effective role from rolePages mapping
+  const role = effectiveRole as AppRole;
   const rolePages = getPagesForRole(role);
   
   // Filter and organize pages by category
@@ -272,7 +277,7 @@ export function AppSidebar() {
       if (page.category === 'settings') return false;
       
       // For non-super-admin, check if page is assigned to agency
-      if (userRole && userRole !== 'super_admin') {
+      if (effectiveRole && effectiveRole !== 'super_admin') {
         if (!pagesLoaded) return false; // Wait for pages to load
         if (accessiblePagePaths.length === 0) return false; // No pages assigned
         const hasAccess = accessiblePagePaths.some(path => {
@@ -287,7 +292,7 @@ export function AppSidebar() {
       }
       
       // Check role-based access
-      if (userRole && !canAccessRouteSync(userRole, page.path)) return false;
+      if (effectiveRole && !canAccessRouteSync(effectiveRole, page.path)) return false;
       return true;
     })
     .sort((a, b) => {
@@ -312,12 +317,12 @@ export function AppSidebar() {
     if (page.path !== '/settings' || !page.exists) return false;
     
     // Check page assignment for non-super-admin
-    if (userRole && userRole !== 'super_admin' && pagesLoaded) {
+    if (effectiveRole && effectiveRole !== 'super_admin' && pagesLoaded) {
       const hasAccess = accessiblePagePaths.includes('/settings');
       if (!hasAccess) return false;
     }
     
-    if (userRole && !canAccessRouteSync(userRole, '/settings')) return false;
+    if (effectiveRole && !canAccessRouteSync(effectiveRole, '/settings')) return false;
     return true;
   });
   
@@ -615,7 +620,7 @@ export function AppSidebar() {
                       {profile.full_name || 'User'}
                     </div>
                     <div className="text-[9px] sm:text-[10px] text-muted-foreground truncate">
-                      {profile.position || userRole || 'Member'}
+                      {profile.position || effectiveRole || 'Member'}
                     </div>
                   </div>
                 </div>

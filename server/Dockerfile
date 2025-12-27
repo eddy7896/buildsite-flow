@@ -41,11 +41,10 @@ COPY --from=builder /app/package-lock.json* ./
 # Install ONLY production dependencies
 RUN --mount=type=cache,target=/root/.npm \
     if [ -f package-lock.json ]; then \
-        npm ci --only=production || npm install --only=production; \
+        npm ci --omit=dev || npm install --omit=dev; \
     else \
-        npm install --only=production; \
+        npm install --omit=dev; \
     fi && \
-    npm cache clean --force && \
     rm -rf /tmp/*
 
 # Copy only runtime files from builder (exclude node_modules, tests, etc.)
