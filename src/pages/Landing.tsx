@@ -195,22 +195,22 @@ export default function Landing() {
       {/* Navigation */}
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-50">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-16 items-center justify-between">
+          <div className="flex h-14 sm:h-16 items-center justify-between gap-3">
             <Link 
               to="/" 
-              className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md p-1"
+              className="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md p-1.5 sm:p-1 flex-shrink-0"
               aria-label="Drena Home"
             >
-              <Building2 className="h-8 w-8 text-primary" aria-hidden="true" />
-              <span className="text-xl font-bold">Drena</span>
+              <Building2 className="h-7 w-7 sm:h-8 sm:w-8 text-primary" aria-hidden="true" />
+              <span className="text-lg sm:text-xl font-bold">Drena</span>
             </Link>
             
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-6" aria-label="Main navigation">
+            <nav className="hidden md:flex items-center gap-4 lg:gap-6" aria-label="Main navigation">
               <a 
                 href="#features" 
                 onClick={(e) => handleSmoothScroll(e, "features")}
-                className={`transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md px-2 py-1 ${
+                className={`transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md px-3 py-1.5 ${
                   activeSection === "features" 
                     ? "text-foreground font-medium" 
                     : "text-muted-foreground hover:text-foreground"
@@ -222,7 +222,7 @@ export default function Landing() {
               <a 
                 href="#benefits" 
                 onClick={(e) => handleSmoothScroll(e, "benefits")}
-                className={`transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md px-2 py-1 ${
+                className={`transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md px-3 py-1.5 ${
                   activeSection === "benefits" 
                     ? "text-foreground font-medium" 
                     : "text-muted-foreground hover:text-foreground"
@@ -234,7 +234,7 @@ export default function Landing() {
               <a 
                 href="#testimonials" 
                 onClick={(e) => handleSmoothScroll(e, "testimonials")}
-                className={`transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md px-2 py-1 ${
+                className={`transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md px-3 py-1.5 ${
                   activeSection === "testimonials" 
                     ? "text-foreground font-medium" 
                     : "text-muted-foreground hover:text-foreground"
@@ -245,7 +245,7 @@ export default function Landing() {
               </a>
               <Link 
                 to="/pricing" 
-                className="text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md px-2 py-1 transition-colors"
+                className="text-muted-foreground hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-md px-3 py-1.5 transition-colors"
                 aria-label="View Pricing"
               >
                 Pricing
@@ -253,10 +253,11 @@ export default function Landing() {
             </nav>
 
             {/* Desktop Actions */}
-            <div className="hidden md:flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-3 lg:gap-4">
               <Link to="/auth">
                 <Button 
                   variant="secondary" 
+                  size="sm"
                   className="focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   aria-label="Sign in to your existing Drena account"
                 >
@@ -266,6 +267,7 @@ export default function Landing() {
               </Link>
               <Link to="/agency-signup">
                 <Button 
+                  size="sm"
                   className="focus:ring-2 focus:ring-ring focus:ring-offset-2"
                   aria-label="Create a new agency account"
                 >
@@ -280,57 +282,84 @@ export default function Landing() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="md:hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                  className="md:hidden h-10 w-10 focus:ring-2 focus:ring-ring focus:ring-offset-2 flex-shrink-0"
                   aria-label="Open navigation menu"
                   aria-expanded={mobileMenuOpen}
                 >
                   <Menu className="h-6 w-6" aria-hidden="true" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-[300px] sm:w-[400px]">
-                <nav className="flex flex-col gap-4 mt-8" aria-label="Mobile navigation">
-                  <a 
-                    href="#features" 
-                    onClick={(e) => handleSmoothScroll(e, "features")}
-                    className="text-lg font-medium py-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md px-2"
-                  >
-                    Features
-                  </a>
-                  <a 
-                    href="#benefits" 
-                    onClick={(e) => handleSmoothScroll(e, "benefits")}
-                    className="text-lg font-medium py-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md px-2"
-                  >
-                    Benefits
-                  </a>
-                  <a 
-                    href="#testimonials" 
-                    onClick={(e) => handleSmoothScroll(e, "testimonials")}
-                    className="text-lg font-medium py-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md px-2"
-                  >
-                    Testimonials
-                  </a>
-                  <Link 
-                    to="/pricing" 
-                    className="text-lg font-medium py-2 focus:outline-none focus:ring-2 focus:ring-ring rounded-md px-2"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Pricing
-                  </Link>
-                  <div className="border-t pt-4 mt-4 space-y-2">
-                    <Link to="/auth" onClick={() => setMobileMenuOpen(false)}>
-                      <Button variant="secondary" className="w-full justify-start">
+              <SheetContent side="right" className="w-[85vw] max-w-[320px] sm:w-[400px]">
+                <div className="flex flex-col h-full">
+                  <div className="flex items-center gap-2 mb-6 pb-4 border-b">
+                    <Building2 className="h-8 w-8 text-primary" />
+                    <span className="text-xl font-bold">Drena</span>
+                  </div>
+                  <nav className="flex flex-col gap-1 flex-1" aria-label="Mobile navigation">
+                    <a 
+                      href="#features" 
+                      onClick={(e) => {
+                        handleSmoothScroll(e, "features");
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`text-base font-medium py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-ring transition-colors ${
+                        activeSection === "features"
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      Features
+                    </a>
+                    <a 
+                      href="#benefits" 
+                      onClick={(e) => {
+                        handleSmoothScroll(e, "benefits");
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`text-base font-medium py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-ring transition-colors ${
+                        activeSection === "benefits"
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      Benefits
+                    </a>
+                    <a 
+                      href="#testimonials" 
+                      onClick={(e) => {
+                        handleSmoothScroll(e, "testimonials");
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`text-base font-medium py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-ring transition-colors ${
+                        activeSection === "testimonials"
+                          ? "bg-primary/10 text-primary"
+                          : "text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      Testimonials
+                    </a>
+                    <Link 
+                      to="/pricing"
+                      className="text-base font-medium py-3 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-ring transition-colors text-foreground hover:bg-muted"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Pricing
+                    </Link>
+                  </nav>
+                  <div className="border-t pt-4 mt-auto space-y-3">
+                    <Link to="/auth" onClick={() => setMobileMenuOpen(false)} className="block">
+                      <Button variant="secondary" className="w-full justify-center h-11">
                         <LogIn className="mr-2 h-4 w-4" />
-                        Sign In to Your Agency
+                        Sign In
                       </Button>
                     </Link>
-                    <Link to="/agency-signup" onClick={() => setMobileMenuOpen(false)}>
-                      <Button className="w-full justify-start">
-                        Create New Agency <ArrowRight className="ml-2 h-4 w-4" />
+                    <Link to="/agency-signup" onClick={() => setMobileMenuOpen(false)} className="block">
+                      <Button className="w-full justify-center h-11">
+                        Create Agency <ArrowRight className="ml-2 h-4 w-4" />
                       </Button>
                     </Link>
                   </div>
-                </nav>
+                </div>
               </SheetContent>
             </Sheet>
           </div>

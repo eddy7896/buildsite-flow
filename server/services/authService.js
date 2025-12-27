@@ -8,15 +8,146 @@ const { pool } = require('../config/database');
 const { parseDatabaseUrl } = require('../utils/poolManager');
 
 /**
- * Search for user across all agency databases
+ * Search for user across all agency databases and main database (for super admins)
  * @param {string} email - User email
  * @param {string} password - User password
  * @returns {Promise<Object|null>} User data with agency info or null
  */
 async function findUserAcrossAgencies(email, password) {
+  console.log('[Auth] findUserAcrossAgencies called with email:', email);
   const mainClient = await pool.connect();
 
   try {
+    // FIRST: Check main database for super admin users
+    // Super admins are in buildflow_db with role 'super_admin' and agency_id = NULL
+    try {
+      console.log('[Auth] Checking for super admin with email:', email);
+      
+      // Query only columns that definitely exist in buildflow_db users table
+      const superAdminCheck = await mainClient.query(`
+        SELECT 
+          u.id, 
+          u.email, 
+          u.password_hash, 
+          u.email_confirmed, 
+          u.is_active,
+          u.created_at,
+          u.updated_at,
+          u.last_sign_in_at,
+          ur.role,
+          p.full_name,
+          p.phone_number as phone,
+          p.avatar_url
+        FROM public.users u
+        LEFT JOIN public.user_roles ur ON u.id = ur.user_id 
+          AND ur.role = 'super_admin' 
+          AND ur.agency_id IS NULL
+        LEFT JOIN public.profiles p ON u.id = p.user_id
+        WHERE u.email = $1 
+          AND ur.role = 'super_admin'
+          AND u.is_active = true
+      `, [email]);
+      
+      console.log('[Auth] Super admin check result:', {
+        found: superAdminCheck.rows.length > 0,
+        rowCount: superAdminCheck.rows.length
+      });
+
+      if (superAdminCheck.rows.length > 0) {
+        const dbUser = superAdminCheck.rows[0];
+        console.log('[Auth] Found super admin user:', {
+          email: dbUser.email,
+          is_active: dbUser.is_active,
+          role: dbUser.role,
+          hasPasswordHash: !!dbUser.password_hash
+        });
+        
+        // Verify password using pgcrypto crypt function
+        // Check if password_hash uses bcrypt or pgcrypto format
+        let passwordMatch = false;
+        
+        if (dbUser.password_hash) {
+          // Verify password using pgcrypto crypt function
+          // The password_hash was created with: crypt('password', gen_salt('bf'))
+          // To verify: crypt('password', existing_hash) should equal existing_hash
+          try {
+            const cryptResult = await mainClient.query(
+              `SELECT ($1 = crypt($2, $1)) as match`,
+              [dbUser.password_hash, password]
+            );
+            passwordMatch = cryptResult.rows[0]?.match || false;
+            console.log('[Auth] pgcrypto verification result:', passwordMatch);
+          } catch (cryptError) {
+            console.log('[Auth] pgcrypto verification failed, trying bcrypt:', cryptError.message);
+            passwordMatch = false;
+          }
+          
+          // If pgcrypto fails, try bcrypt (for backward compatibility)
+          if (!passwordMatch) {
+            try {
+              passwordMatch = await bcrypt.compare(password, dbUser.password_hash);
+              console.log('[Auth] bcrypt verification result:', passwordMatch);
+            } catch (bcryptError) {
+              console.log('[Auth] bcrypt verification failed:', bcryptError.message);
+              passwordMatch = false;
+            }
+          }
+        } else {
+          console.log('[Auth] No password hash found for super admin');
+        }
+        
+        console.log('[Auth] Super admin password verification final:', {
+          email: dbUser.email,
+          passwordMatch,
+          hashPrefix: dbUser.password_hash?.substring(0, 20)
+        });
+        
+        if (passwordMatch) {
+          // Update last sign in time
+          await mainClient.query(
+            'UPDATE public.users SET last_sign_in_at = NOW() WHERE id = $1',
+            [dbUser.id]
+          );
+
+          // Return super admin user with special agency object
+          return {
+            user: {
+              id: dbUser.id,
+              email: dbUser.email,
+              password_hash: dbUser.password_hash,
+              email_confirmed: dbUser.email_confirmed,
+              is_active: dbUser.is_active,
+              two_factor_enabled: false, // Default for buildflow_db users
+              two_factor_secret: null, // Default for buildflow_db users
+              password_policy_id: null, // Default for buildflow_db users
+              created_at: dbUser.created_at,
+              updated_at: dbUser.updated_at,
+              last_sign_in_at: dbUser.last_sign_in_at,
+            },
+            agency: {
+              id: null, // Super admin has no agency
+              name: 'BuildFlow System',
+              domain: null,
+              database_name: null, // Main database, not an agency database
+            },
+            profile: dbUser.full_name ? {
+              id: null,
+              user_id: dbUser.id,
+              full_name: dbUser.full_name,
+              agency_id: null,
+              phone: dbUser.phone,
+              avatar_url: dbUser.avatar_url,
+            } : null,
+            roles: ['super_admin'],
+          };
+        }
+      }
+    } catch (superAdminError) {
+      // If super admin check fails (e.g., tables don't exist), continue to agency search
+      console.warn('[Auth] Super admin check failed:', superAdminError.message);
+    }
+
+    // SECOND: Search agency databases for regular users
     // Get all active agencies with database names
     const agencies = await mainClient.query(`
       SELECT id, name, domain, database_name 
@@ -188,8 +319,9 @@ function generateToken(user, agency) {
   const tokenPayload = {
     userId: user.id,
     email: user.email,
-    agencyId: agency.id,
-    agencyDatabase: agency.database_name,
+    agencyId: agency.id || null, // Super admins have null agency_id
+    agencyDatabase: agency.database_name || null, // Super admins have null database_name
+    isSuperAdmin: !agency.database_name, // Flag to identify super admins
   };
 
   // Generate signed JWT token

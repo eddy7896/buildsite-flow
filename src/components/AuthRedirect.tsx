@@ -72,17 +72,23 @@ export function AuthRedirect() {
   }, [user, userRole, loading, setupChecked, location.pathname, navigate]);
 
   useEffect(() => {
+    // Super admin redirects - highest priority
+    if (user && userRole === 'super_admin' && !loading) {
+      if (location.pathname === '/auth' || location.pathname === '/dashboard' || 
+          location.pathname === '/agency-setup-progress' || location.pathname === '/agency-setup') {
+        setHasRedirected(true);
+        navigate('/system', { replace: true });
+        return;
+      }
+    }
+    
     // Only redirect if user is authenticated, role is determined, not loading, 
     // haven't redirected yet, and currently on auth page
-    // Skip for admin users (handled by setup check above)
-    if (user && userRole && !loading && !hasRedirected && location.pathname === '/auth' && userRole !== 'admin') {
+    // Skip for admin users (handled by setup check above) and super admins (handled above)
+    if (user && userRole && !loading && !hasRedirected && location.pathname === '/auth' && 
+        userRole !== 'admin' && userRole !== 'super_admin') {
       setHasRedirected(true);
-      
-      if (userRole === 'super_admin') {
-        navigate('/system');
-      } else {
-        navigate('/dashboard');
-      }
+      navigate('/dashboard', { replace: true });
     }
   }, [user, userRole, loading, hasRedirected, location.pathname, navigate]);
 

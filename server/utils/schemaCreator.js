@@ -21,6 +21,7 @@ const { ensureGstSchema } = require('./schema/gstSchema');
 const { ensureReimbursementSchema } = require('./schema/reimbursementSchema');
 const { ensureMiscSchema } = require('./schema/miscSchema');
 const { ensureMessagingSchema } = require('./schema/messagingSchema');
+const { ensureSlackIntegrationSchema } = require('./schema/slackIntegrationSchema');
 const { ensureInventorySchema } = require('./schema/inventorySchema');
 const { ensureProcurementSchema } = require('./schema/procurementSchema');
 const { ensureFinancialSchema } = require('./schema/financialSchema');
@@ -336,6 +337,10 @@ async function createAgencySchema(client) {
     // Step 18.5: Messaging (depends on users, agencies)
     console.log('[SQL] Step 18.5/22: Ensuring messaging schema...');
     await ensureMessagingSchema(client);
+
+    // Step 18.5.5: Slack Integration (depends on messaging, users)
+    console.log('[SQL] Step 18.5.5/22: Ensuring Slack integration schema...');
+    await ensureSlackIntegrationSchema(client);
 
     // Step 18.6: Asset Management (depends on suppliers, users, departments)
     console.log('[SQL] Step 18.6/22: Ensuring asset management schema...');

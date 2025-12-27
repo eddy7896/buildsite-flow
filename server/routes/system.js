@@ -2584,16 +2584,25 @@ async function ensureSystemSettingsSchema(client) {
       default_timezone TEXT DEFAULT 'UTC',
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      created_by UUID REFERENCES public.users(id),
-      updated_by UUID REFERENCES public.users(id)
+      created_by UUID,
+      updated_by UUID
     )
   `);
 
-  // Create unique constraint to ensure only one system settings record exists
-  await client.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_system_settings_single 
-    ON public.system_settings((1))
-  `);
+  // Note: We'll enforce single record via application logic instead of a unique index
+  // PostgreSQL doesn't support unique indexes on constant expressions
+
+  // Drop foreign key constraints if they exist (users from agency DBs may not exist in main DB)
+  try {
+    await client.query(`
+      ALTER TABLE public.system_settings 
+      DROP CONSTRAINT IF EXISTS system_settings_created_by_fkey,
+      DROP CONSTRAINT IF EXISTS system_settings_updated_by_fkey
+    `);
+  } catch (err) {
+    // Table might not exist yet or constraints might not exist, that's okay
+    console.warn('[System] Could not drop foreign key constraints (this is okay if table is new):', err.message);
+  }
 
   // Create updated_at trigger function if it doesn't exist
   await client.query(`
@@ -2620,8 +2629,8 @@ async function ensureSystemSettingsSchema(client) {
     DO $$
     BEGIN
         IF NOT EXISTS (SELECT 1 FROM public.system_settings LIMIT 1) THEN
-            INSERT INTO public.system_settings (system_name, system_tagline, system_description)
-            VALUES ('BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations');
+            INSERT INTO public.system_settings (system_name, system_tagline, system_description, created_by, updated_by)
+            VALUES ('BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations', NULL, NULL);
         END IF;
     END $$;
   `);
@@ -2646,9 +2655,10 @@ router.get(
 
       if (result.rows.length === 0) {
         // Create default settings if none exist
+        // Don't set created_by/updated_by in GET endpoint as we don't have user context
         const insertResult = await client.query(
-          `INSERT INTO public.system_settings (system_name, system_tagline, system_description)
-           VALUES ('BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations')
+          `INSERT INTO public.system_settings (system_name, system_tagline, system_description, created_by, updated_by)
+           VALUES ('BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations', NULL, NULL)
            RETURNING *`
         );
         return res.json({
@@ -2684,6 +2694,10 @@ router.get(
 /**
  * PUT /api/system/settings
  * Update system settings (super admin only)
+ * 
+ * Note: This endpoint works for super admins from both main database and agency databases.
+ * The user ID might not exist in the main database's users table if they're from an agency database,
+ * so we handle created_by/updated_by fields gracefully by checking user existence first.
  */
 router.put(
   '/settings',
@@ -2746,57 +2760,86 @@ router.put(
         });
       }
 
-      // Add updated_by
-      updateFields.push(`updated_by = $${paramIndex}`);
-      params.push(userId);
-      paramIndex++;
-
-      // Ensure a record exists first (insert default if needed)
-      const checkResult = await client.query(
-        `SELECT id FROM public.system_settings LIMIT 1`
-      );
-
-      if (checkResult.rows.length === 0) {
-        // Insert default record first
+      // Add updated_by (updated_at is handled by trigger)
+      // Note: Super admins from agency databases may not exist in main DB's users table.
+      // We check if the user exists in main DB before setting updated_by to avoid foreign key errors.
+      // If user doesn't exist in main DB, we leave updated_by as NULL (which is fine).
+      if (userId) {
         try {
-          await client.query(
-            `INSERT INTO public.system_settings (system_name, system_tagline, system_description, created_by, updated_by)
-             VALUES ($1, $2, $3, $4, $5)`,
-            ['BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations', userId, userId]
+          const userCheck = await client.query(
+            `SELECT id FROM public.users WHERE id = $1 LIMIT 1`,
+            [userId]
           );
-        } catch (insertError) {
-          // If insert fails due to unique constraint, that's okay - record might have been created
-          if (!insertError.message.includes('unique') && !insertError.message.includes('duplicate')) {
-            throw insertError;
+          if (userCheck.rows.length > 0) {
+            // User exists in main DB, safe to set updated_by
+            updateFields.push(`updated_by = $${paramIndex}`);
+            params.push(userId);
+            paramIndex++;
           }
+          // If user doesn't exist in main DB (e.g., from agency DB), we skip setting updated_by
+          // This is expected behavior and not an error
+        } catch (err) {
+          // If users table doesn't exist or query fails, skip setting updated_by
+          // This shouldn't happen in normal operation, but we handle it gracefully
+          console.warn('[System] Could not verify user in main DB, skipping updated_by:', err.message);
         }
       }
 
-      // Update existing settings - use the id from check or get it again
+      // Ensure a record exists first (insert default if needed)
+      // First, check if any record exists
+      let checkResult = await client.query(
+        `SELECT id FROM public.system_settings ORDER BY created_at DESC LIMIT 1`
+      );
+
       let settingsId;
-      if (checkResult.rows.length > 0) {
-        settingsId = checkResult.rows[0].id;
-      } else {
-        // Get the id after insert
-        const idResult = await client.query(`SELECT id FROM public.system_settings LIMIT 1`);
-        if (idResult.rows.length === 0) {
-          return res.status(500).json({
-            success: false,
-            error: {
-              code: 'INTERNAL_ERROR',
-              message: 'Failed to create or find system settings record',
-            },
-          });
+      
+      if (checkResult.rows.length === 0) {
+        // Insert default record first
+        // Check if user exists in main DB before setting foreign keys.
+        // Super admins from agency databases may not exist in main DB, which is fine.
+        let createdBy = null;
+        let updatedBy = null;
+        
+        if (userId) {
+          try {
+            const userCheck = await client.query(
+              `SELECT id FROM public.users WHERE id = $1 LIMIT 1`,
+              [userId]
+            );
+            if (userCheck.rows.length > 0) {
+              // User exists in main DB, safe to set created_by/updated_by
+              createdBy = userId;
+              updatedBy = userId;
+            }
+            // If user doesn't exist in main DB, we leave created_by/updated_by as NULL
+            // This is expected for super admins from agency databases
+          } catch (err) {
+            // If users table doesn't exist or query fails, leave as null
+            // This shouldn't happen in normal operation, but we handle it gracefully
+            console.warn('[System] Could not verify user in main DB for insert, leaving created_by/updated_by as null:', err.message);
+          }
         }
-        settingsId = idResult.rows[0].id;
+        
+        const insertResult = await client.query(
+          `INSERT INTO public.system_settings (system_name, system_tagline, system_description, created_by, updated_by)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING id`,
+          ['BuildFlow ERP', 'Complete Business Management Solution', 'A comprehensive ERP system for managing your business operations', createdBy, updatedBy]
+        );
+        settingsId = insertResult.rows[0].id;
+      } else {
+        settingsId = checkResult.rows[0].id;
       }
 
       // Update existing settings using the id
-      const result = await client.query(
-        `UPDATE public.system_settings
+      // Note: updated_at is set via trigger, so we don't need to include it in params
+      const updateQuery = `UPDATE public.system_settings
          SET ${updateFields.join(', ')}
          WHERE id = $${paramIndex}
-         RETURNING *`,
+         RETURNING *`;
+      
+      const result = await client.query(
+        updateQuery,
         [...params, settingsId]
       );
 

@@ -49,11 +49,18 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     return <Navigate to="/auth" replace state={{ from: location }} />;
   }
 
-  // Validate agency context
-  const agencyDatabase = localStorage.getItem('agency_database');
-  if (!agencyDatabase && location.pathname !== '/agency-setup' && location.pathname !== '/agency-setup-progress') {
-    // If no agency database and not on setup pages, redirect to setup
-    return <Navigate to="/agency-setup-progress" replace />;
+  // Validate agency context (skip for super admins - they use main database)
+  if (userRole !== 'super_admin') {
+    const agencyDatabase = localStorage.getItem('agency_database');
+    if (!agencyDatabase && location.pathname !== '/agency-setup' && location.pathname !== '/agency-setup-progress') {
+      // If no agency database and not on setup pages, redirect to setup
+      return <Navigate to="/agency-setup-progress" replace />;
+    }
+  } else {
+    // Super admin - redirect away from agency setup pages
+    if (location.pathname === '/agency-setup-progress' || location.pathname === '/agency-setup') {
+      return <Navigate to="/system" replace />;
+    }
   }
 
   // Determine required roles: use prop if provided, otherwise auto-detect from routePermissions

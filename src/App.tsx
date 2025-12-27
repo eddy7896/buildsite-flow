@@ -17,6 +17,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TicketFloatingButton } from "@/components/TicketFloatingButton";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { useAuth } from "@/hooks/useAuth";
+import { useSystemSettings } from "@/hooks/useSystemSettings";
 // Initialize console logger on app load
 import "@/utils/consoleLogger";
 
@@ -147,12 +148,14 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
       <AppSidebar />
     <SidebarInset className="flex flex-col min-w-0 overflow-hidden">
       <header className="sticky top-0 z-0 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-        <div className="min-h-14 sm:min-h-16 h-auto py-2 sm:py-3 px-3 sm:px-4 lg:px-6 flex items-center gap-2 sm:gap-3">
-          <SidebarTrigger className="mr-2 sm:mr-3 flex-shrink-0 h-8 w-8 sm:h-9 sm:w-9 rounded-lg hover:bg-muted transition-colors" />
-          <AgencyHeader />
+        <div className="h-auto py-2.5 sm:py-3 md:py-3.5 px-3 sm:px-4 md:px-5 lg:px-6 flex items-start sm:items-center gap-2 sm:gap-3 overflow-hidden">
+          <SidebarTrigger className="mt-0.5 sm:mt-0 mr-1 sm:mr-2 flex-shrink-0 h-9 w-9 sm:h-10 sm:w-10 md:h-9 md:w-9 rounded-lg hover:bg-muted transition-colors flex items-center justify-center" />
+          <div className="flex-1 min-w-0">
+            <AgencyHeader />
+          </div>
         </div>
         </header>
-        <div className="flex-1 p-3 sm:p-4 lg:p-6 overflow-auto">
+        <div className="flex-1 p-3 sm:p-4 md:p-5 lg:p-6 overflow-auto">
           {children}
         </div>
     </SidebarInset>
@@ -161,6 +164,8 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
 
 const AppContent = () => {
   const { user, loading } = useAuth();
+  // Load and apply system settings (SEO, analytics, branding, etc.)
+  useSystemSettings();
   
   return (
     <>

@@ -246,6 +246,14 @@ export async function selectOne<T = any>(
   table: string,
   where: Record<string, any>
 ): Promise<T | null> {
+  // Prevent agency_settings queries for super admins - they don't use agency databases
+  if (table === 'agency_settings' && typeof window !== 'undefined') {
+    const userRole = window.localStorage.getItem('user_role');
+    if (userRole === 'super_admin') {
+      return null;
+    }
+  }
+  
   const { clause, params } = buildWhereClause(where);
   const query = `SELECT * FROM public.${table} ${clause} LIMIT 1`;
   return queryOne<T>(query, params);

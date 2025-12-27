@@ -115,6 +115,7 @@ const apiKeysRoutes = require('./routes/apiKeys');
 const sessionManagementRoutes = require('./routes/sessionManagement');
 const emailRoutes = require('./routes/email');
 const messagingRoutes = require('./routes/messaging');
+const slackRoutes = require('./routes/slack');
 const workflowsRoutes = require('./routes/workflows');
 const integrationsRoutes = require('./routes/integrations');
 const settingsRoutes = require('./routes/settings');
@@ -171,6 +172,7 @@ app.use('/api/api-keys', apiKeysRoutes);
 app.use('/api/sessions', sessionManagementRoutes);
 app.use('/api/email', emailRoutes);
 app.use('/api/messaging', messagingRoutes);
+app.use('/api/slack', slackRoutes);
 app.use('/api/workflows', workflowsRoutes);
 app.use('/api/integrations', integrationsRoutes);
 app.use('/api/settings', settingsRoutes);
@@ -502,11 +504,8 @@ async function initializeMainDatabase() {
             );
           `);
           
-          // Create unique constraint
-          await client.query(`
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_system_settings_single 
-            ON public.system_settings((1));
-          `);
+          // Note: We enforce single record via application logic
+          // PostgreSQL doesn't support unique indexes on constant expressions
           
           // Create trigger function if it doesn't exist
           await client.query(`
@@ -550,6 +549,9 @@ async function initializeMainDatabase() {
           logger.info('✅ system_settings table verified');
         }
       }
+      
+      // Ensure super admin user exists
+      await ensureSuperAdminUser(client);
     } finally {
       client.release();
     }
@@ -559,6 +561,145 @@ async function initializeMainDatabase() {
       stack: error.stack 
     });
     // Don't exit - let the server start and handle errors at runtime
+  }
+}
+
+/**
+ * Ensure super admin user exists in buildflow_db
+ */
+async function ensureSuperAdminUser(client) {
+  try {
+    // Check if users table exists
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'users'
+      )
+    `);
+    
+    if (!tableCheck.rows[0].exists) {
+      logger.warn('Users table does not exist, skipping super admin creation');
+      return;
+    }
+    
+    // Check if user_roles table exists
+    const userRolesTableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'user_roles'
+      )
+    `);
+    
+    const userRolesTableExists = userRolesTableCheck.rows[0].exists;
+    
+    // Check if super admin exists
+    let userCheck;
+    if (userRolesTableExists) {
+      userCheck = await client.query(`
+        SELECT u.id, ur.role 
+         FROM public.users u
+         LEFT JOIN public.user_roles ur ON u.id = ur.user_id AND ur.role = 'super_admin' AND ur.agency_id IS NULL
+         WHERE u.email = 'super@buildflow.local'
+      `);
+    } else {
+      // If user_roles table doesn't exist, just check if user exists
+      userCheck = await client.query(`
+        SELECT id, NULL as role 
+         FROM public.users 
+         WHERE email = 'super@buildflow.local'
+      `);
+    }
+    
+    if (userCheck.rows.length === 0 || !userCheck.rows[0].role) {
+      logger.info('Creating super admin user...');
+      
+      // Ensure extensions exist
+      await client.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+      await client.query(`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+      
+      // Create or update super admin user
+      await client.query(`
+        INSERT INTO public.users (email, password_hash, email_confirmed, email_confirmed_at, is_active)
+        VALUES (
+          'super@buildflow.local',
+          crypt('super123', gen_salt('bf')),
+          true,
+          now(),
+          true
+        ) ON CONFLICT (email) 
+        DO UPDATE SET 
+          password_hash = crypt('super123', gen_salt('bf')),
+          email_confirmed = true,
+          email_confirmed_at = now(),
+          is_active = true,
+          updated_at = now();
+      `);
+      
+      // Create profile and assign role
+      await client.query(`
+        DO $$
+        DECLARE
+          admin_id UUID;
+        BEGIN
+          SELECT id INTO admin_id FROM public.users WHERE email = 'super@buildflow.local';
+          
+          IF admin_id IS NOT NULL THEN
+            -- Ensure profiles table exists
+            CREATE TABLE IF NOT EXISTS public.profiles (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id UUID UNIQUE REFERENCES public.users(id) ON DELETE CASCADE,
+              full_name TEXT,
+              phone_number TEXT,
+              address TEXT,
+              avatar_url TEXT,
+              is_active BOOLEAN DEFAULT true,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            );
+            
+            -- Create or update profile
+            INSERT INTO public.profiles (id, user_id, full_name, is_active)
+            VALUES (gen_random_uuid(), admin_id, 'Super Administrator', true)
+            ON CONFLICT (user_id) 
+            DO UPDATE SET 
+              full_name = 'Super Administrator',
+              is_active = true,
+              updated_at = now();
+            
+            -- Ensure app_role enum exists
+            IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'app_role') THEN
+              CREATE TYPE public.app_role AS ENUM (
+                'super_admin', 'admin', 'hr', 'finance_manager', 'cfo', 'ceo', 
+                'project_manager', 'employee', 'contractor', 'intern'
+              );
+            END IF;
+            
+            -- Ensure user_roles table exists
+            CREATE TABLE IF NOT EXISTS public.user_roles (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+              role public.app_role NOT NULL,
+              agency_id UUID,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+              UNIQUE(user_id, role, agency_id)
+            );
+            
+            -- Assign super_admin role (with NULL agency_id for system-level admin)
+            INSERT INTO public.user_roles (user_id, role, agency_id)
+            VALUES (admin_id, 'super_admin'::public.app_role, NULL)
+            ON CONFLICT (user_id, role, agency_id) DO NOTHING;
+          END IF;
+        END $$;
+      `);
+      
+      logger.info('✅ Super admin user created (email: super@buildflow.local, password: super123)');
+    } else {
+      logger.info('✅ Super admin user verified');
+    }
+  } catch (error) {
+    logger.warn('Could not ensure super admin user (this is okay if tables don\'t exist yet):', error.message);
   }
 }
 

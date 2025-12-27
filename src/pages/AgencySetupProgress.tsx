@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { getApiBaseUrl } from '@/config/api';
 import { PageContainer, PageHeader } from '@/components/layout';
 import {
@@ -44,10 +45,24 @@ interface SetupProgress {
 export default function AgencySetupProgress() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { userRole } = useAuth();
   const [loading, setLoading] = useState(true);
   const [progressData, setProgressData] = useState<SetupProgress | null>(null);
 
+  // Redirect super admins immediately
   useEffect(() => {
+    if (userRole === 'super_admin') {
+      navigate('/system', { replace: true });
+      return;
+    }
+  }, [userRole, navigate]);
+
+  useEffect(() => {
+    // Don't fetch if super admin (will be redirected)
+    if (userRole === 'super_admin') {
+      return;
+    }
+    
     const fetchProgress = async () => {
       try {
         const agencyDatabase = localStorage.getItem('agency_database');

@@ -127,12 +127,24 @@ router.post('/login',
 
     // Check if 2FA is enabled for this user
     const twoFactorService = require('../services/twoFactorService');
-    const agencyPool = getAgencyPool(userData.agency.database_name);
-    const agencyClient = await agencyPool.connect();
+    
+    // Super admins use main database, regular users use agency database
+    const isSuperAdmin = !userData.agency.database_name;
+    let client;
+    
+    if (isSuperAdmin) {
+      // Super admin - use main database pool
+      const { pool } = require('../config/database');
+      client = await pool.connect();
+    } else {
+      // Regular user - use agency database pool
+      const agencyPool = getAgencyPool(userData.agency.database_name);
+      client = await agencyPool.connect();
+    }
 
     try {
       // First check if 2FA columns exist in the database
-      const columnCheck = await agencyClient.query(`
+      const columnCheck = await client.query(`
         SELECT column_name 
         FROM information_schema.columns 
         WHERE table_schema = 'public' 
@@ -147,7 +159,7 @@ router.post('/login',
 
       if (hasTwoFactorColumns) {
         // Columns exist, query them
-        const twoFactorResult = await agencyClient.query(
+        const twoFactorResult = await client.query(
           `SELECT two_factor_enabled, two_factor_secret, recovery_codes 
            FROM public.users WHERE id = $1`,
           [userData.user.id]
@@ -169,7 +181,7 @@ router.post('/login',
             success: true,
             requiresTwoFactor: true,
             userId: userData.user.id,
-            agencyDatabase: userData.agency.database_name,
+            agencyDatabase: isSuperAdmin ? null : userData.agency.database_name,
             message: '2FA verification required',
           });
         }
@@ -190,7 +202,7 @@ router.post('/login',
           
           if (isValid && hasTwoFactorColumns) {
             // Update recovery codes (remove used one)
-            await agencyClient.query(
+            await client.query(
               'UPDATE public.users SET recovery_codes = $1 WHERE id = $2',
               [recoveryResult.remainingCodes, userData.user.id]
             );
@@ -207,22 +219,24 @@ router.post('/login',
 
         // Update last verification time (only if columns exist)
         if (hasTwoFactorColumns) {
-          await agencyClient.query(
+          await client.query(
             'UPDATE public.users SET two_factor_verified_at = NOW() WHERE id = $1',
             [userData.user.id]
           );
         }
       }
 
-      // Record successful login attempt
-      await passwordPolicyService.recordLoginAttempt(
-        userData.agency.database_name,
-        userData.user.id,
-        email,
-        true,
-        ipAddress,
-        userAgent
-      );
+      // Record successful login attempt (skip for super admins - no agency database)
+      if (!isSuperAdmin) {
+        await passwordPolicyService.recordLoginAttempt(
+          userData.agency.database_name,
+          userData.user.id,
+          email,
+          true,
+          ipAddress,
+          userAgent
+        );
+      }
 
       // Generate token and return user data
       const token = generateToken(userData.user, userData.agency);
@@ -235,7 +249,7 @@ router.post('/login',
         requiresTwoFactor: false,
       });
     } finally {
-      agencyClient.release();
+      client.release();
       // Don't close pool - it's managed by pool manager
     }
   } catch (error) {

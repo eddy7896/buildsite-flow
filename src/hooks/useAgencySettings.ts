@@ -40,12 +40,19 @@ const DEFAULT_SETTINGS: Omit<AgencySettings, 'id' | 'agency_id' | 'created_at' |
 };
 
 export const useAgencySettings = () => {
-  const { profile, user } = useAuth();
+  const { profile, user, userRole } = useAuth();
   const [settings, setSettings] = useState<AgencySettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchSettings = async () => {
+    // Skip for super admins - they don't use agency settings
+    if (userRole === 'super_admin') {
+      setLoading(false);
+      setSettings(null);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
@@ -266,8 +273,17 @@ export const useAgencySettings = () => {
   };
 
   useEffect(() => {
-    fetchSettings();
-  }, [profile?.agency_id]);
+    // Don't fetch for super admins - they don't use agency settings
+    if (userRole === 'super_admin') {
+      setLoading(false);
+      setSettings(null);
+      return;
+    }
+    // Only fetch if we have a profile or user (not super admin)
+    if (profile || user) {
+      fetchSettings();
+    }
+  }, [profile?.agency_id, userRole, profile, user]);
 
   return {
     settings,

@@ -19,6 +19,15 @@ export async function getAgencyId(
   profile?: { agency_id?: string | null } | null | undefined,
   userId?: string | null | undefined
 ): Promise<string | null> {
+  // Check if user is super admin - super admins don't have agency_id
+  if (typeof window !== 'undefined') {
+    const userRole = window.localStorage.getItem('user_role');
+    if (userRole === 'super_admin') {
+      // Super admin - return null (they use main database, not agency database)
+      return null;
+    }
+  }
+  
   // First try from profile (for backward compatibility)
   if (profile?.agency_id) {
     return profile.agency_id;
@@ -33,6 +42,7 @@ export async function getAgencyId(
   }
 
   // If not in profile, try to fetch from database (for backward compatibility)
+  // Only if we don't already know user is super admin
   if (userId) {
     try {
       const userProfile = await selectOne('profiles', { user_id: userId });
@@ -44,7 +54,14 @@ export async function getAgencyId(
     }
   }
 
-  // Try to get from agency_settings table (first record)
+  // Try to get from agency_settings table (first record) - skip for super admins
+  if (typeof window !== 'undefined') {
+    const userRole = window.localStorage.getItem('user_role');
+    if (userRole === 'super_admin') {
+      return null; // Super admin doesn't need agency_id
+    }
+  }
+  
   try {
     const agencySettings = await selectOne('agency_settings', {});
     if (agencySettings?.agency_id) {

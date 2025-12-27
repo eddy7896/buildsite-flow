@@ -436,6 +436,27 @@ async function createMessage(agencyDatabase, messageData, userId) {
       const { emitNewMessage } = require('./websocketService');
       emitNewMessage(global.io, messageData.thread_id, messageWithRelations);
     }
+
+    // Sync to Slack if integration is active (async, don't wait)
+    try {
+      const slackService = require('./slackIntegrationService');
+      // Get channel ID from thread
+      const threadResult = await client.query(
+        'SELECT channel_id FROM public.message_threads WHERE id = $1',
+        [messageData.thread_id]
+      );
+      if (threadResult.rows.length > 0) {
+        const channelId = threadResult.rows[0].channel_id;
+        // Trigger sync asynchronously (don't block message creation)
+        setImmediate(() => {
+          slackService.syncMessageToSlack(agencyDatabase, message.id, channelId)
+            .catch(err => console.error('[Messaging] Slack sync error:', err.message));
+        });
+      }
+    } catch (error) {
+      // Don't fail message creation if Slack sync fails
+      console.warn('[Messaging] Failed to trigger Slack sync:', error.message);
+    }
     
     return messageWithRelations;
   } catch (error) {

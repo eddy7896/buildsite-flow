@@ -47,12 +47,12 @@ import {
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbList,
-  BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Route mapping for breadcrumbs
 const routeMap: Record<string, { label: string; path: string }[]> = {
@@ -95,6 +95,7 @@ export const AgencyHeader = () => {
   const { user, profile, userRole, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   // Debug: Log image URLs when they change (only in development)
   useEffect(() => {
@@ -261,25 +262,197 @@ export const AgencyHeader = () => {
 
   const CurrentPageIcon = getPageIcon(location.pathname);
 
+  // Mobile Layout: Clean, app-like header with clear hierarchy
+  if (isMobile) {
+    return (
+      <TooltipProvider>
+        <div className="flex flex-col w-full gap-2 min-w-0">
+          {/* Top Row: Page Title + User Menu */}
+          <div className="flex items-center justify-between gap-2 w-full min-w-0">
+            {/* Page Title Section - Prominent on Mobile */}
+            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+              <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                <CurrentPageIcon className="h-4 w-4 text-primary" />
+              </div>
+              <div className="flex flex-col min-w-0 flex-1">
+                <h1 className="text-base font-bold text-foreground truncate leading-tight">
+                  {currentPageTitle}
+                </h1>
+                {/* Show breadcrumb on mobile if there's a parent */}
+                {breadcrumbs.length > 1 && (
+                  <Breadcrumb className="block">
+                    <BreadcrumbList className="text-[10px]">
+                      {breadcrumbs.slice(0, -1).slice(-1).map((crumb, index) => (
+                        <BreadcrumbItem key={`${crumb.path}-${index}`} className="max-w-[120px] truncate">
+                          <BreadcrumbLink asChild>
+                            <Link
+                              to={crumb.path}
+                              className="text-muted-foreground hover:text-foreground truncate transition-colors"
+                            >
+                              {crumb.label}
+                            </Link>
+                          </BreadcrumbLink>
+                        </BreadcrumbItem>
+                      ))}
+                    </BreadcrumbList>
+                  </Breadcrumb>
+                )}
+              </div>
+            </div>
+
+            {/* User Menu - Right Side */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0 flex-shrink-0">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage
+                      src={
+                        profile?.avatar_url && 
+                        typeof profile.avatar_url === 'string' && 
+                        profile.avatar_url.trim() !== ''
+                          ? profile.avatar_url
+                          : undefined
+                      }
+                      alt={userDisplayName}
+                    />
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                      {userInitials}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-64" align="end" forceMount>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage
+                          src={
+                            profile?.avatar_url && 
+                            typeof profile.avatar_url === 'string' && 
+                            profile.avatar_url.trim() !== ''
+                              ? profile.avatar_url
+                              : undefined
+                          }
+                          alt={userDisplayName}
+                        />
+                        <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
+                          {userInitials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <p className="text-sm font-medium leading-none truncate">
+                          {userDisplayName}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate mt-1">
+                          {user?.email}
+                        </p>
+                        {userRole && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'mt-1.5 w-fit text-[10px] px-1.5 py-0',
+                              getRoleBadgeColor(userRole)
+                            )}
+                          >
+                            {getRoleLabel(userRole)}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem asChild>
+                    <Link to="/my-profile" className="cursor-pointer">
+                      <User className="mr-2 h-4 w-4" />
+                      <span>My Profile</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/settings" className="cursor-pointer">
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  {userRole && (userRole === 'admin' || userRole === 'super_admin') && (
+                    <DropdownMenuItem asChild>
+                      <Link to="/system-dashboard" className="cursor-pointer">
+                        <Shield className="mr-2 h-4 w-4" />
+                        <span>System Dashboard</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer"
+                  onClick={() => {
+                    window.open('https://docs.buildflow.com', '_blank');
+                  }}
+                >
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  <span>Help & Support</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 dark:focus:bg-red-950"
+                  onClick={handleSignOut}
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sign Out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Bottom Row: Essential Actions Only */}
+          <div className="flex items-center justify-between gap-2 w-full">
+            {/* Search Button - Full Width on Mobile */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 h-9 justify-start text-muted-foreground"
+              onClick={() => setSearchOpen(true)}
+            >
+              <Search className="h-4 w-4 mr-2" />
+              <span className="text-sm">Search...</span>
+              <kbd className="ml-auto pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </Button>
+
+            {/* Notifications */}
+            <div className="flex-shrink-0">
+              <NotificationCenter />
+            </div>
+          </div>
+        </div>
+      </TooltipProvider>
+    );
+  }
+
+  // Desktop Layout: Full-featured header
   return (
     <TooltipProvider>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between w-full gap-2 sm:gap-3 md:gap-4 min-w-0">
+      <div className="flex flex-row items-center justify-between w-full gap-3 lg:gap-4 min-w-0">
         {/* Left Section: Enhanced Breadcrumbs with Page Context */}
-        <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-1 min-w-0 overflow-hidden">
+        <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0 overflow-hidden">
           {/* Current Page Icon & Title */}
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink-0">
-            <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-              <CurrentPageIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
+          <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-shrink-0">
+            <div className="h-8 w-8 md:h-9 md:w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+              <CurrentPageIcon className="h-3.5 w-3.5 md:h-4 md:w-4 text-primary" />
             </div>
-            <div className="flex flex-col min-w-0">
-              <h1 className="text-sm sm:text-base font-bold text-foreground truncate leading-tight">
+            <div className="flex flex-col min-w-0 flex-1">
+              <h1 className="text-sm md:text-base font-bold text-foreground truncate leading-tight max-w-full">
                 {currentPageTitle}
               </h1>
-              <Breadcrumb className="hidden sm:block">
-                <BreadcrumbList className="flex-wrap max-w-full text-[10px] sm:text-xs">
+              <Breadcrumb className="block">
+                <BreadcrumbList className="flex-wrap max-w-full text-xs">
                   {breadcrumbs.slice(0, -1).map((crumb, index) => (
                     <React.Fragment key={`${crumb.path}-${index}`}>
-                      <BreadcrumbItem className="max-w-[100px] sm:max-w-[150px] truncate">
+                      <BreadcrumbItem className="max-w-[100px] md:max-w-[150px] truncate">
                         <BreadcrumbLink asChild>
                           <Link
                             to={crumb.path}
@@ -290,7 +463,7 @@ export const AgencyHeader = () => {
                         </BreadcrumbLink>
                       </BreadcrumbItem>
                       {index < breadcrumbs.slice(0, -1).length - 1 && (
-                        <BreadcrumbSeparator className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                        <BreadcrumbSeparator className="h-3 w-3" />
                       )}
                     </React.Fragment>
                   ))}
@@ -298,79 +471,46 @@ export const AgencyHeader = () => {
               </Breadcrumb>
             </div>
           </div>
-
-          {/* Full Breadcrumb Trail (on larger screens) */}
-          <div className="hidden xl:flex items-center gap-2 flex-1 min-w-0 ml-2">
-            <Breadcrumb>
-              <BreadcrumbList className="flex-wrap max-w-full">
-                {breadcrumbs.map((crumb, index) => (
-                  <React.Fragment key={`${crumb.path}-${index}`}>
-                    <BreadcrumbItem className="max-w-[140px] lg:max-w-[180px] truncate">
-                      {index === breadcrumbs.length - 1 ? (
-                        <BreadcrumbPage className="text-xs sm:text-sm font-semibold text-foreground truncate">
-                          {crumb.label}
-                        </BreadcrumbPage>
-                      ) : (
-                        <BreadcrumbLink asChild>
-                          <Link
-                            to={crumb.path}
-                            className="text-xs sm:text-sm text-muted-foreground hover:text-foreground truncate transition-colors font-medium"
-                          >
-                            {crumb.label}
-                          </Link>
-                        </BreadcrumbLink>
-                      )}
-                    </BreadcrumbItem>
-                    {index < breadcrumbs.length - 1 && (
-                      <BreadcrumbSeparator className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground/50" />
-                    )}
-                  </React.Fragment>
-                ))}
-              </BreadcrumbList>
-            </Breadcrumb>
-          </div>
         </div>
 
         {/* Center Section: Agency Info (on larger screens) */}
         {agencySettings?.agency_name && (
-          <div className="hidden xl:flex items-center gap-2 px-2 xl:px-4 flex-shrink-0">
+          <div className="hidden xl:flex items-center gap-2 px-4 flex-shrink-0">
             {agencySettings?.logo_url && 
              typeof agencySettings.logo_url === 'string' && 
              agencySettings.logo_url.trim() !== '' && (
               <img
                 src={agencySettings.logo_url}
                 alt="Agency Logo"
-                className="h-5 w-5 xl:h-6 xl:w-6 object-contain"
+                className="h-6 w-6 object-contain"
                 style={{ display: 'block' }}
                 onError={(e) => {
-                  // Log error for debugging but don't hide - let it fail gracefully
                   console.warn('Failed to load agency logo:', agencySettings.logo_url?.substring(0, 50));
                   const img = e.target as HTMLImageElement;
                   img.style.opacity = '0';
                 }}
                 onLoad={(e) => {
-                  // Ensure image is visible when it loads successfully
                   const img = e.target as HTMLImageElement;
                   img.style.opacity = '1';
                   img.style.display = 'block';
                 }}
               />
             )}
-            <span className="text-xs xl:text-sm font-semibold text-foreground whitespace-nowrap">
+            <span className="text-sm font-semibold text-foreground whitespace-nowrap">
               {agencySettings.agency_name}
             </span>
           </div>
         )}
 
         {/* Right Section: Actions */}
-        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 sm:mt-0 mt-1">
+        <div className="flex items-center gap-1 md:gap-2 flex-shrink-0 flex-nowrap justify-end">
           {/* Global Search */}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-9 w-9 p-0"
+                className="h-9 w-9 p-0 flex-shrink-0"
                 onClick={() => setSearchOpen(true)}
               >
                 <Search className="h-4 w-4" />
@@ -385,13 +525,13 @@ export const AgencyHeader = () => {
           {/* Real-time Clock */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="hidden lg:flex items-center gap-1.5 xl:gap-2 px-1.5 xl:px-2 py-1 rounded-md bg-muted/50 text-[10px] xl:text-xs">
-                <Clock className="h-3 w-3 xl:h-3.5 xl:w-3.5 text-muted-foreground flex-shrink-0" />
+              <div className="hidden lg:flex items-center gap-2 px-2 py-1 rounded-md bg-muted/50 text-xs flex-shrink-0">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                 <div className="flex flex-col min-w-0">
                   <span className="font-mono font-medium leading-none">
                     {formatTime(currentTime)}
                   </span>
-                  <span className="text-[9px] xl:text-[10px] text-muted-foreground leading-none mt-0.5">
+                  <span className="text-[10px] text-muted-foreground leading-none mt-0.5">
                     {formatDate(currentTime)}
                   </span>
                 </div>
@@ -405,13 +545,13 @@ export const AgencyHeader = () => {
           {/* System Status */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="hidden md:flex items-center gap-1 xl:gap-1.5 px-1.5 xl:px-2 py-1 rounded-md bg-muted/50">
+              <div className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 flex-shrink-0">
                 {isOnline ? (
-                  <Wifi className="h-3 w-3 xl:h-3.5 xl:w-3.5 text-green-600 flex-shrink-0" />
+                  <Wifi className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
                 ) : (
-                  <WifiOff className="h-3 w-3 xl:h-3.5 xl:w-3.5 text-red-600 flex-shrink-0" />
+                  <WifiOff className="h-3.5 w-3.5 text-red-600 flex-shrink-0" />
                 )}
-                <span className="text-[10px] xl:text-xs font-medium whitespace-nowrap">
+                <span className="text-xs font-medium whitespace-nowrap">
                   {isOnline ? 'Online' : 'Offline'}
                 </span>
               </div>
@@ -422,7 +562,9 @@ export const AgencyHeader = () => {
           </Tooltip>
 
           {/* Notifications */}
-          <NotificationCenter />
+          <div className="flex-shrink-0">
+            <NotificationCenter />
+          </div>
 
           {/* Help/Support */}
           <Tooltip>
@@ -430,9 +572,8 @@ export const AgencyHeader = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-9 w-9 p-0"
+                className="h-9 w-9 p-0 flex-shrink-0"
                 onClick={() => {
-                  // Open help documentation or support
                   window.open('https://docs.buildflow.com', '_blank');
                 }}
               >
@@ -448,8 +589,8 @@ export const AgencyHeader = () => {
           {/* User Profile Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full p-0 flex-shrink-0">
-                <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
+              <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0 flex-shrink-0">
+                <Avatar className="h-9 w-9">
                   <AvatarImage
                     src={
                       profile?.avatar_url && 
@@ -460,7 +601,7 @@ export const AgencyHeader = () => {
                     }
                     alt={userDisplayName}
                   />
-                  <AvatarFallback className="bg-primary/10 text-primary text-[10px] sm:text-xs font-semibold">
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
                     {userInitials}
                   </AvatarFallback>
                 </Avatar>
@@ -555,30 +696,28 @@ export const AgencyHeader = () => {
 
           {/* Agency Logo/Name (on smaller screens, if not shown in center) */}
           {agencySettings?.agency_name && (
-            <div className="xl:hidden flex items-center gap-1.5 sm:gap-2 ml-1 sm:ml-2 flex-shrink-0">
+            <div className="hidden sm:flex xl:hidden items-center gap-2 ml-2 flex-shrink-0">
               {agencySettings?.logo_url && 
                typeof agencySettings.logo_url === 'string' && 
                agencySettings.logo_url.trim() !== '' && (
                 <img
                   src={agencySettings.logo_url}
                   alt="Agency Logo"
-                  className="h-5 w-5 sm:h-6 sm:w-6 object-contain"
+                  className="h-6 w-6 object-contain"
                   style={{ display: 'block' }}
                   onError={(e) => {
-                    // Log error for debugging but don't hide - let it fail gracefully
                     console.warn('Failed to load agency logo:', agencySettings.logo_url?.substring(0, 50));
                     const img = e.target as HTMLImageElement;
                     img.style.opacity = '0';
                   }}
                   onLoad={(e) => {
-                    // Ensure image is visible when it loads successfully
                     const img = e.target as HTMLImageElement;
                     img.style.opacity = '1';
                     img.style.display = 'block';
                   }}
                 />
               )}
-              <span className="text-[10px] sm:text-xs font-semibold text-foreground whitespace-nowrap max-w-[80px] sm:max-w-[100px] truncate">
+              <span className="text-xs font-semibold text-foreground whitespace-nowrap max-w-[100px] truncate">
                 {agencySettings.agency_name}
               </span>
             </div>

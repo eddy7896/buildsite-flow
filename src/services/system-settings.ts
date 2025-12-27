@@ -72,6 +72,7 @@ function getAuthHeaders() {
   }
 
   const token = window.localStorage.getItem('auth_token') || '';
+  const userRole = window.localStorage.getItem('user_role');
   const agencyDatabase = window.localStorage.getItem('agency_database') || '';
 
   const headers: Record<string, string> = {
@@ -83,7 +84,8 @@ function getAuthHeaders() {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  if (agencyDatabase) {
+  // Don't include agency database header for super admins
+  if (agencyDatabase && userRole !== 'super_admin') {
     headers['X-Agency-Database'] = agencyDatabase;
   }
 

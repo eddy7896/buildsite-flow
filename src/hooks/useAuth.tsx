@@ -141,6 +141,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserProfile = async (userId: string) => {
     try {
+      // Don't fetch profile if user is super admin (they use main DB, not agency DB)
+      const currentRole = localStorage.getItem('user_role');
+      if (currentRole === 'super_admin') {
+        return;
+      }
+      
       const data = await selectOne('profiles', { user_id: userId });
       if (data) {
         setProfile(data as Profile);
@@ -261,13 +267,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Set user state from server response
       setUser(result.user as any);
 
+      // Check if user is super admin - super admins don't need agency profiles
+      const isSuperAdmin = ((result.user as any).roles || []).some((r: any) => r.role === 'super_admin' || r === 'super_admin');
+      
       // If profile came back from server, use it directly
       const serverProfile = (result.user as any).profile;
       if (serverProfile) {
         setProfile(serverProfile as any);
-      } else {
-        // Fallback to DB lookup if profile not included
+      } else if (!isSuperAdmin) {
+        // Only fetch profile for non-super-admin users (super admins use main DB, not agency DB)
         fetchUserProfile(result.user.id);
+      } else {
+        // Super admin - set profile to null or minimal profile
+        setProfile(null);
       }
 
       // Prefer roles returned by the server (agency DB) to avoid main-DB mismatch

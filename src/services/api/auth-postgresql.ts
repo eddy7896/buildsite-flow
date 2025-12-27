@@ -184,8 +184,15 @@ export async function loginUser(data: SignInData): Promise<AuthResponse> {
     } as any;
   }
 
-  // Store the agency database and id for future queries
-  if (result.user?.agency?.databaseName) {
+  // Check if user is super admin (has super_admin role and no agency database)
+  const isSuperAdmin = result.user?.roles?.includes('super_admin') && !result.user?.agency?.databaseName;
+  
+  // Store the agency database and id for future queries (only for non-super-admin users)
+  if (isSuperAdmin) {
+    // Clear agency context for super admins - they use main database
+    localStorage.removeItem('agency_database');
+    localStorage.removeItem('agency_id');
+  } else if (result.user?.agency?.databaseName) {
     localStorage.setItem('agency_database', result.user.agency.databaseName);
     localStorage.setItem('agency_id', result.user.agency.id);
   }
