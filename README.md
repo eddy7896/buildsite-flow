@@ -1,4 +1,4 @@
-# Drena - Agency Management Platform
+# Haal - Agency Management Platform
 
 A comprehensive multi-tenant SaaS ERP platform for construction and agency management with complete business operations support.
 
@@ -13,7 +13,7 @@ A comprehensive multi-tenant SaaS ERP platform for construction and agency manag
 
 ## 🎯 Project Overview
 
-**Drena** (also known as **BuildFlow**) is a full-featured Enterprise Resource Planning (ERP) system designed for construction companies and agencies. It provides comprehensive business management capabilities including HR, Finance, Project Management, CRM, Inventory, Procurement, and more.
+**Haal** (also known as **BuildFlow**) is a full-featured Enterprise Resource Planning (ERP) system designed for construction companies and agencies. It provides comprehensive business management capabilities including HR, Finance, Project Management, CRM, Inventory, Procurement, and more.
 
 ### Key Highlights
 
@@ -614,7 +614,7 @@ Create a `.env` file in the root directory:
 
 ```env
 # Application
-VITE_APP_NAME=Drena - Agency Management Platform
+VITE_APP_NAME=Haal - Agency Management Platform
 VITE_APP_VERSION=1.0.0
 VITE_APP_ENVIRONMENT=development
 

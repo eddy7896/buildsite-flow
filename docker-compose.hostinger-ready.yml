@@ -103,7 +103,7 @@ services:
       FILE_STORAGE_PATH: /app/storage
       
       # Application
-      VITE_APP_NAME: ${VITE_APP_NAME:-Drena - Agency Management Platform}
+      VITE_APP_NAME: ${VITE_APP_NAME:-Haal - Agency Management Platform}
       VITE_APP_VERSION: ${VITE_APP_VERSION:-1.0.0}
       VITE_APP_ENVIRONMENT: ${VITE_APP_ENVIRONMENT:-production}
       
@@ -147,7 +147,7 @@ services:
         # This value is embedded into the JavaScript bundle at build time
         VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
         VITE_DATABASE_URL: ${VITE_DATABASE_URL:-}
-        VITE_APP_NAME: ${VITE_APP_NAME:-Drena - Agency Management Platform}
+        VITE_APP_NAME: ${VITE_APP_NAME:-Haal - Agency Management Platform}
         VITE_APP_VERSION: ${VITE_APP_VERSION:-1.0.0}
         VITE_APP_ENVIRONMENT: ${VITE_APP_ENVIRONMENT:-production}
       shm_size: ${FRONTEND_SHM_SIZE:-1gb}
@@ -165,7 +165,7 @@ services:
           memory: ${FRONTEND_MEMORY_RESERVED:-128M}
     environment:
       VITE_API_URL: ${VITE_API_URL:-http://dezignbuild.site:3000/api}
-      VITE_APP_NAME: ${VITE_APP_NAME:-Drena - Agency Management Platform}
+      VITE_APP_NAME: ${VITE_APP_NAME:-Haal - Agency Management Platform}
       VITE_APP_ENVIRONMENT: ${VITE_APP_ENVIRONMENT:-production}
       BACKEND_PORT: ${BACKEND_PORT:-${PORT:-3000}}
     ports:

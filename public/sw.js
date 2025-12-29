@@ -1,9 +1,9 @@
-// Production Service Worker for Drena PWA
+// Production Service Worker for Haal PWA
 // Optimized for reliability and proper asset handling
 
 const CACHE_VERSION = 'v3';
-const STATIC_CACHE = `drena-static-${CACHE_VERSION}`;
-const DYNAMIC_CACHE = `drena-dynamic-${CACHE_VERSION}`;
+const STATIC_CACHE = `Haal-static-${CACHE_VERSION}`;
+const DYNAMIC_CACHE = `Haal-dynamic-${CACHE_VERSION}`;
 const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Static assets to precache (only essential files)
@@ -434,7 +434,7 @@ self.addEventListener('push', (event) => {
   };
   
   event.waitUntil(
-    self.registration.showNotification('Drena', options)
+    self.registration.showNotification('Haal', options)
   );
 });
 

@@ -94,10 +94,11 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				}
 			},
-			fontFamily: {
-				sans: ['var(--font-sans)'],
-				mono: ['var(--font-mono)']
-			},
+fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['DM Sans', 'Inter', 'system-ui', 'sans-serif'],
+        serif: ['Instrument Serif', 'Georgia', 'serif'],
+      },
 			fontSize: {
 				xs: ['var(--text-xs)', { lineHeight: 'var(--leading-normal)' }],
 				sm: ['var(--text-sm)', { lineHeight: 'var(--leading-normal)' }],

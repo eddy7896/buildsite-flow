@@ -20,8 +20,10 @@ import { TicketFloatingButton } from "@/components/TicketFloatingButton";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { useAuth } from "@/hooks/useAuth";
 import { useSystemSettings } from "@/hooks/useSystemSettings";
+import HoverReceiver from "@/visual-edits/VisualEditsMessenger";
 // Initialize console logger on app load
 import "@/utils/consoleLogger";
+import OnboardingWizard from "./components/onboarding/OnboardingWizard";
 
 // Lazy load all page components for better code splitting
 const Index = React.lazy(() => import("./pages/Index"));
@@ -30,7 +32,6 @@ const Pricing = React.lazy(() => import("./pages/Pricing"));
 const Auth = React.lazy(() => import("./pages/Auth"));
 const SignupSuccess = React.lazy(() => import("./pages/SignupSuccess"));
 const AgencyDashboard = React.lazy(() => import("./pages/AgencyDashboard"));
-const AgencyOnboardingWizard = React.lazy(() => import("./components/onboarding/OnboardingWizard"));
 const AgencySetup = React.lazy(() => import("./pages/AgencySetup"));
 const AgencySetupProgress = React.lazy(() => import("./pages/AgencySetupProgress"));
 const SuperAdminDashboard = React.lazy(() => import("./pages/SuperAdminDashboard"));
@@ -122,6 +123,25 @@ const AssetReports = React.lazy(() => import("./pages/AssetReports"));
 const EmailTesting = React.lazy(() => import("./pages/EmailTesting"));
 const PageRequestCenter = React.lazy(() => import("./pages/PageRequestCenter"));
 
+// Static pages for landing page links
+const ContactPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.ContactPage })));
+const AboutPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.AboutPage })));
+const BlogPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.BlogPage })));
+const CareersPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.CareersPage })));
+const HelpCenterPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.HelpCenterPage })));
+const DocsPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.DocsPage })));
+const APIReferencePage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.APIReferencePage })));
+const PrivacyPolicyPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.PrivacyPolicyPage })));
+const TermsPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.TermsPage })));
+const CookiePolicyPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.CookiePolicyPage })));
+const GDPRPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.GDPRPage })));
+const ChangelogPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.ChangelogPage })));
+const RoadmapPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.RoadmapPage })));
+const IntegrationsPublicPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.IntegrationsPage })));
+const TemplatesPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.TemplatesPage })));
+const CommunityPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.CommunityPage })));
+const PressPage = React.lazy(() => import("./pages/StaticPages").then(m => ({ default: m.PressPage })));
+
 // Lazy load component modules
 const RoleChangeRequests = React.lazy(() => import('./components/RoleChangeRequests').then(m => ({ default: m.RoleChangeRequests })));
 const AdvancedPermissions = React.lazy(() => import('./components/AdvancedPermissions'));
@@ -181,11 +201,32 @@ const AppContent = () => {
               <Route path="/" element={<SuspenseRoute><Landing /></SuspenseRoute>} />
               <Route path="/pricing" element={<SuspenseRoute><Pricing /></SuspenseRoute>} />
               <Route path="/auth" element={<SuspenseRoute><Auth /></SuspenseRoute>} />
-              <Route path="/agency-signup" element={<SuspenseRoute><AgencyOnboardingWizard /></SuspenseRoute>} />
+              <Route path="/agency-signup" element={<SuspenseRoute><OnboardingWizard /></SuspenseRoute>} />
               <Route path="/signup-success" element={<SuspenseRoute><SignupSuccess /></SuspenseRoute>} />
-              <Route path="/forgot-password" element={<SuspenseRoute><ForgotPassword /></SuspenseRoute>} />
-              
-              <Route 
+<Route path="/forgot-password" element={<SuspenseRoute><ForgotPassword /></SuspenseRoute>} />
+                <Route path="/login" element={<SuspenseRoute><Auth /></SuspenseRoute>} />
+                <Route path="/register" element={<SuspenseRoute><Auth /></SuspenseRoute>} />
+                
+                {/* Static Pages */}
+                <Route path="/contact" element={<SuspenseRoute><ContactPage /></SuspenseRoute>} />
+                <Route path="/about" element={<SuspenseRoute><AboutPage /></SuspenseRoute>} />
+                <Route path="/blog" element={<SuspenseRoute><BlogPage /></SuspenseRoute>} />
+                <Route path="/careers" element={<SuspenseRoute><CareersPage /></SuspenseRoute>} />
+                <Route path="/help" element={<SuspenseRoute><HelpCenterPage /></SuspenseRoute>} />
+                <Route path="/docs" element={<SuspenseRoute><DocsPage /></SuspenseRoute>} />
+                <Route path="/api" element={<SuspenseRoute><APIReferencePage /></SuspenseRoute>} />
+                <Route path="/privacy" element={<SuspenseRoute><PrivacyPolicyPage /></SuspenseRoute>} />
+                <Route path="/terms" element={<SuspenseRoute><TermsPage /></SuspenseRoute>} />
+                <Route path="/cookies" element={<SuspenseRoute><CookiePolicyPage /></SuspenseRoute>} />
+                <Route path="/gdpr" element={<SuspenseRoute><GDPRPage /></SuspenseRoute>} />
+                <Route path="/changelog" element={<SuspenseRoute><ChangelogPage /></SuspenseRoute>} />
+                <Route path="/roadmap" element={<SuspenseRoute><RoadmapPage /></SuspenseRoute>} />
+                <Route path="/integrations-info" element={<SuspenseRoute><IntegrationsPublicPage /></SuspenseRoute>} />
+                <Route path="/templates" element={<SuspenseRoute><TemplatesPage /></SuspenseRoute>} />
+                <Route path="/community" element={<SuspenseRoute><CommunityPage /></SuspenseRoute>} />
+                <Route path="/press" element={<SuspenseRoute><PressPage /></SuspenseRoute>} />
+                
+                <Route
                 path="/agency-setup" 
                 element={
                   <ProtectedRoute requiredRole={["admin", "super_admin"]}>
@@ -710,7 +751,7 @@ const AppContent = () => {
                       <SuspenseRoute><InventoryAdjustments /></SuspenseRoute>
                     </DashboardLayout>
                   </ProtectedRoute>
-                }
+                } 
               />
               
               <Route 
@@ -1275,22 +1316,21 @@ const AppContent = () => {
   );
 };
 
-const App = () => {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <ErrorBoundary>
-          <AuthProvider>
-            <ViewAsUserProvider>
-              <AppContent />
-            </ViewAsUserProvider>
-          </AuthProvider>
-        </ErrorBoundary>
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-};
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <HoverReceiver />
+      <ErrorBoundary>
+        <AuthProvider>
+          <ViewAsUserProvider>
+            <AppContent />
+          </ViewAsUserProvider>
+        </AuthProvider>
+      </ErrorBoundary>
+    </TooltipProvider>
+  </QueryClientProvider>
+);
 
 export default App;

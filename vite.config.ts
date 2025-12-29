@@ -1,9 +1,68 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import { fileURLToPath, URL } from 'node:url'
+import { componentTaggerPlugin } from "./src/visual-edits/component-tagger-plugin.js";
+
+// Minimal plugin to log build-time and dev-time errors to console
+const logErrorsPlugin = () => ({
+  name: "log-errors-plugin",
+  // Inject a small client-side script that mirrors Vite overlay errors to console
+  transformIndexHtml() {
+    return {
+      tags: [
+        {
+          tag: "script",
+          injectTo: "head",
+          children: `(() => {
+            try {
+              const logOverlay = () => {
+                const el = document.querySelector('vite-error-overlay');
+                if (!el) return;
+                const root = (el.shadowRoot || el);
+                let text = '';
+                try { text = root.textContent || ''; } catch (_) {}
+                if (text && text.trim()) {
+                  const msg = text.trim();
+                  // Use console.error to surface clearly in DevTools
+                  console.error('[Vite Overlay]', msg);
+                  // Also mirror to parent iframe with structured payload
+                  try {
+                    if (window.parent && window.parent !== window) {
+                      window.parent.postMessage({
+                        type: 'ERROR_CAPTURED',
+                        error: {
+                          message: msg,
+                          stack: undefined,
+                          filename: undefined,
+                          lineno: undefined,
+                          colno: undefined,
+                          source: 'vite.overlay',
+                        },
+                        timestamp: Date.now(),
+                      }, '*');
+                    }
+                  } catch (_) {}
+                }
+              };
+
+              const obs = new MutationObserver(() => logOverlay());
+              obs.observe(document.documentElement, { childList: true, subtree: true });
+
+              window.addEventListener('DOMContentLoaded', logOverlay);
+              // Attempt immediately as overlay may already exist
+              logOverlay();
+            } catch (e) {
+              console.warn('[Vite Overlay logger failed]', e);
+            }
+          })();`
+        }
+      ]
+    };
+  },
+});
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   test: {
     globals: true,
     environment: 'jsdom',
@@ -38,23 +97,18 @@ export default defineConfig({
       ],
     },
   },
-  plugins: [react()],
+  server: {
+    host: "::",
+    port: 3000,
+  },
+  plugins: [
+    react(),
+    logErrorsPlugin(),
+    mode === 'development' && componentTaggerPlugin(),
+  ].filter(Boolean),
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-    },
-  },
-  server: {
-    port: parseInt(process.env.VITE_DEV_PORT || '5173', 10),
-    host: true,
-    proxy: {
-      '/api': {
-        target: process.env.VITE_API_URL 
-          ? process.env.VITE_API_URL.replace('/api', '')
-          : `http://localhost:${process.env.PORT || process.env.BACKEND_PORT || 3000}`,
-        changeOrigin: true,
-        secure: false,
-      },
     },
   },
   build: {
@@ -65,7 +119,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'ui-vendor': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-select'],
           'query-vendor': ['@tanstack/react-query'],
         },
@@ -73,11 +126,12 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'react-router-dom', 'recharts'],
+    include: ['recharts'],
     exclude: ['crypto'],
   },
   define: {
     'process.env': {},
     global: 'globalThis',
   },
-})
+}))
+// Orchids restart: 1766997025873
