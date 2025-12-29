@@ -53,24 +53,27 @@ export default function StepLaunch({ formData, isLoading, setCanProceed }: StepL
         transition={{ duration: 0.5, delay: 0.1 }}
         className="space-y-3"
       >
-        {reviewItems.map((item, index) => (
-          <motion.div
-            key={item.label}
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.15 + index * 0.05 }}
-            className="flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]"
-          >
-            <div className="w-9 h-9 rounded-lg bg-white/[0.05] flex items-center justify-center flex-shrink-0">
-              <item.icon className="w-4 h-4 text-zinc-500" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-zinc-600">{item.label}</p>
-              <p className="text-sm text-white truncate">{item.value}</p>
-            </div>
-            <Check className="w-4 h-4 text-emerald-500/60 flex-shrink-0" />
-          </motion.div>
-        ))}
+        {reviewItems.map((item, index) => {
+          const Icon = item.icon;
+          return (
+            <motion.div
+              key={item.label}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.15 + index * 0.05 }}
+              className="flex items-center gap-4 p-4 rounded-xl bg-white/[0.02] border border-white/[0.06]"
+            >
+              <div className="w-9 h-9 rounded-lg bg-white/[0.05] flex items-center justify-center flex-shrink-0">
+                <Icon className="w-4 h-4 text-zinc-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-zinc-600">{item.label}</p>
+                <p className="text-sm text-white truncate">{item.value}</p>
+              </div>
+              <Check className="w-4 h-4 text-emerald-500/60 flex-shrink-0" />
+            </motion.div>
+          );
+        })}
       </motion.div>
 
       {isLoading && (

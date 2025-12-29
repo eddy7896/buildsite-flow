@@ -38,45 +38,55 @@ export default function StepBusiness({ formData, updateFormData, setCanProceed }
         <div className="space-y-3">
           <label className="text-sm text-zinc-400">Industry</label>
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-            {INDUSTRIES.map((industry) => (
-              <button
-                key={industry.value}
-                type="button"
-                onClick={() => updateFormData({ industry: industry.value })}
-                className={cn(
-                  "p-3 rounded-lg border text-center transition-all duration-200",
-                  formData.industry === industry.value
-                    ? "bg-white/[0.08] border-white/[0.2] text-white"
-                    : "bg-white/[0.02] border-white/[0.06] text-zinc-400 hover:border-white/[0.12] hover:text-zinc-300"
-                )}
-              >
-                <span className="text-xl block mb-1">{industry.icon}</span>
-                <span className="text-xs">{industry.label}</span>
-              </button>
-            ))}
+            {INDUSTRIES.map((industry) => {
+              const Icon = industry.icon;
+              return (
+                <button
+                  key={industry.value}
+                  type="button"
+                  onClick={() => updateFormData({ industry: industry.value })}
+                  className={cn(
+                    "p-3 rounded-lg border text-center transition-all duration-200",
+                    formData.industry === industry.value
+                      ? "bg-white/[0.08] border-white/[0.2] text-white"
+                      : "bg-white/[0.02] border-white/[0.06] text-zinc-400 hover:border-white/[0.12] hover:text-zinc-300"
+                  )}
+                >
+                  <span className="text-xl block mb-1">
+                    <Icon className="w-5 h-5 mx-auto" />
+                  </span>
+                  <span className="text-xs">{industry.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <div className="space-y-3">
           <label className="text-sm text-zinc-400">Team Size</label>
           <div className="grid grid-cols-5 gap-2">
-            {COMPANY_SIZES.map((size) => (
-              <button
-                key={size.value}
-                type="button"
-                onClick={() => updateFormData({ companySize: size.value })}
-                className={cn(
-                  "p-3 rounded-lg border text-center transition-all duration-200",
-                  formData.companySize === size.value
-                    ? "bg-white/[0.08] border-white/[0.2] text-white"
-                    : "bg-white/[0.02] border-white/[0.06] text-zinc-400 hover:border-white/[0.12] hover:text-zinc-300"
-                )}
-              >
-                <span className="text-lg block mb-1">{size.icon}</span>
-                <span className="text-xs block">{size.label}</span>
-                <span className="text-[10px] text-zinc-600">{size.employees}</span>
-              </button>
-            ))}
+            {COMPANY_SIZES.map((size) => {
+              const Icon = size.icon;
+              return (
+                <button
+                  key={size.value}
+                  type="button"
+                  onClick={() => updateFormData({ companySize: size.value })}
+                  className={cn(
+                    "p-3 rounded-lg border text-center transition-all duration-200",
+                    formData.companySize === size.value
+                      ? "bg-white/[0.08] border-white/[0.2] text-white"
+                      : "bg-white/[0.02] border-white/[0.06] text-zinc-400 hover:border-white/[0.12] hover:text-zinc-300"
+                  )}
+                >
+                  <span className="text-lg block mb-1">
+                    <Icon className="w-5 h-5 mx-auto" />
+                  </span>
+                  <span className="text-xs block">{size.label}</span>
+                  <span className="text-[10px] text-zinc-600">{size.employees}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </motion.div>
