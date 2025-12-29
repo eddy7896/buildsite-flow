@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger, SidebarInset } from "@/components/ui/sidebar";
+import { ThemeProvider } from "next-themes";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ViewAsUserProvider } from "@/contexts/ViewAsUserContext";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -1318,18 +1319,20 @@ const AppContent = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <HoverReceiver />
-      <ErrorBoundary>
-        <AuthProvider>
-          <ViewAsUserProvider>
-            <AppContent />
-          </ViewAsUserProvider>
-        </AuthProvider>
-      </ErrorBoundary>
-    </TooltipProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <HoverReceiver />
+        <ErrorBoundary>
+          <AuthProvider>
+            <ViewAsUserProvider>
+              <AppContent />
+            </ViewAsUserProvider>
+          </AuthProvider>
+        </ErrorBoundary>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

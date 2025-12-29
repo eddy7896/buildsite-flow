@@ -1071,44 +1071,58 @@ async function createAgency(agencyData) {
       
       // Assign pages
       if (pageIdsToAssign.length > 0) {
-        const placeholders = pageIdsToAssign.map((_, i) => `$${i + 1}`).join(',');
-        const pageCheck = await mainClient.query(
-          `SELECT id FROM public.page_catalog WHERE id IN (${placeholders}) AND is_active = true`,
-          pageIdsToAssign
-        );
+        // First, check if agency_page_assignments table exists
+        const tableCheck = await mainClient.query(`
+          SELECT EXISTS (
+            SELECT FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name = 'agency_page_assignments'
+          );
+        `);
         
-        const validPageIds = pageCheck.rows.map(r => r.id);
-        
-        if (validPageIds.length > 0) {
-          /**
-           * IMPORTANT:
-           * ----------
-           * The agency_page_assignments.assigned_by column has a foreign key
-           * constraint to public.users.id in the MAIN database (where super admin
-           * and staff users live), not the isolated agency database.
-           *
-           * During agency onboarding we are creating the FIRST admin user inside
-           * the isolated agency database only, so adminUserId does NOT exist in
-           * public.users yet. Using it here causes a foreign key violation like:
-           *
-           *   insert or update on table "agency_page_assignments"
-           *   violates foreign key constraint "agency_page_assignments_assigned_by_fkey"
-           *
-           * To avoid this, we set assigned_by to NULL for these initial automatic
-           * assignments. Later manual assignments (via the page catalog routes)
-           * correctly use req.user.userId from the main users table.
-           */
-          for (const pageId of validPageIds) {
-            await mainClient.query(
-              `INSERT INTO public.agency_page_assignments 
-               (agency_id, page_id, assigned_by, status)
-               VALUES ($1, $2, $3, 'active')
-               ON CONFLICT (agency_id, page_id) 
-               DO UPDATE SET status = 'active', updated_at = now()`,
-              [agencyId, pageId, null] // assigned_by must reference main DB users; null is safe for system assignments
-            );
+        if (!tableCheck.rows[0].exists) {
+          console.warn(`[API] ⚠️ agency_page_assignments table does not exist in main database. Skipping page assignment.`);
+          console.warn(`[API] ⚠️ Please ensure the page catalog migration has been run.`);
+        } else {
+          const placeholders = pageIdsToAssign.map((_, i) => `$${i + 1}`).join(',');
+          const pageCheck = await mainClient.query(
+            `SELECT id FROM public.page_catalog WHERE id IN (${placeholders}) AND is_active = true`,
+            pageIdsToAssign
+          );
+          
+          const validPageIds = pageCheck.rows.map(r => r.id);
+          
+          if (validPageIds.length > 0) {
+            /**
+             * IMPORTANT:
+             * ----------
+             * The agency_page_assignments.assigned_by column has a foreign key
+             * constraint to public.users.id in the MAIN database (where super admin
+             * and staff users live), not the isolated agency database.
+             *
+             * During agency onboarding we are creating the FIRST admin user inside
+             * the isolated agency database only, so adminUserId does NOT exist in
+             * public.users yet. Using it here causes a foreign key violation like:
+             *
+             *   insert or update on table "agency_page_assignments"
+             *   violates foreign key constraint "agency_page_assignments_assigned_by_fkey"
+             *
+             * To avoid this, we set assigned_by to NULL for these initial automatic
+             * assignments. Later manual assignments (via the page catalog routes)
+             * correctly use req.user.userId from the main users table.
+             */
+            for (const pageId of validPageIds) {
+              await mainClient.query(
+                `INSERT INTO public.agency_page_assignments 
+                 (agency_id, page_id, assigned_by, status)
+                 VALUES ($1, $2, $3, 'active')
+                 ON CONFLICT (agency_id, page_id) 
+                 DO UPDATE SET status = 'active', updated_at = now()`,
+                [agencyId, pageId, null] // assigned_by must reference main DB users; null is safe for system assignments
+              );
+            }
+            console.log(`[API] ✅ Assigned ${validPageIds.length} pages to agency`);
           }
-          console.log(`[API] ✅ Assigned ${validPageIds.length} pages to agency`);
         }
       }
     } catch (pageError) {

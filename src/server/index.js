@@ -404,6 +404,61 @@ async function initializeMainDatabase() {
         }
       }
       
+      // Ensure agency_page_assignments table exists (needed for page assignments)
+      const assignmentsCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'agency_page_assignments'
+        );
+      `);
+      
+      if (!assignmentsCheck.rows[0].exists) {
+        logger.warn('agency_page_assignments table missing - creating...');
+        
+        // Ensure update_updated_at_column function exists (needed for trigger)
+        await client.query(`
+          CREATE OR REPLACE FUNCTION update_updated_at_column()
+          RETURNS TRIGGER AS $$
+          BEGIN
+            NEW.updated_at = now();
+            RETURN NEW;
+          END;
+          $$ LANGUAGE plpgsql;
+        `);
+        
+        await client.query(`
+          CREATE TABLE IF NOT EXISTS public.agency_page_assignments (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            agency_id UUID NOT NULL REFERENCES public.agencies(id) ON DELETE CASCADE,
+            page_id UUID NOT NULL REFERENCES public.page_catalog(id) ON DELETE CASCADE,
+            assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            assigned_by UUID REFERENCES public.users(id),
+            cost_override NUMERIC(12,2),
+            status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'pending_approval', 'suspended')),
+            metadata JSONB DEFAULT '{}'::jsonb,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            UNIQUE(agency_id, page_id)
+          );
+          
+          CREATE INDEX IF NOT EXISTS idx_agency_page_assignments_agency_id ON public.agency_page_assignments(agency_id);
+          CREATE INDEX IF NOT EXISTS idx_agency_page_assignments_page_id ON public.agency_page_assignments(page_id);
+          CREATE INDEX IF NOT EXISTS idx_agency_page_assignments_status ON public.agency_page_assignments(status);
+        `);
+        
+        // Create trigger if it doesn't exist
+        await client.query(`
+          DROP TRIGGER IF EXISTS update_agency_page_assignments_updated_at ON public.agency_page_assignments;
+          CREATE TRIGGER update_agency_page_assignments_updated_at
+            BEFORE UPDATE ON public.agency_page_assignments
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+        `);
+        
+        logger.info('✅ agency_page_assignments table created');
+      }
+      
       // Seed page_catalog if empty (check regardless of whether table was just created)
       const countResult = await client.query('SELECT COUNT(*) as count FROM public.page_catalog');
       if (parseInt(countResult.rows[0].count) === 0) {

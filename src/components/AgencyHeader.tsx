@@ -17,6 +17,8 @@ import {
   BarChart3,
   Shield,
   Home,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { NotificationCenter } from './NotificationCenter';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
@@ -53,6 +55,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useThemeSync } from '@/hooks/useThemeSync';
 
 // Route mapping for breadcrumbs
 const routeMap: Record<string, { label: string; path: string }[]> = {
@@ -96,6 +99,7 @@ export const AgencyHeader = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
+  const { theme, resolvedTheme, setTheme } = useThemeSync();
 
   // Debug: Log image URLs when they change (only in development)
   useEffect(() => {
@@ -261,6 +265,18 @@ export const AgencyHeader = () => {
   };
 
   const CurrentPageIcon = getPageIcon(location.pathname);
+
+  // Theme toggle handler
+  const handleThemeToggle = () => {
+    const currentResolved = resolvedTheme || theme;
+    if (currentResolved === 'dark') {
+      setTheme('light');
+    } else {
+      setTheme('dark');
+    }
+  };
+
+  const isDark = resolvedTheme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   // Mobile Layout: Clean, app-like header with clear hierarchy
   if (isMobile) {
