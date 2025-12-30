@@ -7,56 +7,42 @@ const express = require('express');
 const router = express.Router();
 const { asyncHandler } = require('../middleware/errorHandler');
 const { authenticate, requireRole, requireAgencyContext } = require('../middleware/authMiddleware');
-const { parseDatabaseUrl } = require('../utils/poolManager');
-const { Pool } = require('pg');
-
-// Helper to get agency database connection
-async function getAgencyDb(agencyDatabase) {
-  if (!agencyDatabase || typeof agencyDatabase !== 'string') {
-    throw new Error('Agency database name is required');
-  }
-  
-  const dbConfig = parseDatabaseUrl();
-  
-  // Validate all required fields are present
-  if (!dbConfig.host || !dbConfig.user || dbConfig.password === undefined || !dbConfig.port) {
-    throw new Error('Invalid database configuration: missing required connection parameters');
-  }
-  
-  // URL-encode password to handle special characters
-  const encodedPassword = encodeURIComponent(dbConfig.password);
-  const agencyDbUrl = `postgresql://${dbConfig.user}:${encodedPassword}@${dbConfig.host}:${dbConfig.port}/${agencyDatabase}`;
-  
-  // Validate connection string is not undefined
-  if (!agencyDbUrl || agencyDbUrl.includes('undefined')) {
-    throw new Error('Failed to construct valid database connection string');
-  }
-  
-  return new Pool({ connectionString: agencyDbUrl, max: 1 });
-}
+const { getAgencyPool } = require('../utils/poolManager');
+const logger = require('../utils/logger');
+const { query, queryOne, queryMany } = require('../utils/dbQuery');
+const { withTransaction } = require('../utils/transactionHelper');
+const { send, success, error: errorResponse, databaseError, validationError, notFound } = require('../utils/responseHelper');
 
 // Helper to ensure user_permissions table exists
-async function ensureUserPermissionsTable(client) {
-  const tableCheck = await client.query(`
-    SELECT EXISTS (
+async function ensureUserPermissionsTable(agencyDatabase, requestId) {
+  const tableCheck = await queryOne(
+    `SELECT EXISTS (
       SELECT FROM information_schema.tables 
       WHERE table_schema = 'public' 
       AND table_name = 'user_permissions'
-    );
-  `);
+    )`,
+    [],
+    { agencyDatabase, requestId }
+  );
   
-  if (!tableCheck.rows[0].exists) {
-    const { ensureUserPermissionsTable: ensureTable } = require('../utils/schema/authSchema');
-    await ensureTable(client);
+  if (!tableCheck.exists) {
+    const pool = getAgencyPool(agencyDatabase);
+    const client = await pool.connect();
+    try {
+      const { ensureUserPermissionsTable: ensureTable } = require('../utils/schema/authSchema');
+      await ensureTable(client);
+    } finally {
+      client.release();
+    }
   }
 }
 
 // Helper to log audit trail
-async function logAudit(client, tableName, action, userId, recordId, oldValues, newValues, ipAddress, userAgent) {
+async function logAudit(agencyDatabase, tableName, action, userId, recordId, oldValues, newValues, ipAddress, userAgent, requestId) {
   try {
     // Ensure audit_logs table exists
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS public.audit_logs (
+    await query(
+      `CREATE TABLE IF NOT EXISTS public.audit_logs (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         table_name TEXT NOT NULL,
         action TEXT NOT NULL,
@@ -67,16 +53,28 @@ async function logAudit(client, tableName, action, userId, recordId, oldValues, 
         ip_address INET,
         user_agent TEXT,
         created_at TIMESTAMPTZ DEFAULT now()
-      );
-    `);
+      )`,
+      [],
+      { agencyDatabase, requestId }
+    );
 
-    await client.query(
+    await query(
       `INSERT INTO public.audit_logs (table_name, action, user_id, record_id, old_values, new_values, ip_address, user_agent)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [tableName, action, userId, recordId, oldValues ? JSON.stringify(oldValues) : null, newValues ? JSON.stringify(newValues) : null, ipAddress, userAgent]
+      [tableName, action, userId, recordId, oldValues ? JSON.stringify(oldValues) : null, newValues ? JSON.stringify(newValues) : null, ipAddress, userAgent],
+      { agencyDatabase, requestId }
     );
   } catch (error) {
-    console.error('[Audit] Failed to log audit trail:', error);
+    logger.error('Failed to log audit trail', {
+      error: error.message,
+      code: error.code,
+      userId,
+      action,
+      tableName,
+      recordId,
+      agencyDatabase,
+      requestId,
+    });
     // Don't throw - audit logging failure shouldn't break the operation
   }
 }
@@ -90,41 +88,39 @@ router.get('/', authenticate, requireAgencyContext, asyncHandler(async (req, res
   const { page = 1, limit = 100, category, search } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
-
   try {
     // Check if permissions table exists
-    const tableCheck = await client.query(`
-      SELECT EXISTS (
+    const tableCheck = await queryOne(
+      `SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_name = 'permissions'
-      );
-    `);
+      )`,
+      [],
+      { agencyDatabase, requestId: req.requestId }
+    );
 
-    if (!tableCheck.rows[0].exists) {
-      return res.json({
-        success: true,
-        data: [],
+    if (!tableCheck.exists) {
+      return send(res, success([], null, {
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
           total: 0,
           totalPages: 0
-        }
-      });
+        },
+        requestId: req.requestId
+      }));
     }
 
-    let query = 'SELECT * FROM public.permissions WHERE 1=1';
-    let countQuery = 'SELECT COUNT(*) FROM public.permissions WHERE 1=1';
+    let sqlQuery = 'SELECT * FROM public.permissions WHERE 1=1';
+    let countQuery = 'SELECT COUNT(*) as count FROM public.permissions WHERE 1=1';
     const params = [];
     const countParams = [];
     let paramCount = 0;
 
     if (category) {
       paramCount++;
-      query += ` AND category = $${paramCount}`;
+      sqlQuery += ` AND category = $${paramCount}`;
       countQuery += ` AND category = $${paramCount}`;
       params.push(category);
       countParams.push(category);
@@ -132,45 +128,44 @@ router.get('/', authenticate, requireAgencyContext, asyncHandler(async (req, res
 
     if (search) {
       paramCount++;
-      query += ` AND (name ILIKE $${paramCount} OR description ILIKE $${paramCount})`;
+      sqlQuery += ` AND (name ILIKE $${paramCount} OR description ILIKE $${paramCount})`;
       countQuery += ` AND (name ILIKE $${paramCount} OR description ILIKE $${paramCount})`;
       params.push(`%${search}%`);
       countParams.push(`%${search}%`);
     }
 
-    query += ' ORDER BY category, name';
+    sqlQuery += ' ORDER BY category, name';
     paramCount++;
-    query += ` LIMIT $${paramCount}`;
+    sqlQuery += ` LIMIT $${paramCount}`;
     params.push(parseInt(limit));
     paramCount++;
-    query += ` OFFSET $${paramCount}`;
+    sqlQuery += ` OFFSET $${paramCount}`;
     params.push(offset);
 
-    const result = await client.query(query, params);
-    const countResult = await client.query(countQuery, countParams);
+    // Execute queries in parallel
+    const [result, countResult] = await Promise.all([
+      queryMany(sqlQuery, params, { agencyDatabase, requestId: req.requestId }),
+      queryOne(countQuery, countParams, { agencyDatabase, requestId: req.requestId })
+    ]);
 
-    res.json({
-      success: true,
-      data: result.rows,
+    return send(res, success(result, null, {
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total: parseInt(countResult.rows[0].count),
-        totalPages: Math.ceil(parseInt(countResult.rows[0].count) / parseInt(limit))
-      }
-    });
+        total: parseInt(countResult.count),
+        totalPages: Math.ceil(parseInt(countResult.count) / parseInt(limit))
+      },
+      requestId: req.requestId
+    }));
   } catch (error) {
-    console.error('[Permissions] Error fetching permissions:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: error.message || 'Failed to fetch permissions',
-        detail: error.detail
-      }
+    logger.error('Error fetching permissions', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
     });
-  } finally {
-    client.release();
-    await pool.end();
+    return send(res, databaseError(error, 'Failed to fetch permissions'));
   }
 }));
 
@@ -180,45 +175,39 @@ router.get('/', authenticate, requireAgencyContext, asyncHandler(async (req, res
  */
 router.get('/categories', authenticate, requireAgencyContext, asyncHandler(async (req, res) => {
   const agencyDatabase = req.user.agencyDatabase;
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
 
   try {
     // Check if permissions table exists
-    const tableCheck = await client.query(`
-      SELECT EXISTS (
+    const tableCheck = await queryOne(
+      `SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_name = 'permissions'
-      );
-    `);
+      )`,
+      [],
+      { agencyDatabase, requestId: req.requestId }
+    );
 
-    if (!tableCheck.rows[0].exists) {
-      return res.json({
-        success: true,
-        data: []
-      });
+    if (!tableCheck.exists) {
+      return send(res, success([], null, { requestId: req.requestId }));
     }
 
-    const result = await client.query(
-      'SELECT DISTINCT category FROM public.permissions WHERE is_active = true ORDER BY category'
+    const result = await queryMany(
+      'SELECT DISTINCT category FROM public.permissions WHERE is_active = true ORDER BY category',
+      [],
+      { agencyDatabase, requestId: req.requestId }
     );
-    res.json({
-      success: true,
-      data: result.rows.map(r => r.category)
-    });
+
+    return send(res, success(result.map(r => r.category), null, { requestId: req.requestId }));
   } catch (error) {
-    console.error('[Permissions] Error fetching categories:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: error.message || 'Failed to fetch categories',
-        detail: error.detail
-      }
+    logger.error('Error fetching categories', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
     });
-  } finally {
-    client.release();
-    await pool.end();
+    return send(res, databaseError(error, 'Failed to fetch categories'));
   }
 }));
 
@@ -229,50 +218,44 @@ router.get('/categories', authenticate, requireAgencyContext, asyncHandler(async
 router.get('/roles/:role', authenticate, requireAgencyContext, asyncHandler(async (req, res) => {
   const agencyDatabase = req.user.agencyDatabase;
   const { role } = req.params;
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
 
   try {
     // Check if tables exist
-    const permissionsTableCheck = await client.query(`
-      SELECT EXISTS (
+    const permissionsTableCheck = await queryOne(
+      `SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_name = 'permissions'
-      );
-    `);
+      )`,
+      [],
+      { agencyDatabase, requestId: req.requestId }
+    );
 
-    if (!permissionsTableCheck.rows[0].exists) {
-      return res.json({
-        success: true,
-        data: []
-      });
+    if (!permissionsTableCheck.exists) {
+      return send(res, success([], null, { requestId: req.requestId }));
     }
 
-    const result = await client.query(
+    const result = await queryMany(
       `SELECT p.*, rp.granted, rp.id as role_permission_id
        FROM public.permissions p
        LEFT JOIN public.role_permissions rp ON p.id = rp.permission_id AND rp.role = $1
        WHERE p.is_active = true
        ORDER BY p.category, p.name`,
-      [role]
+      [role],
+      { agencyDatabase, requestId: req.requestId }
     );
-    res.json({
-      success: true,
-      data: result.rows
-    });
+
+    return send(res, success(result, null, { requestId: req.requestId }));
   } catch (error) {
-    console.error('[Permissions] Error fetching role permissions:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: error.message || 'Failed to fetch role permissions',
-        detail: error.detail
-      }
+    logger.error('Error fetching role permissions', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      role: req.params.role,
+      agencyDatabase,
+      requestId: req.requestId,
     });
-  } finally {
-    client.release();
-    await pool.end();
+    return send(res, databaseError(error, 'Failed to fetch role permissions'));
   }
 }));
 
@@ -289,68 +272,67 @@ router.put('/roles/:role', authenticate, requireRole(['super_admin', 'ceo', 'adm
   const userAgent = req.headers['user-agent'];
 
   if (!Array.isArray(permissions)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Permissions must be an array'
-    });
+    return send(res, validationError('Permissions must be an array'), 400);
   }
 
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
+  const pool = getAgencyPool(agencyDatabase);
 
   try {
-    await client.query('BEGIN');
+    await withTransaction(pool, async (client) => {
+      for (const perm of permissions) {
+        const { permission_id, granted } = perm;
 
-    for (const perm of permissions) {
-      const { permission_id, granted } = perm;
-
-      // Check if permission exists
-      const permCheck = await client.query('SELECT id FROM public.permissions WHERE id = $1', [permission_id]);
-      if (permCheck.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({
-          success: false,
-          error: `Permission ${permission_id} does not exist`
-        });
-      }
-
-      // Check if role_permission exists
-      const existing = await client.query(
-        'SELECT id, granted FROM public.role_permissions WHERE role = $1 AND permission_id = $2',
-        [role, permission_id]
-      );
-
-      if (existing.rows.length > 0) {
-        const oldValue = existing.rows[0].granted;
-        if (oldValue !== granted) {
-          await client.query(
-            'UPDATE public.role_permissions SET granted = $1, updated_at = now() WHERE id = $2',
-            [granted, existing.rows[0].id]
-          );
-          await logAudit(client, 'role_permissions', 'UPDATE', userId, existing.rows[0].id,
-            { granted: oldValue }, { granted }, ipAddress, userAgent);
+        // Check if permission exists
+        const permCheck = await client.query('SELECT id FROM public.permissions WHERE id = $1', [permission_id]);
+        if (permCheck.rows.length === 0) {
+          throw new Error(`Permission ${permission_id} does not exist`);
         }
-      } else {
-        const insertResult = await client.query(
-          'INSERT INTO public.role_permissions (role, permission_id, granted) VALUES ($1, $2, $3) RETURNING id',
-          [role, permission_id, granted]
-        );
-        await logAudit(client, 'role_permissions', 'INSERT', userId, insertResult.rows[0].id,
-          null, { role, permission_id, granted }, ipAddress, userAgent);
-      }
-    }
 
-    await client.query('COMMIT');
-    res.json({
-      success: true,
-      message: 'Role permissions updated successfully'
+        // Check if role_permission exists
+        const existing = await client.query(
+          'SELECT id, granted FROM public.role_permissions WHERE role = $1 AND permission_id = $2',
+          [role, permission_id]
+        );
+
+        if (existing.rows.length > 0) {
+          const oldValue = existing.rows[0].granted;
+          if (oldValue !== granted) {
+            await client.query(
+              'UPDATE public.role_permissions SET granted = $1, updated_at = now() WHERE id = $2',
+              [granted, existing.rows[0].id]
+            );
+            // Log audit after transaction commits
+            await logAudit(agencyDatabase, 'role_permissions', 'UPDATE', userId, existing.rows[0].id,
+              { granted: oldValue }, { granted }, ipAddress, userAgent, req.requestId);
+          }
+        } else {
+          const insertResult = await client.query(
+            'INSERT INTO public.role_permissions (role, permission_id, granted) VALUES ($1, $2, $3) RETURNING id',
+            [role, permission_id, granted]
+          );
+          // Log audit after transaction commits
+          await logAudit(agencyDatabase, 'role_permissions', 'INSERT', userId, insertResult.rows[0].id,
+            null, { role, permission_id, granted }, ipAddress, userAgent, req.requestId);
+        }
+      }
     });
+
+    return send(res, success(null, 'Role permissions updated successfully', { requestId: req.requestId }));
   } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-    await pool.end();
+    logger.error('Error updating role permissions', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      role: req.params.role,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
+    
+    if (error.message.includes('does not exist')) {
+      return send(res, validationError(error.message), 400);
+    }
+    
+    return send(res, databaseError(error, 'Failed to update role permissions'));
   }
 }));
 
@@ -361,82 +343,86 @@ router.put('/roles/:role', authenticate, requireRole(['super_admin', 'ceo', 'adm
 router.get('/users/:userId', authenticate, requireAgencyContext, asyncHandler(async (req, res) => {
   const agencyDatabase = req.user.agencyDatabase;
   const { userId } = req.params;
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
 
   try {
     // Get user roles
-    const rolesResult = await client.query(
+    const rolesResult = await queryMany(
       'SELECT role FROM public.user_roles WHERE user_id = $1',
-      [userId]
+      [userId],
+      { agencyDatabase, requestId: req.requestId }
     );
-    const roles = rolesResult.rows.map(r => r.role);
+    const roles = rolesResult.map(r => r.role);
 
     // Get role-based permissions (only if user has roles)
-    let rolePermsResult = { rows: [] };
+    let rolePermsResult = [];
     if (roles.length > 0) {
-      rolePermsResult = await client.query(
+      rolePermsResult = await queryMany(
         `SELECT DISTINCT p.*, rp.granted, 'role' as source
          FROM public.permissions p
          INNER JOIN public.role_permissions rp ON p.id = rp.permission_id
          WHERE rp.role = ANY($1::text[]) AND rp.granted = true AND p.is_active = true`,
-        [roles]
+        [roles],
+        { agencyDatabase, requestId: req.requestId }
       );
     }
 
     // Get user-specific overrides (if user_permissions table exists)
-    let userPermsResult = { rows: [] };
+    let userPermsResult = [];
     try {
       // Check if user_permissions table exists
-      const tableCheck = await client.query(`
-        SELECT EXISTS (
+      const tableCheck = await queryOne(
+        `SELECT EXISTS (
           SELECT FROM information_schema.tables 
           WHERE table_schema = 'public' 
           AND table_name = 'user_permissions'
-        );
-      `);
+        )`,
+        [],
+        { agencyDatabase, requestId: req.requestId }
+      );
       
-      if (tableCheck.rows[0].exists) {
-        userPermsResult = await client.query(
+      if (tableCheck.exists) {
+        userPermsResult = await queryMany(
           `SELECT p.*, up.granted, up.reason, up.expires_at, 'user' as source
            FROM public.permissions p
            INNER JOIN public.user_permissions up ON p.id = up.permission_id
            WHERE up.user_id = $1 AND p.is_active = true`,
-          [userId]
+          [userId],
+          { agencyDatabase, requestId: req.requestId }
         );
       }
     } catch (error) {
       // If table doesn't exist or query fails, continue without user permissions
       if (error.code !== '42P01') {
-        console.warn('[Permissions] Error fetching user permissions:', error.message);
+        logger.warn('Error fetching user permissions', {
+          error: error.message,
+          code: error.code,
+          userId: req.params.userId,
+          agencyDatabase,
+          requestId: req.requestId,
+        });
       }
     }
 
     // Merge and deduplicate (user overrides take precedence)
     const permissionsMap = new Map();
-    rolePermsResult.rows.forEach(p => {
+    rolePermsResult.forEach(p => {
       permissionsMap.set(p.id, p);
     });
-    (userPermsResult.rows || []).forEach(p => {
+    userPermsResult.forEach(p => {
       permissionsMap.set(p.id, p);
     });
 
-    res.json({
-      success: true,
-      data: Array.from(permissionsMap.values())
-    });
+    return send(res, success(Array.from(permissionsMap.values()), null, { requestId: req.requestId }));
   } catch (error) {
-    console.error('[Permissions] Error fetching user permissions:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: error.message || 'Failed to fetch user permissions',
-        detail: error.detail
-      }
+    logger.error('Error fetching user permissions', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      userId: req.params.userId,
+      agencyDatabase,
+      requestId: req.requestId,
     });
-  } finally {
-    client.release();
-    await pool.end();
+    return send(res, databaseError(error, 'Failed to fetch user permissions'));
   }
 }));
 
@@ -453,74 +439,73 @@ router.put('/users/:userId', authenticate, requireRole(['super_admin', 'ceo', 'a
   const userAgent = req.headers['user-agent'];
 
   if (!Array.isArray(permissions)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Permissions must be an array'
-    });
+    return send(res, validationError('Permissions must be an array'), 400);
   }
 
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
+  const pool = getAgencyPool(agencyDatabase);
 
   try {
-    await client.query('BEGIN');
+    // Ensure user_permissions table exists before transaction
+    await ensureUserPermissionsTable(agencyDatabase, req.requestId);
 
-    for (const perm of permissions) {
-      const { permission_id, granted, reason, expires_at } = perm;
+    await withTransaction(pool, async (client) => {
+      for (const perm of permissions) {
+        const { permission_id, granted, reason, expires_at } = perm;
 
-      // Check if permission exists
-      const permCheck = await client.query('SELECT id FROM public.permissions WHERE id = $1', [permission_id]);
-      if (permCheck.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({
-          success: false,
-          error: `Permission ${permission_id} does not exist`
-        });
-      }
-
-      // Ensure user_permissions table exists
-      await ensureUserPermissionsTable(client);
-      
-      // Check if user_permission exists
-      const existing = await client.query(
-        'SELECT id, granted FROM public.user_permissions WHERE user_id = $1 AND permission_id = $2',
-        [userId, permission_id]
-      );
-
-      if (existing.rows.length > 0) {
-        const oldValue = existing.rows[0].granted;
-        if (oldValue !== granted) {
-          await client.query(
-            `UPDATE public.user_permissions 
-             SET granted = $1, reason = $2, expires_at = $3, granted_at = now()
-             WHERE id = $4`,
-            [granted, reason || null, expires_at || null, existing.rows[0].id]
-          );
-          await logAudit(client, 'user_permissions', 'UPDATE', grantedBy, existing.rows[0].id,
-            { granted: oldValue }, { granted, reason, expires_at }, ipAddress, userAgent);
+        // Check if permission exists
+        const permCheck = await client.query('SELECT id FROM public.permissions WHERE id = $1', [permission_id]);
+        if (permCheck.rows.length === 0) {
+          throw new Error(`Permission ${permission_id} does not exist`);
         }
-      } else {
-        const insertResult = await client.query(
-          `INSERT INTO public.user_permissions (user_id, permission_id, granted, granted_by, reason, expires_at)
-           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-          [userId, permission_id, granted, grantedBy, reason || null, expires_at || null]
+        
+        // Check if user_permission exists
+        const existing = await client.query(
+          'SELECT id, granted FROM public.user_permissions WHERE user_id = $1 AND permission_id = $2',
+          [userId, permission_id]
         );
-        await logAudit(client, 'user_permissions', 'INSERT', grantedBy, insertResult.rows[0].id,
-          null, { user_id: userId, permission_id, granted, reason, expires_at }, ipAddress, userAgent);
-      }
-    }
 
-    await client.query('COMMIT');
-    res.json({
-      success: true,
-      message: 'User permissions updated successfully'
+        if (existing.rows.length > 0) {
+          const oldValue = existing.rows[0].granted;
+          if (oldValue !== granted) {
+            await client.query(
+              `UPDATE public.user_permissions 
+               SET granted = $1, reason = $2, expires_at = $3, granted_at = now()
+               WHERE id = $4`,
+              [granted, reason || null, expires_at || null, existing.rows[0].id]
+            );
+            // Log audit after transaction commits
+            await logAudit(agencyDatabase, 'user_permissions', 'UPDATE', grantedBy, existing.rows[0].id,
+              { granted: oldValue }, { granted, reason, expires_at }, ipAddress, userAgent, req.requestId);
+          }
+        } else {
+          const insertResult = await client.query(
+            `INSERT INTO public.user_permissions (user_id, permission_id, granted, granted_by, reason, expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+            [userId, permission_id, granted, grantedBy, reason || null, expires_at || null]
+          );
+          // Log audit after transaction commits
+          await logAudit(agencyDatabase, 'user_permissions', 'INSERT', grantedBy, insertResult.rows[0].id,
+            null, { user_id: userId, permission_id, granted, reason, expires_at }, ipAddress, userAgent, req.requestId);
+        }
+      }
     });
+
+    return send(res, success(null, 'User permissions updated successfully', { requestId: req.requestId }));
   } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-    await pool.end();
+    logger.error('Error updating user permissions', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      userId: req.params.userId,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
+    
+    if (error.message.includes('does not exist')) {
+      return send(res, validationError(error.message), 400);
+    }
+    
+    return send(res, databaseError(error, 'Failed to update user permissions'));
   }
 }));
 
@@ -535,40 +520,39 @@ router.delete('/users/:userId/overrides', authenticate, requireRole(['super_admi
   const ipAddress = req.ip || req.connection.remoteAddress;
   const userAgent = req.headers['user-agent'];
 
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
+  const pool = getAgencyPool(agencyDatabase);
 
   try {
-    // Ensure user_permissions table exists
-    await ensureUserPermissionsTable(client);
-    
-    await client.query('BEGIN');
+    // Ensure user_permissions table exists before transaction
+    await ensureUserPermissionsTable(agencyDatabase, req.requestId);
 
-    // Get all overrides before deleting
-    const overrides = await client.query(
-      'SELECT id FROM public.user_permissions WHERE user_id = $1',
-      [userId]
-    );
+    await withTransaction(pool, async (client) => {
+      // Get all overrides before deleting
+      const overrides = await client.query(
+        'SELECT id FROM public.user_permissions WHERE user_id = $1',
+        [userId]
+      );
 
-    await client.query('DELETE FROM public.user_permissions WHERE user_id = $1', [userId]);
+      await client.query('DELETE FROM public.user_permissions WHERE user_id = $1', [userId]);
 
-    // Log audit
-    for (const override of overrides.rows) {
-      await logAudit(client, 'user_permissions', 'DELETE', grantedBy, override.id,
-        { user_id: userId }, null, ipAddress, userAgent);
-    }
-
-    await client.query('COMMIT');
-    res.json({
-      success: true,
-      message: 'User permission overrides removed successfully'
+      // Log audit after transaction commits
+      for (const override of overrides.rows) {
+        await logAudit(agencyDatabase, 'user_permissions', 'DELETE', grantedBy, override.id,
+          { user_id: userId }, null, ipAddress, userAgent, req.requestId);
+      }
     });
+
+    return send(res, success(null, 'User permission overrides removed successfully', { requestId: req.requestId }));
   } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-    await pool.end();
+    logger.error('Error removing user permission overrides', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      userId: req.params.userId,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
+    return send(res, databaseError(error, 'Failed to remove user permission overrides'));
   }
 }));
 
@@ -580,80 +564,74 @@ router.post('/bulk', authenticate, requireRole(['super_admin', 'ceo', 'admin']),
   const agencyDatabase = req.user.agencyDatabase;
   const { type, targets, permissions } = req.body; // type: 'roles' | 'users', targets: string[], permissions: { permission_id, granted }[]
   const userId = req.user.id;
-  const ipAddress = req.ip || req.connection.remoteAddress;
-  const userAgent = req.headers['user-agent'];
 
   if (!['roles', 'users'].includes(type) || !Array.isArray(targets) || !Array.isArray(permissions)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid request body'
-    });
+    return send(res, validationError('Invalid request body'), 400);
   }
 
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
+  const pool = getAgencyPool(agencyDatabase);
 
   try {
     // Ensure user_permissions table exists if needed
     if (type === 'users') {
-      await ensureUserPermissionsTable(client);
+      await ensureUserPermissionsTable(agencyDatabase, req.requestId);
     }
     
-    await client.query('BEGIN');
+    await withTransaction(pool, async (client) => {
+      for (const target of targets) {
+        for (const perm of permissions) {
+          const { permission_id, granted } = perm;
 
-    for (const target of targets) {
-      for (const perm of permissions) {
-        const { permission_id, granted } = perm;
-
-        if (type === 'roles') {
-          const existing = await client.query(
-            'SELECT id FROM public.role_permissions WHERE role = $1 AND permission_id = $2',
-            [target, permission_id]
-          );
-
-          if (existing.rows.length > 0) {
-            await client.query(
-              'UPDATE public.role_permissions SET granted = $1, updated_at = now() WHERE id = $2',
-              [granted, existing.rows[0].id]
+          if (type === 'roles') {
+            const existing = await client.query(
+              'SELECT id FROM public.role_permissions WHERE role = $1 AND permission_id = $2',
+              [target, permission_id]
             );
+
+            if (existing.rows.length > 0) {
+              await client.query(
+                'UPDATE public.role_permissions SET granted = $1, updated_at = now() WHERE id = $2',
+                [granted, existing.rows[0].id]
+              );
+            } else {
+              await client.query(
+                'INSERT INTO public.role_permissions (role, permission_id, granted) VALUES ($1, $2, $3)',
+                [target, permission_id, granted]
+              );
+            }
           } else {
-            await client.query(
-              'INSERT INTO public.role_permissions (role, permission_id, granted) VALUES ($1, $2, $3)',
-              [target, permission_id, granted]
+            const existing = await client.query(
+              'SELECT id FROM public.user_permissions WHERE user_id = $1 AND permission_id = $2',
+              [target, permission_id]
             );
-          }
-        } else {
-          const existing = await client.query(
-            'SELECT id FROM public.user_permissions WHERE user_id = $1 AND permission_id = $2',
-            [target, permission_id]
-          );
 
-          if (existing.rows.length > 0) {
-            await client.query(
-              'UPDATE public.user_permissions SET granted = $1, granted_at = now() WHERE id = $2',
-              [granted, existing.rows[0].id]
-            );
-          } else {
-            await client.query(
-              'INSERT INTO public.user_permissions (user_id, permission_id, granted, granted_by) VALUES ($1, $2, $3, $4)',
-              [target, permission_id, granted, userId]
-            );
+            if (existing.rows.length > 0) {
+              await client.query(
+                'UPDATE public.user_permissions SET granted = $1, granted_at = now() WHERE id = $2',
+                [granted, existing.rows[0].id]
+              );
+            } else {
+              await client.query(
+                'INSERT INTO public.user_permissions (user_id, permission_id, granted, granted_by) VALUES ($1, $2, $3, $4)',
+                [target, permission_id, granted, userId]
+              );
+            }
           }
         }
       }
-    }
-
-    await client.query('COMMIT');
-    res.json({
-      success: true,
-      message: 'Bulk permissions update completed successfully'
     });
+
+    return send(res, success(null, 'Bulk permissions update completed successfully', { requestId: req.requestId }));
   } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-    await pool.end();
+    logger.error('Error updating bulk permissions', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      type,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
+    return send(res, databaseError(error, 'Failed to update bulk permissions'));
   }
 }));
 
@@ -663,53 +641,46 @@ router.post('/bulk', authenticate, requireRole(['super_admin', 'ceo', 'admin']),
  */
 router.get('/templates', authenticate, requireAgencyContext, asyncHandler(async (req, res) => {
   const agencyDatabase = req.user.agencyDatabase;
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
 
   try {
     // Check if table exists first
-    const tableCheck = await client.query(`
-      SELECT EXISTS (
+    const tableCheck = await queryOne(
+      `SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_name = 'permission_templates'
-      );
-    `);
+      )`,
+      [],
+      { agencyDatabase, requestId: req.requestId }
+    );
 
-    if (!tableCheck.rows[0].exists) {
+    if (!tableCheck.exists) {
       // Table doesn't exist, return empty array
-      return res.json({
-        success: true,
-        data: []
-      });
+      return send(res, success([], null, { requestId: req.requestId }));
     }
 
-    const result = await client.query(
-      'SELECT * FROM public.permission_templates WHERE is_active = true ORDER BY name'
+    const result = await queryMany(
+      'SELECT * FROM public.permission_templates WHERE is_active = true ORDER BY name',
+      [],
+      { agencyDatabase, requestId: req.requestId }
     );
     
     // Parse JSONB permissions field if it exists
-    const templates = result.rows.map(row => ({
+    const templates = result.map(row => ({
       ...row,
       permissions: typeof row.permissions === 'string' ? JSON.parse(row.permissions) : (row.permissions || [])
     }));
 
-    res.json({
-      success: true,
-      data: templates
-    });
+    return send(res, success(templates, null, { requestId: req.requestId }));
   } catch (error) {
-    console.error('[Permissions] Error fetching templates:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: error.message || 'Failed to fetch templates',
-        detail: error.detail
-      }
+    logger.error('Error fetching templates', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
     });
-  } finally {
-    client.release();
-    await pool.end();
+    return send(res, databaseError(error, 'Failed to fetch templates'));
   }
 }));
 
@@ -723,19 +694,13 @@ router.post('/templates', authenticate, requireRole(['super_admin', 'ceo', 'admi
   const createdBy = req.user.id;
 
   if (!name || !Array.isArray(permissions)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Name and permissions array are required'
-    });
+    return send(res, validationError('Name and permissions array are required'), 400);
   }
-
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
 
   try {
     // Ensure table exists
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS public.permission_templates (
+    await query(
+      `CREATE TABLE IF NOT EXISTS public.permission_templates (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         name TEXT NOT NULL,
         description TEXT,
@@ -744,37 +709,33 @@ router.post('/templates', authenticate, requireRole(['super_admin', 'ceo', 'admi
         created_at TIMESTAMPTZ DEFAULT now(),
         updated_at TIMESTAMPTZ DEFAULT now(),
         is_active BOOLEAN DEFAULT true
-      );
-    `);
+      )`,
+      [],
+      { agencyDatabase, requestId: req.requestId }
+    );
 
-    const result = await client.query(
+    const result = await queryOne(
       `INSERT INTO public.permission_templates (name, description, permissions, created_by)
        VALUES ($1, $2, $3, $4) RETURNING *`,
-      [name, description || null, JSON.stringify(permissions), createdBy]
+      [name, description || null, JSON.stringify(permissions), createdBy],
+      { agencyDatabase, requestId: req.requestId }
     );
     
-    const template = result.rows[0];
     // Parse JSONB if needed
-    if (typeof template.permissions === 'string') {
-      template.permissions = JSON.parse(template.permissions);
+    if (result && typeof result.permissions === 'string') {
+      result.permissions = JSON.parse(result.permissions);
     }
 
-    res.json({
-      success: true,
-      data: template
-    });
+    return send(res, success(result, null, { requestId: req.requestId }));
   } catch (error) {
-    console.error('[Permissions] Error creating template:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: error.message || 'Failed to create template',
-        detail: error.detail
-      }
+    logger.error('Error creating template', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
     });
-  } finally {
-    client.release();
-    await pool.end();
+    return send(res, databaseError(error, 'Failed to create template'));
   }
 }));
 
@@ -789,59 +750,45 @@ router.post('/templates/:templateId/apply', authenticate, requireRole(['super_ad
   const userId = req.user.id;
 
   if (!['roles', 'users'].includes(type) || !Array.isArray(targets)) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid request body'
-    });
+    return send(res, validationError('Invalid request body'), 400);
   }
 
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
+  const pool = getAgencyPool(agencyDatabase);
 
   try {
     // Check if table exists
-    const tableCheck = await client.query(`
-      SELECT EXISTS (
+    const tableCheck = await queryOne(
+      `SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
         AND table_name = 'permission_templates'
-      );
-    `);
-
-    if (!tableCheck.rows[0].exists) {
-      return res.status(404).json({
-        success: false,
-        error: 'Templates table does not exist'
-      });
-    }
-
-    await client.query('BEGIN');
-
-    // Get template
-    const templateResult = await client.query(
-      'SELECT permissions FROM public.permission_templates WHERE id = $1',
-      [templateId]
+      )`,
+      [],
+      { agencyDatabase, requestId: req.requestId }
     );
 
-    if (templateResult.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({
-        success: false,
-        error: 'Template not found'
-      });
+    if (!tableCheck.exists) {
+      return send(res, notFound('Templates table'), 404);
+    }
+
+    // Get template
+    const templateResult = await queryOne(
+      'SELECT permissions FROM public.permission_templates WHERE id = $1',
+      [templateId],
+      { agencyDatabase, requestId: req.requestId }
+    );
+
+    if (!templateResult) {
+      return send(res, notFound('Template', templateId), 404);
     }
 
     // Parse JSONB if it's a string
-    let permissions = templateResult.rows[0].permissions;
+    let permissions = templateResult.permissions;
     if (typeof permissions === 'string') {
       try {
         permissions = JSON.parse(permissions);
       } catch (parseError) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({
-          success: false,
-          error: 'Invalid template permissions format'
-        });
+        return send(res, validationError('Invalid template permissions format'), 400);
       }
     }
     if (!Array.isArray(permissions)) {
@@ -850,73 +797,64 @@ router.post('/templates/:templateId/apply', authenticate, requireRole(['super_ad
 
     // Ensure user_permissions table exists if needed
     if (type === 'users') {
-      await ensureUserPermissionsTable(client);
+      await ensureUserPermissionsTable(agencyDatabase, req.requestId);
     }
 
-    for (const target of targets) {
-      for (const perm of permissions) {
-        const { permission_id, granted } = perm;
+    await withTransaction(pool, async (client) => {
+      for (const target of targets) {
+        for (const perm of permissions) {
+          const { permission_id, granted } = perm;
 
-        if (type === 'roles') {
-          const existing = await client.query(
-            'SELECT id FROM public.role_permissions WHERE role = $1 AND permission_id = $2',
-            [target, permission_id]
-          );
-
-          if (existing.rows.length > 0) {
-            await client.query(
-              'UPDATE public.role_permissions SET granted = $1, updated_at = now() WHERE id = $2',
-              [granted, existing.rows[0].id]
+          if (type === 'roles') {
+            const existing = await client.query(
+              'SELECT id FROM public.role_permissions WHERE role = $1 AND permission_id = $2',
+              [target, permission_id]
             );
+
+            if (existing.rows.length > 0) {
+              await client.query(
+                'UPDATE public.role_permissions SET granted = $1, updated_at = now() WHERE id = $2',
+                [granted, existing.rows[0].id]
+              );
+            } else {
+              await client.query(
+                'INSERT INTO public.role_permissions (role, permission_id, granted) VALUES ($1, $2, $3)',
+                [target, permission_id, granted]
+              );
+            }
           } else {
-            await client.query(
-              'INSERT INTO public.role_permissions (role, permission_id, granted) VALUES ($1, $2, $3)',
-              [target, permission_id, granted]
+            const existing = await client.query(
+              'SELECT id FROM public.user_permissions WHERE user_id = $1 AND permission_id = $2',
+              [target, permission_id]
             );
-          }
-        } else {
-          const existing = await client.query(
-            'SELECT id FROM public.user_permissions WHERE user_id = $1 AND permission_id = $2',
-            [target, permission_id]
-          );
 
-          if (existing.rows.length > 0) {
-            await client.query(
-              'UPDATE public.user_permissions SET granted = $1, granted_at = now() WHERE id = $2',
-              [granted, existing.rows[0].id]
-            );
-          } else {
-            await client.query(
-              'INSERT INTO public.user_permissions (user_id, permission_id, granted, granted_by) VALUES ($1, $2, $3, $4)',
-              [target, permission_id, granted, userId]
-            );
+            if (existing.rows.length > 0) {
+              await client.query(
+                'UPDATE public.user_permissions SET granted = $1, granted_at = now() WHERE id = $2',
+                [granted, existing.rows[0].id]
+              );
+            } else {
+              await client.query(
+                'INSERT INTO public.user_permissions (user_id, permission_id, granted, granted_by) VALUES ($1, $2, $3, $4)',
+                [target, permission_id, granted, userId]
+              );
+            }
           }
         }
       }
-    }
+    });
 
-    await client.query('COMMIT');
-    res.json({
-      success: true,
-      message: 'Template applied successfully'
-    });
+    return send(res, success(null, 'Template applied successfully', { requestId: req.requestId }));
   } catch (error) {
-    try {
-      await client.query('ROLLBACK');
-    } catch (rollbackError) {
-      console.error('[Permissions] Rollback error:', rollbackError);
-    }
-    console.error('[Permissions] Error applying template:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: error.message || 'Failed to apply template',
-        detail: error.detail
-      }
+    logger.error('Error applying template', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      templateId: req.params.templateId,
+      agencyDatabase,
+      requestId: req.requestId,
     });
-  } finally {
-    client.release();
-    await pool.end();
+    return send(res, databaseError(error, 'Failed to apply template'));
   }
 }));
 
@@ -926,40 +864,44 @@ router.post('/templates/:templateId/apply', authenticate, requireRole(['super_ad
  */
 router.post('/export', authenticate, requireRole(['super_admin', 'ceo', 'admin']), requireAgencyContext, asyncHandler(async (req, res) => {
   const agencyDatabase = req.user.agencyDatabase;
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
 
   try {
     // Check which tables exist
-    const tableCheck = await client.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public' 
-      AND table_name IN ('permissions', 'role_permissions', 'user_permissions', 'permission_templates')
-    `);
-    const existingTables = new Set(tableCheck.rows.map(r => r.table_name));
+    const tableCheck = await queryMany(
+      `SELECT table_name 
+       FROM information_schema.tables 
+       WHERE table_schema = 'public' 
+       AND table_name IN ('permissions', 'role_permissions', 'user_permissions', 'permission_templates')`,
+      [],
+      { agencyDatabase, requestId: req.requestId }
+    );
+    const existingTables = new Set(tableCheck.map(r => r.table_name));
 
     const queries = [];
     if (existingTables.has('permissions')) {
-      queries.push(client.query('SELECT * FROM public.permissions').then(r => ({ name: 'permissions', data: r.rows })));
+      queries.push(queryMany('SELECT * FROM public.permissions', [], { agencyDatabase, requestId: req.requestId })
+        .then(data => ({ name: 'permissions', data })));
     } else {
       queries.push(Promise.resolve({ name: 'permissions', data: [] }));
     }
 
     if (existingTables.has('role_permissions')) {
-      queries.push(client.query('SELECT * FROM public.role_permissions').then(r => ({ name: 'role_permissions', data: r.rows })));
+      queries.push(queryMany('SELECT * FROM public.role_permissions', [], { agencyDatabase, requestId: req.requestId })
+        .then(data => ({ name: 'role_permissions', data })));
     } else {
       queries.push(Promise.resolve({ name: 'role_permissions', data: [] }));
     }
 
     if (existingTables.has('user_permissions')) {
-      queries.push(client.query('SELECT * FROM public.user_permissions').then(r => ({ name: 'user_permissions', data: r.rows })));
+      queries.push(queryMany('SELECT * FROM public.user_permissions', [], { agencyDatabase, requestId: req.requestId })
+        .then(data => ({ name: 'user_permissions', data })));
     } else {
       queries.push(Promise.resolve({ name: 'user_permissions', data: [] }));
     }
 
     if (existingTables.has('permission_templates')) {
-      queries.push(client.query('SELECT * FROM public.permission_templates').then(r => ({ name: 'templates', data: r.rows })));
+      queries.push(queryMany('SELECT * FROM public.permission_templates', [], { agencyDatabase, requestId: req.requestId })
+        .then(data => ({ name: 'templates', data })));
     } else {
       queries.push(Promise.resolve({ name: 'templates', data: [] }));
     }
@@ -970,25 +912,19 @@ router.post('/export', authenticate, requireRole(['super_admin', 'ceo', 'admin']
       data[result.name === 'templates' ? 'templates' : result.name] = result.data;
     });
 
-    res.json({
-      success: true,
-      data: {
-        ...data,
-        exported_at: new Date().toISOString()
-      }
-    });
+    return send(res, success({
+      ...data,
+      exported_at: new Date().toISOString()
+    }, null, { requestId: req.requestId }));
   } catch (error) {
-    console.error('[Permissions] Error exporting permissions:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: error.message || 'Failed to export permissions',
-        detail: error.detail
-      }
+    logger.error('Error exporting permissions', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
     });
-  } finally {
-    client.release();
-    await pool.end();
+    return send(res, databaseError(error, 'Failed to export permissions'));
   }
 }));
 
@@ -1002,96 +938,80 @@ router.post('/import', authenticate, requireRole(['super_admin']), requireAgency
   const userId = req.user.id;
 
   if (!data || !data.permissions) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid import data'
-    });
+    return send(res, validationError('Invalid import data'), 400);
   }
 
-  const pool = await getAgencyDb(agencyDatabase);
-  const client = await pool.connect();
+  const pool = getAgencyPool(agencyDatabase);
 
   try {
-    await client.query('BEGIN');
+    await withTransaction(pool, async (client) => {
+      // Ensure permissions table exists
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.permissions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          name TEXT UNIQUE NOT NULL,
+          category TEXT NOT NULL,
+          description TEXT,
+          is_active BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT now(),
+          updated_at TIMESTAMPTZ DEFAULT now()
+        )
+      `);
 
-    // Ensure permissions table exists
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS public.permissions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name TEXT UNIQUE NOT NULL,
-        category TEXT NOT NULL,
-        description TEXT,
-        is_active BOOLEAN DEFAULT true,
-        created_at TIMESTAMPTZ DEFAULT now(),
-        updated_at TIMESTAMPTZ DEFAULT now()
-      );
-    `);
+      // Ensure role_permissions table exists
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.role_permissions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          role TEXT NOT NULL,
+          permission_id UUID NOT NULL REFERENCES public.permissions(id) ON DELETE CASCADE,
+          granted BOOLEAN DEFAULT true,
+          created_at TIMESTAMPTZ DEFAULT now(),
+          updated_at TIMESTAMPTZ DEFAULT now(),
+          UNIQUE(role, permission_id)
+        )
+      `);
 
-    // Ensure role_permissions table exists
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS public.role_permissions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        role TEXT NOT NULL,
-        permission_id UUID NOT NULL REFERENCES public.permissions(id) ON DELETE CASCADE,
-        granted BOOLEAN DEFAULT true,
-        created_at TIMESTAMPTZ DEFAULT now(),
-        updated_at TIMESTAMPTZ DEFAULT now(),
-        UNIQUE(role, permission_id)
-      );
-    `);
-
-    // Import permissions
-    if (data.permissions && Array.isArray(data.permissions)) {
-      for (const perm of data.permissions) {
-        await client.query(
-          `INSERT INTO public.permissions (id, name, category, description, is_active)
-           VALUES ($1, $2, $3, $4, $5)
-           ON CONFLICT (name) DO UPDATE SET
-           category = EXCLUDED.category,
-           description = EXCLUDED.description,
-           is_active = EXCLUDED.is_active,
-           updated_at = now()`,
-          [perm.id || null, perm.name, perm.category, perm.description || null, perm.is_active !== false]
-        );
+      // Import permissions
+      if (data.permissions && Array.isArray(data.permissions)) {
+        for (const perm of data.permissions) {
+          await client.query(
+            `INSERT INTO public.permissions (id, name, category, description, is_active)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (name) DO UPDATE SET
+             category = EXCLUDED.category,
+             description = EXCLUDED.description,
+             is_active = EXCLUDED.is_active,
+             updated_at = now()`,
+            [perm.id || null, perm.name, perm.category, perm.description || null, perm.is_active !== false]
+          );
+        }
       }
-    }
 
-    // Import role permissions
-    if (data.role_permissions && Array.isArray(data.role_permissions)) {
-      for (const rp of data.role_permissions) {
-        await client.query(
-          `INSERT INTO public.role_permissions (role, permission_id, granted)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (role, permission_id) DO UPDATE SET
-           granted = EXCLUDED.granted,
-           updated_at = now()`,
-          [rp.role, rp.permission_id, rp.granted]
-        );
+      // Import role permissions
+      if (data.role_permissions && Array.isArray(data.role_permissions)) {
+        for (const rp of data.role_permissions) {
+          await client.query(
+            `INSERT INTO public.role_permissions (role, permission_id, granted)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (role, permission_id) DO UPDATE SET
+             granted = EXCLUDED.granted,
+             updated_at = now()`,
+            [rp.role, rp.permission_id, rp.granted]
+          );
+        }
       }
-    }
-
-    await client.query('COMMIT');
-    res.json({
-      success: true,
-      message: 'Permissions imported successfully'
     });
+
+    return send(res, success(null, 'Permissions imported successfully', { requestId: req.requestId }));
   } catch (error) {
-    try {
-      await client.query('ROLLBACK');
-    } catch (rollbackError) {
-      console.error('[Permissions] Rollback error:', rollbackError);
-    }
-    console.error('[Permissions] Error importing permissions:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        message: error.message || 'Failed to import permissions',
-        detail: error.detail
-      }
+    logger.error('Error importing permissions', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
     });
-  } finally {
-    client.release();
-    await pool.end();
+    return send(res, databaseError(error, 'Failed to import permissions'));
   }
 }));
 
