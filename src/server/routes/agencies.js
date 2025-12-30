@@ -15,6 +15,7 @@ const {
   repairAgencyDatabase,
   completeAgencySetup,
 } = require('../services/agencyService');
+const logger = require('../utils/logger');
 
 /**
  * GET /api/agencies/check-domain
@@ -34,8 +35,13 @@ router.get('/check-domain', asyncHandler(async (req, res) => {
       domain: domain.toLowerCase().trim(),
     });
   } catch (error) {
-    console.error('[API] Domain check error:', error);
-    console.error('[API] Domain check error stack:', error.stack);
+    logger.error('Domain check error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      domain,
+      requestId: req.requestId,
+    });
     
     // Return 200 with error flag instead of 500 to avoid CORS issues
     res.json({
@@ -74,7 +80,13 @@ router.get('/check-setup', asyncHandler(async (req, res) => {
           agencyName: progress.agencyName || null,
         });
       } catch (progressError) {
-        console.error('[API] Get setup progress error:', progressError);
+        logger.error('Get setup progress error', {
+          error: progressError.message,
+          code: progressError.code,
+          stack: progressError.stack,
+          agencyDatabase,
+          requestId: req.requestId,
+        });
         // Return default structure on error
         return res.json({
           setupComplete: false,
@@ -90,7 +102,13 @@ router.get('/check-setup', asyncHandler(async (req, res) => {
     const setupComplete = await checkSetupStatus(agencyDatabase);
     res.json({ setupComplete });
   } catch (error) {
-    console.error('[API] Check setup error:', error);
+    logger.error('Check setup error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.json({ setupComplete: false });
   }
 }));
@@ -218,7 +236,13 @@ router.get('/agency-settings', authenticate, asyncHandler(async (req, res) => {
       await agencyPool.end();
     }
   } catch (error) {
-    console.error('[API] Error fetching agency settings from agency database:', error);
+    logger.error('Error fetching agency settings from agency database', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     return res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch agency settings',
@@ -249,7 +273,13 @@ router.post('/complete-setup', asyncHandler(async (req, res) => {
       teamCredentialsCsv: result?.teamCredentialsCsv || '',
     });
   } catch (error) {
-    console.error('[API] Complete setup error:', error);
+    logger.error('Complete setup error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       error: error.message || 'Failed to complete setup',
       detail: error.detail,
@@ -292,14 +322,15 @@ router.post('/create', asyncHandler(async (req, res) => {
       });
     }
 
-    console.log('[Agency] Create request received:', {
+    logger.info('Agency create request received', {
       agencyName,
       domain,
       subscriptionPlan,
       adminEmail,
-      page_ids: page_ids?.length || 0,
-      business_goals: business_goals?.length || 0,
+      pageIdsCount: page_ids?.length || 0,
+      businessGoalsCount: business_goals?.length || 0,
       origin: req.headers.origin,
+      requestId: req.requestId,
     });
 
     const result = await createAgency({
@@ -326,7 +357,14 @@ router.post('/create', asyncHandler(async (req, res) => {
       message: 'Agency created successfully with separate database',
     });
   } catch (error) {
-    console.error('[API] Agency creation failed:', error);
+    logger.error('Agency creation failed', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyName,
+      domain,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to create agency',
@@ -352,7 +390,10 @@ router.post('/repair-database', asyncHandler(async (req, res) => {
       });
     }
 
-    console.log(`[API] Starting database repair for: ${agencyDatabase}`);
+    logger.info('Starting database repair', {
+      agencyDatabase,
+      requestId: req.requestId,
+    });
 
     const result = await repairAgencyDatabase(agencyDatabase);
 
@@ -362,7 +403,13 @@ router.post('/repair-database', asyncHandler(async (req, res) => {
       ...result,
     });
   } catch (error) {
-    console.error('[API] Database repair failed:', error);
+    logger.error('Database repair failed', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       error: error.message || 'Failed to repair database',
       detail: error.detail,

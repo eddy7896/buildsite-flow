@@ -701,7 +701,8 @@ export default function AgencySetup() {
       });
 
       setTimeout(() => {
-        navigate('/dashboard');
+        // Redirect agency admins to agency dashboard, not general dashboard
+        navigate('/agency');
       }, 1500);
     } catch (error: any) {
       toast({

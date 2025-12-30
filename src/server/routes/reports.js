@@ -11,6 +11,7 @@ const { parseDatabaseUrl } = require('../utils/poolManager');
 const { Pool } = require('pg');
 const reportingDashboardService = require('../services/reportingDashboardService');
 const { cacheMiddleware } = require('../services/cacheService');
+const logger = require('../utils/logger');
 
 // Helper to get agency database connection
 async function getAgencyDb(agencyDatabase) {
@@ -218,7 +219,13 @@ router.get('/dashboard', authenticate, requireAgencyContext, asyncHandler(async 
       data: dashboardData,
     });
   } catch (error) {
-    console.error('[Reports Route] Dashboard error:', error);
+    logger.error('Reports dashboard error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch dashboard data',
@@ -332,7 +339,13 @@ router.post('/custom', authenticate, requireAgencyContext, asyncHandler(async (r
       count: result.rows.length,
     });
   } catch (error) {
-    console.error('[Reports] Error generating custom report:', error);
+    logger.error('Error generating custom report', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     throw error;
   } finally {
     client.release();

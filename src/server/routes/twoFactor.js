@@ -9,6 +9,7 @@ const { authenticate, requireAgencyContext } = require('../middleware/authMiddle
 const twoFactorService = require('../services/twoFactorService');
 const { parseDatabaseUrl } = require('../utils/poolManager');
 const { Pool } = require('pg');
+const logger = require('../utils/logger');
 
 /**
  * Ensure 2FA columns exist in the users table
@@ -30,7 +31,7 @@ async function ensureTwoFactorColumns(client) {
     const missingColumns = requiredColumns.filter(col => !existingColumns.includes(col));
 
     if (missingColumns.length > 0) {
-      console.log('[2FA] Adding missing 2FA columns:', missingColumns);
+      logger.info('Adding missing 2FA columns', { missingColumns });
       
       // Add missing columns
       if (missingColumns.includes('two_factor_secret')) {
@@ -46,10 +47,14 @@ async function ensureTwoFactorColumns(client) {
         await client.query('ALTER TABLE public.users ADD COLUMN IF NOT EXISTS two_factor_verified_at TIMESTAMP WITH TIME ZONE');
       }
 
-      console.log('[2FA] ✅ 2FA columns added successfully');
+      logger.info('2FA columns added successfully', { missingColumns });
     }
   } catch (error) {
-    console.error('[2FA] Error ensuring 2FA columns:', error);
+    logger.error('Error ensuring 2FA columns', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+    });
     throw error;
   }
 }
@@ -73,10 +78,11 @@ router.post('/setup', authenticate, requireAgencyContext, asyncHandler(async (re
   const agencyDatabase = req.user.agencyDatabase || req.headers['x-agency-database'];
 
   if (!agencyDatabase) {
-    console.error('[2FA] Setup error: Agency context missing', {
+    logger.error('2FA setup error: Agency context missing', {
       userId,
       hasUser: !!req.user,
       headers: Object.keys(req.headers),
+      requestId: req.requestId,
     });
     return res.status(403).json({
       success: false,
@@ -97,7 +103,11 @@ router.post('/setup', authenticate, requireAgencyContext, asyncHandler(async (re
         throw new Error('Invalid database configuration');
       }
     } catch (dbConfigError) {
-      console.error('[2FA] Setup error: Failed to parse database URL:', dbConfigError);
+      logger.error('2FA setup error: Failed to parse database URL', {
+        error: dbConfigError.message,
+        code: dbConfigError.code,
+        requestId: req.requestId,
+      });
       return res.status(500).json({
         success: false,
         error: 'Database configuration error',
@@ -112,10 +122,11 @@ router.post('/setup', authenticate, requireAgencyContext, asyncHandler(async (re
       agencyPool = new Pool({ connectionString: agencyDbUrl, max: 1 });
       agencyClient = await agencyPool.connect();
     } catch (connectionError) {
-      console.error('[2FA] Setup error: Failed to connect to agency database:', {
+      logger.error('2FA setup error: Failed to connect to agency database', {
         error: connectionError.message,
         stack: connectionError.stack,
         agencyDatabase,
+        requestId: req.requestId,
       });
       return res.status(500).json({
         success: false,
@@ -180,8 +191,14 @@ router.post('/setup', authenticate, requireAgencyContext, asyncHandler(async (re
       }
     }
   } catch (error) {
-    console.error('[2FA] Setup error:', error);
-    console.error('[2FA] Setup error stack:', error.stack);
+    logger.error('2FA setup error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      userId,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to setup 2FA',
@@ -273,9 +290,15 @@ router.post('/verify-and-enable', authenticate, requireAgencyContext, asyncHandl
       agencyClient.release();
       await agencyPool.end();
     }
-  } catch (error) {
-    console.error('[2FA] Verify and enable error:', error);
-    res.status(500).json({
+    } catch (error) {
+      logger.error('2FA verify and enable error', {
+        error: error.message,
+        code: error.code,
+        stack: error.stack,
+        userId: req.user?.id,
+        requestId: req.requestId,
+      });
+      res.status(500).json({
       success: false,
       error: error.message || 'Failed to enable 2FA',
       message: 'Failed to enable 2FA',
@@ -388,9 +411,15 @@ router.post('/verify', asyncHandler(async (req, res) => {
       agencyClient.release();
       await agencyPool.end();
     }
-  } catch (error) {
-    console.error('[2FA] Verify error:', error);
-    res.status(500).json({
+    } catch (error) {
+      logger.error('2FA verify error', {
+        error: error.message,
+        code: error.code,
+        stack: error.stack,
+        userId: req.user?.id,
+        requestId: req.requestId,
+      });
+      res.status(500).json({
       success: false,
       error: error.message || 'Failed to verify 2FA',
       message: 'Failed to verify 2FA',
@@ -470,9 +499,15 @@ router.post('/disable', authenticate, requireAgencyContext, asyncHandler(async (
       agencyClient.release();
       await agencyPool.end();
     }
-  } catch (error) {
-    console.error('[2FA] Disable error:', error);
-    res.status(500).json({
+    } catch (error) {
+      logger.error('2FA disable error', {
+        error: error.message,
+        code: error.code,
+        stack: error.stack,
+        userId: req.user?.id,
+        requestId: req.requestId,
+      });
+      res.status(500).json({
       success: false,
       error: error.message || 'Failed to disable 2FA',
       message: 'Failed to disable 2FA',
@@ -499,10 +534,11 @@ router.get('/status', authenticate, requireAgencyContext, asyncHandler(async (re
   const agencyDatabase = req.user.agencyDatabase || req.headers['x-agency-database'];
 
   if (!agencyDatabase) {
-    console.error('[2FA] Status error: Agency context missing', {
+    logger.error('2FA status error: Agency context missing', {
       userId,
       hasUser: !!req.user,
       headers: Object.keys(req.headers),
+      requestId: req.requestId,
     });
     return res.status(403).json({
       success: false,
@@ -556,8 +592,13 @@ router.get('/status', authenticate, requireAgencyContext, asyncHandler(async (re
       }
     }
   } catch (error) {
-    console.error('[2FA] Status error:', error);
-    console.error('[2FA] Status error stack:', error.stack);
+    logger.error('2FA status error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      userId: req.user?.id,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to get 2FA status',

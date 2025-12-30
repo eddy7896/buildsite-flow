@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:docker": "vite --host 0.0.0.0",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
@@ -14,7 +15,16 @@
     "test:coverage": "vitest --coverage",
     "test:watch": "vitest --watch",
     "seed:db": "node scripts/seed-database.js",
-    "seed:journal": "node scripts/seed-journal-entries.cjs"
+    "seed:journal": "node scripts/seed-journal-entries.cjs",
+    "docker:dev": "docker-compose -f docker-compose.dev.yml up",
+    "docker:dev:build": "docker-compose -f docker-compose.dev.yml up --build",
+    "docker:dev:down": "docker-compose -f docker-compose.dev.yml down",
+    "docker:dev:clean": "docker-compose -f docker-compose.dev.yml down -v && docker-compose -f docker-compose.dev.yml up --build",
+    "docker:dev:logs": "docker-compose -f docker-compose.dev.yml logs -f",
+    "docker:dev:restart": "docker-compose -f docker-compose.dev.yml restart",
+    "docker:prod": "docker-compose up",
+    "docker:prod:build": "docker-compose up --build",
+    "docker:prod:down": "docker-compose down"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

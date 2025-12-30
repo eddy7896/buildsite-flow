@@ -11,6 +11,7 @@ const messagingService = require('../services/messagingService');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
+const logger = require('../utils/logger');
 
 // Storage configuration - use same storage path as files.js
 const STORAGE_BASE_PATH = process.env.FILE_STORAGE_PATH || path.join(__dirname, '../../storage');
@@ -21,7 +22,11 @@ async function ensureMessagingStorageDir() {
   try {
     await fs.mkdir(MESSAGING_STORAGE_PATH, { recursive: true });
   } catch (error) {
-    console.warn('[Messaging] Could not create messaging storage directory:', error.message);
+    logger.warn('Could not create messaging storage directory', {
+      error: error.message,
+      code: error.code,
+      storagePath: MESSAGING_STORAGE_PATH,
+    });
   }
 }
 ensureMessagingStorageDir();
@@ -549,7 +554,14 @@ router.post('/attachments', authenticate, requireAgencyContext, upload.single('f
   try {
     await fs.writeFile(filePath, req.file.buffer);
   } catch (error) {
-    console.error('[Messaging] Error saving file:', error);
+    logger.error('Error saving messaging file', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      filePath,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     return res.status(500).json({
       success: false,
       error: { code: 'FILE_SAVE_ERROR', message: 'Failed to save file' },

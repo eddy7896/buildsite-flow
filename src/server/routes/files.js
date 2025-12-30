@@ -10,6 +10,7 @@ const multer = require('multer');
 const { getAgencyPool } = require('../config/database');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { authenticate, requireAgencyContext } = require('../middleware/authMiddleware');
+const logger = require('../utils/logger');
 
 const STORAGE_BASE_PATH = process.env.FILE_STORAGE_PATH || path.join(__dirname, '../../storage');
 
@@ -19,7 +20,11 @@ async function ensureStorageDir() {
     await fs.mkdir(STORAGE_BASE_PATH, { recursive: true });
     await fs.mkdir(path.join(STORAGE_BASE_PATH, 'documents'), { recursive: true });
   } catch (error) {
-    console.warn('[Files] Could not create storage directory:', error.message);
+    logger.warn('Could not create storage directory', {
+      error: error.message,
+      code: error.code,
+      storagePath: STORAGE_BASE_PATH,
+    });
   }
 }
 ensureStorageDir();
@@ -86,7 +91,12 @@ router.get('/:bucket/:path(*)', authenticate, requireAgencyContext, asyncHandler
     // Decode the path
     const decodedPath = decodeURIComponent(filePath);
     
-    console.log(`[Files] Serving file - bucket: ${bucket}, path: ${decodedPath}`);
+    logger.debug('Serving file', {
+      bucket,
+      path: decodedPath,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     
     // Construct full file path on disk
     // decodedPath might be just the filename or include subdirectories
@@ -99,7 +109,11 @@ router.get('/:bucket/:path(*)', authenticate, requireAgencyContext, asyncHandler
       return res.status(403).json({ error: 'Access denied' });
     }
     
-    console.log(`[Files] Attempting to serve file: ${normalizedPath}`);
+    logger.debug('Attempting to serve file', {
+      normalizedPath,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
 
     // Check if file exists
     let fileExists = false;
@@ -108,7 +122,11 @@ router.get('/:bucket/:path(*)', authenticate, requireAgencyContext, asyncHandler
       fileExists = true;
     } catch (accessError) {
       // File doesn't exist at expected path, try to find it
-      console.log(`[Files] File not found at ${normalizedPath}, searching...`);
+      logger.debug('File not found at expected path, searching', {
+        normalizedPath,
+        agencyDatabase,
+        requestId: req.requestId,
+      });
       
       // Try to find file by filename only (in case path structure differs)
       try {
@@ -135,7 +153,12 @@ router.get('/:bucket/:path(*)', authenticate, requireAgencyContext, asyncHandler
                 mimeType = docResult.rows[0].file_type || mimeType;
               }
             } catch (dbError) {
-              console.warn('[API] Could not get file metadata:', dbError.message);
+              logger.warn('Could not get file metadata', {
+                error: dbError.message,
+                code: dbError.code,
+                agencyDatabase,
+                requestId: req.requestId,
+              });
             } finally {
               client.release();
             }
@@ -147,7 +170,13 @@ router.get('/:bucket/:path(*)', authenticate, requireAgencyContext, asyncHandler
           }
         }
       } catch (searchError) {
-        console.warn('[Files] Error searching for file:', searchError.message);
+        logger.warn('Error searching for file', {
+          error: searchError.message,
+          code: searchError.code,
+          normalizedPath,
+          agencyDatabase,
+          requestId: req.requestId,
+        });
       }
       
       // File doesn't exist on disk, check if it exists in database
@@ -178,7 +207,11 @@ router.get('/:bucket/:path(*)', authenticate, requireAgencyContext, asyncHandler
 
         // File exists in DB but not on disk - return metadata
         const doc = docResult.rows[0];
-        console.warn(`[Files] File exists in DB but not on disk: ${doc.file_path}`);
+        logger.warn('File exists in DB but not on disk', {
+          filePath: doc.file_path,
+          agencyDatabase,
+          requestId: req.requestId,
+        });
         return res.status(404).json({
           error: 'File not found on disk',
           message: 'File metadata exists but file content is missing',
@@ -213,7 +246,12 @@ router.get('/:bucket/:path(*)', authenticate, requireAgencyContext, asyncHandler
         mimeType = docResult.rows[0].file_type || mimeType;
       }
     } catch (dbError) {
-      console.warn('[API] Could not get file metadata:', dbError.message);
+      logger.warn('Could not get file metadata', {
+        error: dbError.message,
+        code: dbError.code,
+        agencyDatabase,
+        requestId: req.requestId,
+      });
     } finally {
       client.release();
     }
@@ -224,7 +262,15 @@ router.get('/:bucket/:path(*)', authenticate, requireAgencyContext, asyncHandler
     res.setHeader('Content-Length', fileBuffer.length);
     res.send(fileBuffer);
   } catch (error) {
-    console.error('[API] File serving error:', error);
+    logger.error('File serving error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      bucket: req.params.bucket,
+      path: req.params.path,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({ error: error.message });
   }
 }));
@@ -280,7 +326,16 @@ router.post('/upload', authenticate, requireAgencyContext, upload.single('file')
     // Write file to disk
     await fs.writeFile(normalizedPath, req.file.buffer);
     
-    console.log(`[Files] ✅ File saved to: ${normalizedPath}`);
+    logger.info('File saved successfully', {
+      normalizedPath,
+      bucket,
+      filePath: actualFilePath,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      agencyDatabase,
+      userId,
+      requestId: req.requestId,
+    });
 
     // Save metadata to file_storage table
     const agencyPool = getAgencyPool(agencyDatabase);
@@ -327,7 +382,16 @@ router.post('/upload', authenticate, requireAgencyContext, upload.single('file')
       client.release();
     }
   } catch (error) {
-    console.error('[API] File upload error:', error);
+    logger.error('File upload error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      bucket,
+      filePath,
+      agencyDatabase,
+      userId,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: { code: 'UPLOAD_FAILED', message: error.message },

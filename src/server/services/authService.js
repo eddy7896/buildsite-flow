@@ -251,9 +251,11 @@ async function findUserAcrossAgencies(email, password) {
               );
 
               // Get user roles
+              // In isolated databases, agency_id may be NULL or set to the agency ID
+              // Query should handle both cases
               const rolesResult = await agencyClient.query(
                 `SELECT role FROM public.user_roles 
-                 WHERE user_id = $1 AND agency_id = $2`,
+                 WHERE user_id = $1 AND (agency_id IS NULL OR agency_id = $2)`,
                 [dbUser.id, agency.id]
               );
 
@@ -291,6 +293,7 @@ async function findUserAcrossAgencies(email, password) {
       return null;
     }
 
+    
     return {
       user: foundUser,
       agency: foundAgency,
@@ -316,13 +319,18 @@ function generateToken(user, agency) {
     throw new Error('JWT_SECRET environment variable is required');
   }
 
+  // Ensure agency.id is properly set (handle both agency object and null cases)
+  const agencyId = (agency && agency.id) ? agency.id : null;
+  const agencyDatabase = (agency && agency.database_name) ? agency.database_name : null;
+  
   const tokenPayload = {
     userId: user.id,
     email: user.email,
-    agencyId: agency.id || null, // Super admins have null agency_id
-    agencyDatabase: agency.database_name || null, // Super admins have null database_name
-    isSuperAdmin: !agency.database_name, // Flag to identify super admins
+    agencyId: agencyId, // Explicitly set - null for super admins, agency.id for agency users
+    agencyDatabase: agencyDatabase, // Explicitly set - null for super admins, database_name for agency users
+    isSuperAdmin: !agencyDatabase, // Flag to identify system-level super admins (no agency database)
   };
+  
 
   // Generate signed JWT token
   return jwt.sign(tokenPayload, jwtSecret, {
@@ -341,6 +349,20 @@ function generateToken(user, agency) {
 function formatUserResponse(userData) {
   const { user, agency, profile, roles } = userData;
 
+
+  // Ensure agency object always has id, even if agency is null (for super admins)
+  const agencyResponse = agency ? {
+    id: agency.id || null, // Explicitly handle null case
+    name: agency.name || null,
+    domain: agency.domain || null,
+    databaseName: agency.database_name || null,
+  } : {
+    id: null,
+    name: null,
+    domain: null,
+    databaseName: null,
+  };
+
   return {
     id: user.id,
     email: user.email,
@@ -351,12 +373,7 @@ function formatUserResponse(userData) {
     last_sign_in_at: user.last_sign_in_at,
     profile: profile || undefined,
     roles: roles || [],
-    agency: {
-      id: agency.id,
-      name: agency.name,
-      domain: agency.domain,
-      databaseName: agency.database_name,
-    },
+    agency: agencyResponse,
   };
 }
 

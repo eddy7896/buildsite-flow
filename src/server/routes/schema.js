@@ -10,6 +10,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { authenticate, requireAgencyContext } = require('../middleware/authMiddleware');
 const { ensureMessagingSchema } = require('../utils/schema/messagingSchema');
 const { quickSyncSchema } = require('../utils/schemaSyncService');
+const logger = require('../utils/logger');
 
 /**
  * GET /api/schema/overview
@@ -95,7 +96,12 @@ router.get(
         },
       });
     } catch (error) {
-      console.error('[Schema Diagnostics] Error fetching schema overview:', error);
+      logger.error('Error fetching schema overview', {
+        error: error.message,
+        code: error.code,
+        stack: error.stack,
+        requestId: req.requestId,
+      });
       res.status(500).json({
         success: false,
         error: error.message,
@@ -137,7 +143,13 @@ router.post(
         message: 'Messaging schema ensured successfully',
       });
     } catch (error) {
-      console.error('[Schema] Error ensuring messaging schema:', error);
+      logger.error('Error ensuring messaging schema', {
+        error: error.message,
+        code: error.code,
+        stack: error.stack,
+        agencyDatabase,
+        requestId: req.requestId,
+      });
       res.status(500).json({
         success: false,
         error: { code: 'SCHEMA_ERROR', message: error.message },
@@ -173,7 +185,10 @@ router.post(
     const client = await pool.connect();
 
     try {
-      console.log(`[SchemaSync] Starting manual schema sync for database: ${agencyDatabase}`);
+      logger.info('Starting manual schema sync', {
+        agencyDatabase,
+        requestId: req.requestId,
+      });
       const syncResult = await quickSyncSchema(client);
       
       res.json({
@@ -187,7 +202,13 @@ router.post(
         },
       });
     } catch (error) {
-      console.error('[SchemaSync] Error during schema sync:', error);
+      logger.error('Error during schema sync', {
+        error: error.message,
+        code: error.code,
+        stack: error.stack,
+        agencyDatabase,
+        requestId: req.requestId,
+      });
       res.status(500).json({
         success: false,
         error: { code: 'SYNC_ERROR', message: error.message },
@@ -273,7 +294,13 @@ router.get(
         data: status,
       });
     } catch (error) {
-      console.error('[SchemaSync] Error checking sync status:', error);
+      logger.error('Error checking sync status', {
+        error: error.message,
+        code: error.code,
+        stack: error.stack,
+        agencyDatabase,
+        requestId: req.requestId,
+      });
       res.status(500).json({
         success: false,
         error: { code: 'STATUS_ERROR', message: error.message },

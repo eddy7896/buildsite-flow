@@ -11,6 +11,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const slackService = require('../services/slackIntegrationService');
 const { createServer } = require('http');
 const { createEventAdapter } = require('@slack/events-api');
+const logger = require('../utils/logger');
 
 // Slack Events API adapter
 const slackEvents = createEventAdapter(process.env.SLACK_SIGNING_SECRET || '');
@@ -63,7 +64,14 @@ router.get('/oauth/start', authenticate, requireAgencyContext, asyncHandler(asyn
       message: 'OAuth URL generated successfully'
     });
   } catch (error) {
-    console.error('[Slack] OAuth start error:', error);
+    logger.error('Slack OAuth start error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      userId,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -109,7 +117,12 @@ router.get('/oauth/callback', asyncHandler(async (req, res) => {
         res.redirect(`${frontendUrl}/settings/integrations/slack?success=true`);
       },
       failure: (error, installOptions, req, res) => {
-        console.error('[Slack] OAuth callback failure:', error);
+        logger.error('Slack OAuth callback failure', {
+          error: error.message,
+          code: error.code,
+          agencyDatabase: stateData?.agencyDatabase,
+          userId: stateData?.userId,
+        });
         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
         res.redirect(`${frontendUrl}/settings/integrations/slack?error=${encodeURIComponent(error.message)}`);
       },
@@ -117,7 +130,11 @@ router.get('/oauth/callback', asyncHandler(async (req, res) => {
 
     return callbackResult;
   } catch (error) {
-    console.error('[Slack] OAuth callback error:', error);
+    logger.error('Slack OAuth callback error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+    });
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     res.redirect(`${frontendUrl}/settings/integrations/slack?error=${encodeURIComponent(error.message)}`);
   }
@@ -172,7 +189,13 @@ router.get('/integration', authenticate, requireAgencyContext, asyncHandler(asyn
       message: 'Slack integration retrieved successfully'
     });
   } catch (error) {
-    console.error('[Slack] Get integration error:', error);
+    logger.error('Slack get integration error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -204,7 +227,13 @@ router.delete('/integration', authenticate, requireAgencyContext, asyncHandler(a
       message: 'Slack integration disconnected successfully'
     });
   } catch (error) {
-    console.error('[Slack] Disconnect integration error:', error);
+    logger.error('Slack disconnect integration error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -237,7 +266,13 @@ router.get('/channels', authenticate, requireAgencyContext, asyncHandler(async (
       message: 'Slack channels retrieved successfully'
     });
   } catch (error) {
-    console.error('[Slack] Get channels error:', error);
+    logger.error('Slack get channels error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -284,7 +319,15 @@ router.post('/channels/map', authenticate, requireAgencyContext, asyncHandler(as
       message: 'Channel mapped successfully'
     });
   } catch (error) {
-    console.error('[Slack] Map channel error:', error);
+    logger.error('Slack map channel error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      internalChannelId: internal_channel_id,
+      slackChannelId: slack_channel_id,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -340,7 +383,13 @@ router.get('/channels/mappings', authenticate, requireAgencyContext, asyncHandle
       client.release();
     }
   } catch (error) {
-    console.error('[Slack] Get mappings error:', error);
+    logger.error('Slack get mappings error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -413,7 +462,13 @@ router.post('/sync/settings', authenticate, requireAgencyContext, asyncHandler(a
       client.release();
     }
   } catch (error) {
-    console.error('[Slack] Update sync settings error:', error);
+    logger.error('Slack update sync settings error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      agencyDatabase,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -437,19 +492,30 @@ slackEvents.on('message', async (event) => {
     // Find agency database by team ID
     const agencyDatabase = await slackService.getAgencyDatabaseBySlackTeamId(event.team);
     if (!agencyDatabase) {
-      console.warn(`[Slack] No agency found for team ${event.team}`);
+      logger.warn('No agency found for Slack team', {
+        teamId: event.team,
+      });
       return;
     }
 
     // Sync message from Slack
     await slackService.syncMessageFromSlack(agencyDatabase, event);
   } catch (error) {
-    console.error('[Slack] Error handling message event:', error);
+    logger.error('Error handling Slack message event', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      teamId: event?.team,
+    });
   }
 });
 
 slackEvents.on('error', (error) => {
-  console.error('[Slack] Events API error:', error);
+  logger.error('Slack Events API error', {
+    error: error.message,
+    code: error.code,
+    stack: error.stack,
+  });
 });
 
 module.exports = router;

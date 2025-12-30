@@ -98,8 +98,16 @@ export default defineConfig(({ mode }) => ({
     },
   },
   server: {
-    host: "::",
-    port: 3000,
+    host: process.env.VITE_DEV_SERVER_HOST || "::",
+    port: parseInt(process.env.VITE_DEV_SERVER_PORT || "5173"),
+    watch: {
+      usePolling: true, // Enable polling for Docker volume mounts
+      interval: 1000,
+    },
+    hmr: {
+      host: process.env.VITE_DEV_SERVER_HOST || "localhost",
+      port: parseInt(process.env.VITE_DEV_SERVER_PORT || "5173"),
+    },
   },
   plugins: [
     react(),

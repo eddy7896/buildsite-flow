@@ -185,16 +185,26 @@ export async function loginUser(data: SignInData): Promise<AuthResponse> {
   }
 
   // Check if user is super admin (has super_admin role and no agency database)
-  const isSuperAdmin = result.user?.roles?.includes('super_admin') && !result.user?.agency?.databaseName;
+  // IMPORTANT: Only treat as super_admin if they have super_admin role AND no agency database
+  // Agency admins should NOT be treated as super_admin even if they have admin role
+  const hasSuperAdminRole = result.user?.roles?.includes('super_admin');
+  const hasAgencyDatabase = !!result.user?.agency?.databaseName;
+  const isSuperAdmin = hasSuperAdminRole && !hasAgencyDatabase;
   
   // Store the agency database and id for future queries (only for non-super-admin users)
   if (isSuperAdmin) {
     // Clear agency context for super admins - they use main database
     localStorage.removeItem('agency_database');
     localStorage.removeItem('agency_id');
-  } else if (result.user?.agency?.databaseName) {
-    localStorage.setItem('agency_database', result.user.agency.databaseName);
-    localStorage.setItem('agency_id', result.user.agency.id);
+  } else if (result.user?.agency) {
+    // Set agency context for all non-super-admin users (including agency admins)
+    // Always set both databaseName and id if agency object exists
+    if (result.user.agency.databaseName) {
+      localStorage.setItem('agency_database', result.user.agency.databaseName);
+    }
+    if (result.user.agency.id) {
+      localStorage.setItem('agency_id', result.user.agency.id);
+    }
   }
 
   // Format response to match AuthResponse interface

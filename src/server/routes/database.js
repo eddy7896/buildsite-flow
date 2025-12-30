@@ -9,6 +9,9 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { executeQuery, executeTransaction, repairMissingColumn } = require('../services/databaseService');
 const { createAgencySchema } = require('../utils/schemaCreator');
 const { parseDatabaseUrl } = require('../utils/poolManager');
+const logger = require('../utils/logger');
+const { queryOne } = require('../utils/dbQuery');
+const { send, success, error: errorResponse } = require('../utils/responseHelper');
 
 /**
  * POST /api/database/query
@@ -31,7 +34,9 @@ router.post('/query', asyncHandler(async (req, res) => {
   if (sql.includes('agency_settings') && sql.includes('INSERT INTO')) {
     // Check if agency_id is present (case-insensitive)
     if (sql.match(/\bagency_id\b/i)) {
-      console.log('[API] ⚠️ Detected agency_id in agency_settings INSERT, removing it...');
+      logger.debug('Detected agency_id in agency_settings INSERT, removing it', {
+        sql: sql.substring(0, 200),
+      });
       
       // Match the full INSERT statement including RETURNING clause
       const fullMatch = sql.match(/INSERT\s+INTO\s+([^(]+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)\s*(RETURNING\s+\*)?/is);
@@ -50,9 +55,11 @@ router.post('/query', asyncHandler(async (req, res) => {
         const agencyIdIndex = columns.findIndex(c => c.toLowerCase() === 'agency_id');
         
         if (agencyIdIndex !== -1) {
-          console.log('[API] Found agency_id at column index:', agencyIdIndex);
-          console.log('[API] Original columns count:', columns.length);
-          console.log('[API] Original params count:', params.length);
+          logger.debug('Found agency_id in agency_settings INSERT', {
+            agencyIdIndex,
+            originalColumnsCount: columns.length,
+            originalParamsCount: params.length,
+          });
           
           // Remove agency_id from columns
           columns.splice(agencyIdIndex, 1);
@@ -68,12 +75,14 @@ router.post('/query', asyncHandler(async (req, res) => {
             params.splice(agencyIdIndex, 1);
           }
           
-          console.log('[API] ✅ Removed agency_id - New columns count:', columns.length);
-          console.log('[API] ✅ New params count:', params.length);
+          logger.debug('Removed agency_id from agency_settings INSERT', {
+            newColumnsCount: columns.length,
+            newParamsCount: params.length,
+          });
         }
       } else {
         // Fallback: aggressive regex replacement
-        console.log('[API] ⚠️ Full match failed, using fallback regex');
+        logger.debug('Full match failed for agency_id removal, using fallback regex');
         sql = sql.replace(/,\s*agency_id\s*(?=,|\))/gi, '');
         sql = sql.replace(/\(\s*agency_id\s*,/gi, '(');
         sql = sql.replace(/,\s*agency_id\s*\)/gi, ')');
@@ -95,21 +104,24 @@ router.post('/query', asyncHandler(async (req, res) => {
       rowCount: result.rowCount,
     });
   } catch (error) {
-    console.error('[API] Query error:', error);
-    console.error('[API] Error code:', error.code);
-    console.error('[API] Error message:', error.message);
-    console.error('[API] Error detail:', error.detail);
+    logger.error('Database query error', {
+      error: error.message,
+      code: error.code,
+      detail: error.detail,
+      agencyDatabase,
+      sql: sql.substring(0, 200),
+    });
 
     // Handle missing notifications table in MAIN database (not agency database)
     if (error.code === '42P01' && error.message.includes('notifications') && !agencyDatabase) {
-      console.log('[API] Notifications table missing in main database, creating...');
+      logger.info('Notifications table missing in main database, creating...');
       try {
         const { pool } = require('../config/database');
         const client = await pool.connect();
         try {
           const { ensureNotificationsTable } = require('../utils/schema/miscSchema');
           await ensureNotificationsTable(client);
-          console.log('[API] ✅ Notifications table created in main database, retrying query...');
+          logger.info('Notifications table created in main database, retrying query...');
           
           // Retry the query
           const retryResult = await executeQuery(sql, params, agencyDatabase, userId);
@@ -121,33 +133,51 @@ router.post('/query', asyncHandler(async (req, res) => {
           client.release();
         }
       } catch (repairError) {
-        console.error('[API] Failed to repair notifications table:', repairError);
+        logger.error('Failed to repair notifications table', {
+          error: repairError.message,
+          code: repairError.code,
+        });
       }
     }
 
     // Handle missing database (3D000 = database does not exist)
     if (error.code === '3D000' && agencyDatabase) {
-      console.log(`[API] Database does not exist: ${agencyDatabase}`);
+      logger.info('Database does not exist, checking agency', {
+        agencyDatabase,
+      });
       
       // Check if agency exists in main database
       try {
-        const { pool } = require('../config/database');
-        const agencyCheck = await pool.query(
+        const agency = await queryOne(
           'SELECT id, name FROM agencies WHERE database_name = $1',
-          [agencyDatabase]
+          [agencyDatabase],
+          { requestId: req.requestId }
         );
         
-        if (agencyCheck.rows.length === 0) {
+        if (!agency) {
           // Agency doesn't exist - invalid reference
-          return res.status(404).json({
-            error: 'Agency database not found',
-            message: `Agency database "${agencyDatabase}" does not exist. Please log out and log in again.`,
-            code: 'AGENCY_DB_NOT_FOUND'
+          logger.warn('Agency not found in main database', {
+            agencyDatabase,
+            message: 'User session references non-existent agency. User should log out and log in again.',
           });
+          return send(res, errorResponse(
+            `Agency database "${agencyDatabase}" does not exist. This usually happens when the development database is reset. Please log out and log in again, or contact support if the issue persists.`,
+            'AGENCY_DB_NOT_FOUND',
+            { 
+              error: 'Agency database not found',
+              agencyDatabase,
+              suggestion: 'Log out and log in again, or recreate your agency account'
+            },
+            404
+          ));
         }
         
         // Agency exists but database is missing - try to create it
-        console.log(`[API] Agency exists but database missing. Creating database: ${agencyDatabase}`);
+        logger.info('Agency exists but database missing, creating database', {
+          agencyDatabase,
+          agencyId: agency.id,
+          agencyName: agency.name,
+        });
         const { createAgencySchema } = require('../utils/schemaCreator');
         const { parseDatabaseUrl } = require('../utils/poolManager');
         const { Pool } = require('pg');
@@ -163,7 +193,9 @@ router.post('/query', asyncHandler(async (req, res) => {
           const validatedDbName = validateDatabaseName(agencyDatabase);
           const quotedDbName = quoteIdentifier(validatedDbName);
           await postgresClient.query(`CREATE DATABASE ${quotedDbName}`);
-          console.log(`[API] ✅ Database created: ${agencyDatabase}`);
+          logger.info('Database created successfully', {
+            agencyDatabase,
+          });
           
           // Connect to new database and create schema
           const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
@@ -172,7 +204,9 @@ router.post('/query', asyncHandler(async (req, res) => {
           
           try {
             await createAgencySchema(agencyClient);
-            console.log(`[API] ✅ Schema created for: ${agencyDatabase}`);
+            logger.info('Schema created for agency database', {
+              agencyDatabase,
+            });
             
             // Retry the original query
             const retryResult = await executeQuery(sql, params, agencyDatabase, userId);
@@ -185,23 +219,33 @@ router.post('/query', asyncHandler(async (req, res) => {
             await agencyPool.end();
           }
         } catch (createError) {
-          console.error(`[API] Error creating database/schema:`, createError);
-          return res.status(500).json({
-            error: 'Failed to create agency database',
-            message: createError.message,
-            code: 'DB_CREATION_FAILED'
+          logger.error('Error creating database/schema', {
+            error: createError.message,
+            code: createError.code,
+            agencyDatabase,
           });
+          return send(res, errorResponse(
+            createError.message,
+            'DB_CREATION_FAILED',
+            { error: 'Failed to create agency database' },
+            500
+          ));
         } finally {
           postgresClient.release();
           await postgresPool.end();
         }
       } catch (checkError) {
-        console.error(`[API] Error checking agency:`, checkError);
-        return res.status(500).json({
-          error: 'Database error',
-          message: checkError.message,
-          code: 'DB_CHECK_FAILED'
+        logger.error('Error checking agency', {
+          error: checkError.message,
+          code: checkError.code,
+          agencyDatabase,
         });
+        return send(res, errorResponse(
+          checkError.message,
+          'DB_CHECK_FAILED',
+          { error: 'Database error' },
+          500
+        ));
       }
     }
 
@@ -212,7 +256,7 @@ router.post('/query', asyncHandler(async (req, res) => {
       // 42P01 = relation does not exist (table/view)
       // 42883 = function does not exist
       req._schemaRepairAttempted = true; // Prevent infinite loops
-      console.log(`[API] Missing table/function detected (${error.code}), attempting schema repair (one time only)...`);
+      logger.debug(`Missing table/function detected (${error.code}), attempting schema repair (one time only)...`, { errorCode: error.code, agencyDatabase });
       try {
         const { host, port, user, password } = parseDatabaseUrl();
         const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
@@ -225,7 +269,7 @@ router.post('/query', asyncHandler(async (req, res) => {
           const missingTable = tableMatch ? tableMatch[1] : null;
           
           if (missingTable) {
-            console.log(`[API] Missing table detected: ${missingTable}`);
+            logger.debug(`Missing table detected`, { missingTable, agencyDatabase });
             
             // Document tables - repair misc schema
             if (['document_folders', 'documents', 'document_versions', 'document_permissions'].includes(missingTable)) {
@@ -233,15 +277,15 @@ router.post('/query', asyncHandler(async (req, res) => {
               const { ensureSharedFunctions } = require('../utils/schema/sharedFunctions');
               try {
                 await ensureSharedFunctions(agencyClient);
-                console.log(`[API] ✅ Shared functions ensured`);
+                logger.debug(`Shared functions ensured`, { agencyDatabase });
               } catch (funcError) {
-                console.warn(`[API] ⚠️ Could not ensure shared functions:`, funcError.message);
+                logger.warn(`Could not ensure shared functions`, { error: funcError.message, agencyDatabase });
                 // Continue anyway - tables can be created without triggers
               }
               
               const { ensureMiscSchema } = require('../utils/schema/miscSchema');
               await ensureMiscSchema(agencyClient);
-              console.log(`[API] ✅ Document tables schema repair completed, retrying query...`);
+              logger.debug(`Document tables schema repair completed, retrying query...`, { missingTable, agencyDatabase });
             }
             // Holidays and company events - repair misc schema
             else if (['holidays', 'company_events', 'calendar_settings', 'notifications'].includes(missingTable)) {
@@ -249,52 +293,52 @@ router.post('/query', asyncHandler(async (req, res) => {
               // Explicitly ensure notifications table first
               if (missingTable === 'notifications') {
                 await ensureNotificationsTable(agencyClient);
-                console.log(`[API] ✅ Notifications table explicitly created`);
+                logger.debug(`Notifications table explicitly created`, { agencyDatabase });
               }
               await ensureMiscSchema(agencyClient);
-              console.log(`[API] ✅ Miscellaneous schema repair completed for ${missingTable}, retrying query...`);
+              logger.debug(`Miscellaneous schema repair completed`, { missingTable, agencyDatabase });
             }
             // Leave requests - repair HR schema
             else if (['leave_requests', 'leave_types', 'employee_details', 'employee_salary_details', 'employee_files', 'payroll', 'payroll_periods'].includes(missingTable)) {
               const { ensureHrSchema } = require('../utils/schema/hrSchema');
               await ensureHrSchema(agencyClient);
-              console.log(`[API] ✅ HR schema repair completed for ${missingTable}, retrying query...`);
+              logger.debug(`HR schema repair completed`, { missingTable, agencyDatabase });
             }
             // Reimbursement - repair reimbursement schema
             else if (['reimbursement_requests', 'reimbursement_attachments', 'expense_categories'].includes(missingTable)) {
               const { ensureReimbursementSchema } = require('../utils/schema/reimbursementSchema');
               await ensureReimbursementSchema(agencyClient);
-              console.log(`[API] ✅ Reimbursement schema repair completed for ${missingTable}, retrying query...`);
+              logger.debug(`Reimbursement schema repair completed`, { missingTable, agencyDatabase });
             }
             // Projects and tasks - repair projects schema
             else if (['projects', 'tasks', 'task_assignments', 'task_comments', 'task_time_tracking'].includes(missingTable)) {
               const { ensureProjectsTasksSchema } = require('../utils/schema/projectsTasksSchema');
               await ensureProjectsTasksSchema(agencyClient);
-              console.log(`[API] ✅ Projects schema repair completed for ${missingTable}, retrying query...`);
+              logger.debug(`Projects schema repair completed`, { missingTable, agencyDatabase });
             }
             // Invoices and clients - repair clients financial schema
             else if (['invoices', 'clients', 'quotations', 'quotation_templates', 'quotation_line_items'].includes(missingTable)) {
               const { ensureClientsFinancialSchema } = require('../utils/schema/clientsFinancialSchema');
               await ensureClientsFinancialSchema(agencyClient);
-              console.log(`[API] ✅ Clients/Financial schema repair completed for ${missingTable}, retrying query...`);
+              logger.debug(`Clients/Financial schema repair completed`, { missingTable, agencyDatabase });
             }
             // GST tables - repair GST schema
             else if (missingTable.startsWith('gst_')) {
               const { ensureGstSchema } = require('../utils/schema/gstSchema');
               await ensureGstSchema(agencyClient);
-              console.log(`[API] ✅ GST schema repair completed, retrying query...`);
+              logger.debug(`GST schema repair completed`, { missingTable, agencyDatabase });
             }
             // For other missing tables, run full schema creation
             else {
               const { createAgencySchema } = require('../utils/schemaCreator');
               await createAgencySchema(agencyClient);
-              console.log(`[API] ✅ Full schema repair completed for ${missingTable}, retrying query...`);
+              logger.debug(`Full schema repair completed`, { missingTable, agencyDatabase });
             }
           } else {
             // If we can't identify the table, run full schema creation
             const { createAgencySchema } = require('../utils/schemaCreator');
             await createAgencySchema(agencyClient);
-            console.log(`[API] ✅ Full schema repair completed, retrying query...`);
+            logger.debug(`Full schema repair completed`, { agencyDatabase });
           }
           
           // Wait a moment for schema to be fully available
@@ -310,30 +354,30 @@ router.post('/query', asyncHandler(async (req, res) => {
           `, [missingTable]);
           
           if (!tableCheck.rows[0].exists) {
-            console.error(`[API] ❌ Table ${missingTable} still does not exist after schema repair`);
+            logger.error(`Table still does not exist after schema repair`, { missingTable, agencyDatabase });
             // Try one more time with explicit table creation
             if (missingTable === 'document_folders') {
               const { ensureDocumentFoldersTable } = require('../utils/schema/miscSchema');
               await ensureDocumentFoldersTable(agencyClient);
-              console.log(`[API] ✅ Explicitly created ${missingTable} table`);
+              logger.debug(`Explicitly created table`, { missingTable, agencyDatabase });
             } else if (missingTable === 'documents') {
               const { ensureDocumentsTable } = require('../utils/schema/miscSchema');
               await ensureDocumentsTable(agencyClient);
-              console.log(`[API] ✅ Explicitly created ${missingTable} table`);
+              logger.debug(`Explicitly created table`, { missingTable, agencyDatabase });
             } else if (missingTable === 'notifications') {
               const { ensureNotificationsTable } = require('../utils/schema/miscSchema');
               await ensureNotificationsTable(agencyClient);
-              console.log(`[API] ✅ Explicitly created ${missingTable} table`);
+              logger.debug(`Explicitly created table`, { missingTable, agencyDatabase });
             } else {
               throw new Error(`Table ${missingTable} was not created`);
             }
           }
           
-          console.log(`[API] ✅ Verified table ${missingTable} exists, retrying query...`);
+          logger.debug(`Verified table exists, retrying query...`, { missingTable, agencyDatabase });
           
           // Retry the query
           const retryResult = await executeQuery(sql, params, agencyDatabase, userId);
-          console.log(`[API] ✅ Query retry successful after schema repair`);
+          logger.debug(`Query retry successful after schema repair`, { missingTable, agencyDatabase });
           return res.json({
             rows: retryResult.rows,
             rowCount: retryResult.rowCount,
@@ -343,15 +387,18 @@ router.post('/query', asyncHandler(async (req, res) => {
           await agencyPool.end();
         }
       } catch (repairError) {
-        console.error('[API] ❌ Schema repair failed:', repairError.message);
-        console.error('[API] Repair error stack:', repairError.stack);
+        logger.error('Schema repair failed', {
+          error: repairError.message,
+          stack: repairError.stack,
+          agencyDatabase,
+        });
         // Fall through to return original error
       }
     }
 
     // If it's a NOT NULL constraint violation for leads.name, try to make it nullable and retry
     if (error.code === '23502' && agencyDatabase && error.message.includes('column "name" of relation "leads"')) {
-      console.log(`[API] NOT NULL constraint violation detected for leads.name, attempting to make nullable...`);
+      logger.info('NOT NULL constraint violation detected for leads.name, attempting to make nullable', { agencyDatabase });
       try {
         const { host, port, user, password } = parseDatabaseUrl();
         const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
@@ -360,14 +407,14 @@ router.post('/query', asyncHandler(async (req, res) => {
         const agencyClient = await agencyPool.connect();
         try {
           await agencyClient.query('ALTER TABLE public.leads ALTER COLUMN name DROP NOT NULL');
-          console.log(`[API] ✅ Made leads.name column nullable`);
+          logger.info('Made leads.name column nullable', { agencyDatabase });
           
           // Wait a moment for the change to be fully available
           await new Promise(resolve => setTimeout(resolve, 200));
           
           // Retry the query
           const retryResult = await executeQuery(sql, params, agencyDatabase, userId);
-          console.log(`[API] ✅ Query retry successful after making leads.name nullable`);
+          logger.info('Query retry successful after making leads.name nullable', { agencyDatabase });
           return res.json({
             rows: retryResult.rows,
             rowCount: retryResult.rowCount,
@@ -377,7 +424,11 @@ router.post('/query', asyncHandler(async (req, res) => {
           await agencyPool.end();
         }
       } catch (repairError) {
-        console.error('[API] ❌ Failed to make leads.name nullable:', repairError.message);
+        logger.error('Failed to make leads.name nullable', {
+          error: repairError.message,
+          code: repairError.code,
+          agencyDatabase,
+        });
         // Fall through to return original error
       }
     }
@@ -390,12 +441,12 @@ router.post('/query', asyncHandler(async (req, res) => {
       const columnMatch = error.message.match(/column "([^"]+)" of relation "([^"]+)"/);
       if (columnMatch) {
         const [, columnName, tableName] = columnMatch;
-        console.log(`[API] Missing column detected: ${tableName}.${columnName}, attempting to add...`);
+        logger.debug(`Missing column detected, attempting to add`, { tableName, columnName, agencyDatabase });
         
         // Special handling for reimbursement tables - run full reimbursement schema repair
         if (tableName === 'reimbursement_requests' || tableName === 'expense_categories') {
           try {
-            console.log(`[API] Running reimbursement schema repair for ${tableName}.${columnName}...`);
+            logger.debug(`Running reimbursement schema repair`, { tableName, columnName, agencyDatabase });
             const { host, port, user, password } = parseDatabaseUrl();
             const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
             const { Pool } = require('pg');
@@ -404,7 +455,7 @@ router.post('/query', asyncHandler(async (req, res) => {
             try {
               const { ensureReimbursementSchema } = require('../utils/schema/reimbursementSchema');
               await ensureReimbursementSchema(agencyClient);
-              console.log(`[API] ✅ Reimbursement schema repair completed`);
+              logger.debug(`Reimbursement schema repair completed`, { tableName, columnName, agencyDatabase });
             } finally {
               agencyClient.release();
               await agencyPool.end();
@@ -415,13 +466,19 @@ router.post('/query', asyncHandler(async (req, res) => {
             
             // Retry the query
             const retryResult = await executeQuery(sql, params, agencyDatabase, userId);
-            console.log(`[API] ✅ Query retry successful after reimbursement schema repair`);
+            logger.debug(`Query retry successful after reimbursement schema repair`, { tableName, columnName, agencyDatabase });
             return res.json({
               rows: retryResult.rows,
               rowCount: retryResult.rowCount,
             });
           } catch (repairError) {
-            console.error('[API] ❌ Reimbursement schema repair failed:', repairError.message);
+            logger.error('Reimbursement schema repair failed', {
+              error: repairError.message,
+              code: repairError.code,
+              tableName,
+              columnName,
+              agencyDatabase,
+            });
             // Fall through to return original error
           }
         }
@@ -433,7 +490,7 @@ router.post('/query', asyncHandler(async (req, res) => {
         try {
           if (isBillingColumn) {
             // For billing columns, add all of them at once to prevent multiple repair cycles
-            console.log(`[API] Detected missing billing column, adding all billing columns to clients table...`);
+            logger.debug(`Detected missing billing column, adding all billing columns to clients table`, { columnName, agencyDatabase });
             const { host, port, user, password } = parseDatabaseUrl();
             const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
             const { Pool } = require('pg');
@@ -452,13 +509,13 @@ router.post('/query', asyncHandler(async (req, res) => {
               const missingColumns = billingColumns.filter(col => !existingColumns.includes(col));
               
               if (missingColumns.length > 0) {
-                console.log(`[API] Adding missing billing columns: ${missingColumns.join(', ')}`);
+                logger.debug(`Adding missing billing columns`, { missingColumns, agencyDatabase });
                 for (const col of missingColumns) {
                   await agencyClient.query(`ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS ${col} TEXT`);
                 }
-                console.log(`[API] ✅ Added all missing billing columns to clients table`);
+                logger.debug(`Added all missing billing columns to clients table`, { missingColumns, agencyDatabase });
               } else {
-                console.log(`[API] ℹ️ All billing columns already exist`);
+                logger.debug(`All billing columns already exist`, { agencyDatabase });
               }
             } finally {
               agencyClient.release();
@@ -473,16 +530,22 @@ router.post('/query', asyncHandler(async (req, res) => {
 
           // Retry the query
           const retryResult = await executeQuery(sql, params, agencyDatabase, userId);
-          console.log(`[API] ✅ Query retry successful after adding ${columnName} to ${tableName}`);
+          logger.debug(`Query retry successful after adding column`, { tableName, columnName, agencyDatabase });
           return res.json({
             rows: retryResult.rows,
             rowCount: retryResult.rowCount,
           });
         } catch (repairError) {
-          console.error('[API] ❌ Column repair failed:', repairError.message);
+          logger.error('Column repair failed', {
+            error: repairError.message,
+            code: repairError.code,
+            tableName,
+            columnName,
+            agencyDatabase,
+          });
           // Try one more time with full schema repair
           try {
-            console.log('[API] Attempting full schema repair as fallback...');
+            logger.debug('Attempting full schema repair as fallback', { tableName, columnName, agencyDatabase });
             const { host, port, user, password } = parseDatabaseUrl();
             const agencyDbUrl = `postgresql://${user}:${password}@${host}:${port}/${agencyDatabase}`;
             const { Pool } = require('pg');
@@ -500,7 +563,13 @@ router.post('/query', asyncHandler(async (req, res) => {
               await agencyPool.end();
             }
           } catch (fallbackError) {
-            console.error('[API] ❌ Full schema repair also failed:', fallbackError.message);
+            logger.error('Full schema repair also failed', {
+              error: fallbackError.message,
+              code: fallbackError.code,
+              tableName,
+              columnName,
+              agencyDatabase,
+            });
             // Fall through to return original error
           }
         }
@@ -508,7 +577,7 @@ router.post('/query', asyncHandler(async (req, res) => {
     }
 
     // Return detailed error information for debugging
-    const errorResponse = {
+    const errorDetails = {
       error: error.message || 'Database query failed',
       detail: error.detail,
       code: error.code,
@@ -528,13 +597,13 @@ router.post('/query', asyncHandler(async (req, res) => {
     };
     
     // Remove undefined fields
-    Object.keys(errorResponse).forEach(key => {
-      if (errorResponse[key] === undefined) {
-        delete errorResponse[key];
+    Object.keys(errorDetails).forEach(key => {
+      if (errorDetails[key] === undefined) {
+        delete errorDetails[key];
       }
     });
     
-    res.status(500).json(errorResponse);
+    res.status(500).json(errorDetails);
   }
 }));
 
@@ -554,12 +623,18 @@ router.post('/transaction', asyncHandler(async (req, res) => {
       results,
     });
   } catch (error) {
-    console.error('[API] Transaction error:', error);
-    res.status(500).json({
+    logger.error('Database transaction error', {
       error: error.message,
-      detail: error.detail,
       code: error.code,
+      detail: error.detail,
+      agencyDatabase: req.headers['x-agency-database'],
     });
+    return send(res, errorResponse(
+      error.message,
+      error.code || 'TRANSACTION_FAILED',
+      { detail: error.detail },
+      500
+    ));
   }
 }));
 

@@ -121,6 +121,7 @@ const integrationsRoutes = require('./routes/integrations');
 const settingsRoutes = require('./routes/settings');
 const pageCatalogRoutes = require('./routes/pageCatalog');
 const schemaAdminRoutes = require('./routes/schemaAdmin');
+const superAdminRoutes = require('./routes/superAdmin');
 
 // Create Express app
 const app = express();
@@ -130,6 +131,10 @@ configureMiddleware(app);
 
 // Request logging (after CORS, before routes)
 app.use(requestLogger);
+
+// Maintenance mode check (before rate limiting, but after auth setup)
+const { maintenanceMode } = require('./middleware/maintenanceMode');
+app.use('/api', maintenanceMode);
 
 // Apply general API rate limiting (after CORS but before routes)
 // Note: system-health endpoints are excluded from rate limiting in rateLimiter.js
@@ -148,6 +153,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/agencies', agenciesRoutes);
 app.use('/api/schema', schemaRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/super-admin', superAdminRoutes);
 app.use('/api/permissions', permissionsRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/reports', reportsRoutes);

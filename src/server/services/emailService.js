@@ -25,8 +25,28 @@ const PROVIDERS = {
   MAILTRAP: 'mailtrap',
 };
 
-// Get active provider from environment
-function getActiveProvider() {
+// Get active provider from system settings or environment
+async function getActiveProvider() {
+  try {
+    const { getEmailConfig } = require('../utils/systemSettings');
+    const emailConfig = await getEmailConfig();
+    
+    // Use system settings if configured
+    if (emailConfig.provider && emailConfig.provider !== 'smtp') {
+      return emailConfig.provider.toLowerCase();
+    }
+    
+    // Check if provider-specific settings are configured in system settings
+    if (emailConfig.sendgrid.apiKey) return PROVIDERS.SENDGRID;
+    if (emailConfig.mailgun.apiKey && emailConfig.mailgun.domain) return PROVIDERS.MAILGUN;
+    if (emailConfig.awsSes.region && emailConfig.awsSes.accessKeyId) return PROVIDERS.AWS_SES;
+    if (emailConfig.resend.apiKey) return PROVIDERS.RESEND;
+  } catch (error) {
+    // Fall back to environment variables if system settings not available
+    console.warn('[Email] Could not load system settings, using environment variables:', error.message);
+  }
+  
+  // Fallback to environment variables
   // Priority order: explicit provider > Mailtrap > Postmark > SendGrid > Mailgun > AWS SES > Resend > SMTP
   if (process.env.EMAIL_PROVIDER) {
     return process.env.EMAIL_PROVIDER.toLowerCase();
@@ -53,48 +73,60 @@ function getActiveProvider() {
 }
 
 // Create transporter based on provider
-function createTransporter(config = {}) {
-  const provider = config.provider || getActiveProvider();
+async function createTransporter(config = {}) {
+  const provider = config.provider || await getActiveProvider();
   
   switch (provider) {
     case PROVIDERS.SENDGRID:
-      return createSendGridTransporter(config);
+      return await createSendGridTransporter(config);
     
     case PROVIDERS.MAILGUN:
-      return createMailgunTransporter(config);
+      return await createMailgunTransporter(config);
     
     case PROVIDERS.AWS_SES:
-      return createSESTransporter(config);
+      return await createSESTransporter(config);
     
     case PROVIDERS.RESEND:
-      return createResendTransporter(config);
+      return await createResendTransporter(config);
     
     case PROVIDERS.POSTMARK:
-      return createPostmarkTransporter(config);
+      return await createPostmarkTransporter(config);
     
     case PROVIDERS.MAILTRAP:
-      return createMailtrapTransporter(config);
+      return await createMailtrapTransporter(config);
     
     case PROVIDERS.SMTP:
     default:
-      return createSMTPTransporter(config);
+      return await createSMTPTransporter(config);
   }
 }
 
 // SMTP Transporter (Gmail, Outlook, Mailtrap, custom SMTP)
-function createSMTPTransporter(config = {}) {
-  const host = config.host || process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(config.port || process.env.SMTP_PORT || '587', 10);
-  const user = config.user || process.env.SMTP_USER || '';
-  const password = config.password || process.env.SMTP_PASSWORD || '';
-  const from = config.from || process.env.SMTP_FROM || user || 'noreply@buildflow.com';
-
+async function createSMTPTransporter(config = {}) {
+  // Try to get email config from system settings first
+  let emailConfig = {};
+  try {
+    const { getEmailConfig } = require('../utils/systemSettings');
+    emailConfig = await getEmailConfig();
+  } catch (error) {
+    // Fall back to environment variables
+  }
+  
+  const host = config.host || emailConfig.smtp?.host || process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(config.port || emailConfig.smtp?.port || process.env.SMTP_PORT || '587', 10);
+  const user = config.user || emailConfig.smtp?.user || process.env.SMTP_USER || '';
+  const password = config.password || emailConfig.smtp?.password || process.env.SMTP_PASSWORD || '';
+  const from = config.from || emailConfig.smtp?.from || process.env.SMTP_FROM || user || 'noreply@buildflow.com';
+  
   // Determine secure/SSL settings
   // Mailtrap sandbox uses STARTTLS on port 2525 (not SSL)
   // Port 465 = SSL, Port 587/2525 = STARTTLS
   let secure = config.secure;
   if (secure === undefined) {
-    if (port === 465) {
+    // Use system settings if available
+    if (emailConfig.smtp?.secure !== undefined) {
+      secure = emailConfig.smtp.secure;
+    } else if (port === 465) {
       secure = true; // SSL
     } else if (host.includes('mailtrap.io')) {
       secure = false; // Mailtrap uses STARTTLS
@@ -129,11 +161,20 @@ function createSMTPTransporter(config = {}) {
 }
 
 // SendGrid Transporter
-function createSendGridTransporter(config = {}) {
-  const apiKey = config.apiKey || process.env.SENDGRID_API_KEY;
+async function createSendGridTransporter(config = {}) {
+  // Try to get from system settings first
+  let emailConfig = {};
+  try {
+    const { getEmailConfig } = require('../utils/systemSettings');
+    emailConfig = await getEmailConfig();
+  } catch (error) {
+    // Fall back to environment variables
+  }
+  
+  const apiKey = config.apiKey || emailConfig.sendgrid?.apiKey || process.env.SENDGRID_API_KEY;
   
   if (!apiKey) {
-    throw new Error('SendGrid API key is required. Set SENDGRID_API_KEY environment variable.');
+    throw new Error('SendGrid API key is required. Set SENDGRID_API_KEY environment variable or configure in system settings.');
   }
 
   return nodemailer.createTransport({
@@ -146,9 +187,18 @@ function createSendGridTransporter(config = {}) {
 }
 
 // Mailgun Transporter
-function createMailgunTransporter(config = {}) {
-  const apiKey = config.apiKey || process.env.MAILGUN_API_KEY;
-  const domain = config.domain || process.env.MAILGUN_DOMAIN;
+async function createMailgunTransporter(config = {}) {
+  // Try to get from system settings first
+  let emailConfig = {};
+  try {
+    const { getEmailConfig } = require('../utils/systemSettings');
+    emailConfig = await getEmailConfig();
+  } catch (error) {
+    // Fall back to environment variables
+  }
+  
+  const apiKey = config.apiKey || emailConfig.mailgun?.apiKey || process.env.MAILGUN_API_KEY;
+  const domain = config.domain || emailConfig.mailgun?.domain || process.env.MAILGUN_DOMAIN;
   
   if (!apiKey || !domain) {
     throw new Error('Mailgun API key and domain are required. Set MAILGUN_API_KEY and MAILGUN_DOMAIN environment variables.');
@@ -464,7 +514,7 @@ let cachedProvider = null;
 
 async function sendEmail(to, subject, html, text = null, attachments = [], options = {}) {
   try {
-    const provider = options.provider || getActiveProvider();
+    const provider = options.provider || await getActiveProvider();
     const config = options.config || {};
     
     // Handle Resend separately (HTTP API)
@@ -512,7 +562,7 @@ async function sendEmail(to, subject, html, text = null, attachments = [], optio
     // For other providers, use nodemailer
     // Recreate transporter if provider changed or config provided
     if (!cachedTransporter || cachedProvider !== provider || Object.keys(config).length > 0) {
-      cachedTransporter = createTransporter({ provider, ...config });
+      cachedTransporter = await createTransporter({ provider, ...config });
       cachedProvider = provider;
     }
 

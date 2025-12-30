@@ -73,7 +73,7 @@ router.post('/validate', authenticate, requireAgencyContext, asyncHandler(async 
   }
 
   const policy = await passwordPolicyService.getPasswordPolicy(agencyDatabase);
-  const validation = passwordPolicyService.validatePassword(password, policy);
+  const validation = await passwordPolicyService.validatePassword(password, policy);
 
   res.json({
     success: true,
@@ -106,7 +106,7 @@ router.post('/change', authenticate, requireAgencyContext, asyncHandler(async (r
   const policy = await passwordPolicyService.getPasswordPolicy(agencyDatabase);
 
   // Validate new password
-  const validation = passwordPolicyService.validatePassword(newPassword, policy);
+  const validation = await passwordPolicyService.validatePassword(newPassword, policy);
   if (!validation.valid) {
     return res.status(400).json({
       success: false,

@@ -16,9 +16,9 @@ const AgencyDashboard = () => {
   const { toast } = useToast();
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  // Redirect super_admin users to system dashboard
+  // Redirect super_admin users to super admin dashboard
   if (userRole === 'super_admin') {
-    return <Navigate to="/system" replace />;
+    return <Navigate to="/super-admin" replace />;
   }
 
   useEffect(() => {

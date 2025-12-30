@@ -22,7 +22,8 @@ export async function getAgencyAccessiblePages(): Promise<AgencyPageAssignment[]
   }
 
   try {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('token') || localStorage.getItem('auth_token');
+    
     if (!token) {
       return [];
     }
@@ -40,6 +41,7 @@ export async function getAgencyAccessiblePages(): Promise<AgencyPageAssignment[]
     }
 
     const data = await response.json();
+
     if (data.success && data.data) {
       cachedPages = data.data;
       cacheTimestamp = now;

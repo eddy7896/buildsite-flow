@@ -1,9 +1,7 @@
 // Environment variable validation and type safety
-const requiredEnvVars = [
-  'VITE_API_URL',
-] as const;
-
+// VITE_API_URL is now optional - will use fallback from getApiRoot() if not set
 const optionalEnvVars = [
+  'VITE_API_URL', // Optional - will use fallback from getApiRoot() if not set
   'VITE_DATABASE_URL', // Not used by frontend (uses HTTP API), kept for compatibility
   'VITE_APP_NAME',
   'VITE_APP_VERSION',
@@ -19,36 +17,18 @@ const optionalEnvVars = [
   'VITE_ANALYTICS_TRACKING_ID',
 ] as const;
 
-type RequiredEnvVar = typeof requiredEnvVars[number];
 type OptionalEnvVar = typeof optionalEnvVars[number];
-type EnvVar = RequiredEnvVar | OptionalEnvVar;
+type EnvVar = OptionalEnvVar;
 
-// Validate required environment variables
+// Validate environment variables (all are optional with defaults)
 function validateEnv(): Record<EnvVar, string> {
-  const missing: string[] = [];
   const env: Partial<Record<EnvVar, string>> = {};
 
-  // Check required variables
-  for (const key of requiredEnvVars) {
-    const value = import.meta.env[key];
-    if (!value) {
-      missing.push(key);
-    } else {
-      env[key] = value;
-    }
-  }
-
-  // Add optional variables with defaults
+  // Add all variables with defaults
   for (const key of optionalEnvVars) {
     // Handle undefined, null, or empty string - use default in all cases
     const value = import.meta.env[key];
     env[key] = (value && value.trim() !== '') ? value : getDefaultValue(key);
-  }
-
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required environment variables: ${missing.join(', ')}`
-    );
   }
 
   return env as Record<EnvVar, string>;
@@ -56,6 +36,7 @@ function validateEnv(): Record<EnvVar, string> {
 
 function getDefaultValue(key: OptionalEnvVar): string {
   const defaults: Record<OptionalEnvVar, string> = {
+    VITE_API_URL: '', // Empty - will use fallback from getApiRoot()
     VITE_DATABASE_URL: '', // Not used by frontend (uses HTTP API)
     VITE_APP_NAME: 'BuildFlow Agency Management',
     VITE_APP_VERSION: '1.0.0',

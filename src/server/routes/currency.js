@@ -8,6 +8,8 @@ const router = express.Router();
 const { authenticate, requireAgencyContext } = require('../middleware/authMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
 const currencyService = require('../services/currencyService');
+const { success, databaseError, send, validationError } = require('../utils/responseHelper');
+const logger = require('../utils/logger');
 
 /**
  * GET /api/currency/currencies
@@ -16,12 +18,23 @@ const currencyService = require('../services/currencyService');
 router.get('/currencies', authenticate, requireAgencyContext, asyncHandler(async (req, res) => {
   const agencyDatabase = req.user.agencyDatabase;
 
-  const currencies = await currencyService.getCurrencies(agencyDatabase);
+  try {
+    const currencies = await currencyService.getCurrencies(agencyDatabase);
 
-  res.json({
-    success: true,
-    data: currencies,
-  });
+    return send(res, success(
+      currencies,
+      'Currencies fetched successfully',
+      { requestId: req.requestId }
+    ));
+  } catch (error) {
+    logger.error('Error fetching currencies', {
+      agencyDatabase,
+      error: error.message,
+      code: error.code,
+      requestId: req.requestId,
+    });
+    return send(res, databaseError(error, 'Fetch currencies'));
+  }
 }));
 
 /**
@@ -32,13 +45,24 @@ router.post('/update-rates', authenticate, requireAgencyContext, asyncHandler(as
   const agencyId = req.user.agencyId;
   const agencyDatabase = req.user.agencyDatabase;
 
-  const rates = await currencyService.updateExchangeRates(agencyDatabase, agencyId);
+  try {
+    const rates = await currencyService.updateExchangeRates(agencyDatabase, agencyId);
 
-  res.json({
-    success: true,
-    data: rates,
-    message: 'Exchange rates updated successfully',
-  });
+    return send(res, success(
+      rates,
+      'Exchange rates updated successfully',
+      { requestId: req.requestId }
+    ));
+  } catch (error) {
+    logger.error('Error updating exchange rates', {
+      agencyId,
+      agencyDatabase,
+      error: error.message,
+      code: error.code,
+      requestId: req.requestId,
+    });
+    return send(res, databaseError(error, 'Update exchange rates'));
+  }
 }));
 
 /**
@@ -50,29 +74,42 @@ router.post('/convert', authenticate, requireAgencyContext, asyncHandler(async (
   const { amount, from_currency, to_currency } = req.body;
 
   if (!amount || !from_currency || !to_currency) {
-    return res.status(400).json({
-      success: false,
-      error: 'Amount, from_currency, and to_currency are required',
-    });
+    return send(res, validationError(
+      'Amount, from_currency, and to_currency are required',
+      { missing: ['amount', 'from_currency', 'to_currency'].filter(f => !req.body[f]) }
+    ));
   }
 
-  const converted = await currencyService.convertCurrency(
-    agencyDatabase,
-    amount,
-    from_currency,
-    to_currency
-  );
+  try {
+    const converted = await currencyService.convertCurrency(
+      agencyDatabase,
+      amount,
+      from_currency,
+      to_currency
+    );
 
-  res.json({
-    success: true,
-    data: {
-      original_amount: parseFloat(amount),
+    return send(res, success(
+      {
+        original_amount: parseFloat(amount),
+        from_currency,
+        to_currency,
+        converted_amount: converted,
+        exchange_rate: converted / parseFloat(amount),
+      },
+      'Currency converted successfully',
+      { requestId: req.requestId }
+    ));
+  } catch (error) {
+    logger.error('Error converting currency', {
+      agencyDatabase,
+      amount,
       from_currency,
       to_currency,
-      converted_amount: converted,
-      exchange_rate: converted / parseFloat(amount),
-    },
-  });
+      error: error.message,
+      requestId: req.requestId,
+    });
+    return send(res, databaseError(error, 'Convert currency'));
+  }
 }));
 
 module.exports = router;

@@ -348,11 +348,60 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   },
 
   // System & Super Admin
+  // Super Admin Routes (system-level only, no agency context)
+  '/super-admin': { 
+    path: '/super-admin', 
+    requiredRoles: ['super_admin'], 
+    allowHigherRoles: false,
+    description: 'Super admin dashboard'
+  },
+  '/super-admin/agencies': { 
+    path: '/super-admin/agencies', 
+    requiredRoles: ['super_admin'], 
+    allowHigherRoles: false,
+    description: 'Agency management'
+  },
+  '/super-admin/agencies/:id': { 
+    path: '/super-admin/agencies/:id', 
+    requiredRoles: ['super_admin'], 
+    allowHigherRoles: false,
+    description: 'Agency details'
+  },
+  '/super-admin/agencies/:id/data': { 
+    path: '/super-admin/agencies/:id/data', 
+    requiredRoles: ['super_admin'], 
+    allowHigherRoles: false,
+    description: 'View agency data (read-only)'
+  },
+  '/super-admin/system-settings': { 
+    path: '/super-admin/system-settings', 
+    requiredRoles: ['super_admin'], 
+    allowHigherRoles: false,
+    description: 'System settings management'
+  },
+  '/super-admin/plans': { 
+    path: '/super-admin/plans', 
+    requiredRoles: ['super_admin'], 
+    allowHigherRoles: false,
+    description: 'Subscription plan management'
+  },
+  '/super-admin/page-catalog': { 
+    path: '/super-admin/page-catalog', 
+    requiredRoles: ['super_admin'], 
+    allowHigherRoles: false,
+    description: 'Page catalog management'
+  },
+  '/super-admin/analytics': { 
+    path: '/super-admin/analytics', 
+    requiredRoles: ['super_admin'], 
+    allowHigherRoles: false,
+    description: 'System analytics'
+  },
   '/system': { 
     path: '/system', 
     requiredRoles: ['super_admin'], 
     allowHigherRoles: false,
-    description: 'System administration dashboard'
+    description: 'System administration dashboard (legacy - redirects to /super-admin)'
   },
   '/system-health': { 
     path: '/system-health', 
@@ -365,12 +414,6 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     requiredRoles: ['super_admin', 'admin'], 
     allowHigherRoles: true,
     description: 'Email service testing and configuration'
-  },
-  '/agency/:agencyId/super-admin-dashboard': { 
-    path: '/agency/:agencyId/super-admin-dashboard', 
-    requiredRoles: ['super_admin'], 
-    allowHigherRoles: false,
-    description: 'Super admin dashboard for specific agency'
   },
 
   // Advanced Features
@@ -676,8 +719,12 @@ export async function canAccessRoute(userRole: AppRole | null, routePath: string
     return false;
   }
 
-  // Super admin always has access to all routes
-  if (userRole === 'super_admin') {
+  // Only system-level super admin (no agency database) always has access to all routes
+  // Agency admins (role='admin' with agency database) should go through page access check
+  const hasAgencyDatabase = typeof window !== 'undefined' && !!localStorage.getItem('agency_database');
+  const isSystemSuperAdmin = userRole === 'super_admin' && !hasAgencyDatabase;
+  
+  if (isSystemSuperAdmin) {
     return true;
   }
 

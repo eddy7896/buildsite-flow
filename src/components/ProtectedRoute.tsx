@@ -20,14 +20,17 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   const [pageAccessChecked, setPageAccessChecked] = useState(false);
   const [hasPageAccessResult, setHasPageAccessResult] = useState<boolean | null>(null);
 
-  // Check page access for non-super-admin users
+  // Check page access for non-system-super-admin users
   // MUST be declared before any early returns to follow Rules of Hooks
   useEffect(() => {
-    if (userRole && userRole !== 'super_admin' && user) {
+    // Only system-level super admins (no agency database) should skip page access check
+    const isSystemSuperAdminCheck = userRole === 'super_admin' && !localStorage.getItem('agency_database');
+    
+    if (userRole && !isSystemSuperAdminCheck && user) {
       hasPageAccess(location.pathname).then(hasAccess => {
         setHasPageAccessResult(hasAccess);
         setPageAccessChecked(true);
-      }).catch(() => {
+      }).catch((error) => {
         setHasPageAccessResult(true); // Default to allowing if check fails
         setPageAccessChecked(true);
       });
@@ -49,17 +52,21 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     return <Navigate to="/auth" replace state={{ from: location }} />;
   }
 
-  // Validate agency context (skip for super admins - they use main database)
-  if (userRole !== 'super_admin') {
+  // Validate agency context (skip for system-level super admins - they use main database)
+  // IMPORTANT: Only system-level super_admin (no agency database) should skip agency context check
+  // Agency admins (role='admin' with agency database) should have agency context
+  const isSystemSuperAdmin = userRole === 'super_admin' && !localStorage.getItem('agency_database');
+  
+  if (!isSystemSuperAdmin) {
     const agencyDatabase = localStorage.getItem('agency_database');
     if (!agencyDatabase && location.pathname !== '/agency-setup' && location.pathname !== '/agency-setup-progress') {
       // If no agency database and not on setup pages, redirect to setup
       return <Navigate to="/agency-setup-progress" replace />;
     }
   } else {
-    // Super admin - redirect away from agency setup pages
+    // System-level super admin - redirect away from agency setup pages
     if (location.pathname === '/agency-setup-progress' || location.pathname === '/agency-setup') {
-      return <Navigate to="/system" replace />;
+      return <Navigate to="/super-admin" replace />;
     }
   }
 
@@ -89,8 +96,10 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     );
   }
 
-  // Check page access first (for non-super-admin)
-  if (userRole && userRole !== 'super_admin' && hasPageAccessResult === false) {
+  // Check page access first (for non-system-super-admin)
+  // Only system-level super admins (no agency database) should skip page access check
+  // Note: isSystemSuperAdmin is already declared above at line 68
+  if (userRole && !isSystemSuperAdmin && hasPageAccessResult === false) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
         <Card className="w-full max-w-md">

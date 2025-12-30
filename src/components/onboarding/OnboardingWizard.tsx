@@ -100,7 +100,8 @@ export default function OnboardingWizard() {
         description: 'Your agency workspace is ready.',
       });
 
-      navigate('/dashboard');
+      // Redirect agency admins to agency dashboard, not general dashboard
+      navigate('/agency');
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to create agency. Please try again.';
       logError('Agency creation error:', error);

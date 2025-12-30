@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Save, RefreshCw, Settings, Image, Search, Tag, Megaphone, Mail, Globe, Shield } from 'lucide-react';
+import { Loader2, Save, RefreshCw, Settings, Image, Search, Tag, Megaphone, Mail, Globe, Shield, Lock, Database, HardDrive, Code, FileText, Server, Archive } from 'lucide-react';
 import { fetchSystemSettings, updateSystemSettings, type SystemSettings } from '@/services/system-settings';
 
 export function SystemSettings() {
@@ -115,12 +115,16 @@ export function SystemSettings() {
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="identity" className="space-y-6">
-            <TabsList className="grid w-full grid-cols-6">
+            <TabsList className="grid w-full grid-cols-7 lg:grid-cols-10 gap-1">
               <TabsTrigger value="identity">Identity</TabsTrigger>
               <TabsTrigger value="branding">Branding</TabsTrigger>
               <TabsTrigger value="seo">SEO</TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
               <TabsTrigger value="advertising">Ads</TabsTrigger>
+              <TabsTrigger value="email">Email</TabsTrigger>
+              <TabsTrigger value="security">Security</TabsTrigger>
+              <TabsTrigger value="storage">Storage</TabsTrigger>
+              <TabsTrigger value="api">API</TabsTrigger>
               <TabsTrigger value="other">Other</TabsTrigger>
             </TabsList>
 
@@ -569,6 +573,200 @@ export function SystemSettings() {
                     />
                   </div>
                 )}
+              </div>
+
+              {/* Logging & Monitoring */}
+              <div className="space-y-4 border rounded-lg p-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Logging & Monitoring
+                </h3>
+                <div className="space-y-2">
+                  <Label htmlFor="log_level">Log Level</Label>
+                  <select
+                    id="log_level"
+                    value={formData.log_level || 'info'}
+                    onChange={(e) => handleChange('log_level', e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <option value="debug">Debug</option>
+                    <option value="info">Info</option>
+                    <option value="warn">Warning</option>
+                    <option value="error">Error</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="log_retention_days">Log Retention (Days)</Label>
+                    <Input
+                      id="log_retention_days"
+                      type="number"
+                      value={formData.log_retention_days || 30}
+                      onChange={(e) => handleChange('log_retention_days', parseInt(e.target.value) || 30)}
+                      min="1"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="enable_audit_logging" className="cursor-pointer">
+                      Enable Audit Logging
+                    </Label>
+                    <Switch
+                      id="enable_audit_logging"
+                      checked={formData.enable_audit_logging ?? true}
+                      onCheckedChange={(checked) => handleChange('enable_audit_logging', checked)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="enable_error_tracking" className="cursor-pointer">
+                      Enable Error Tracking (Sentry)
+                    </Label>
+                    <Switch
+                      id="enable_error_tracking"
+                      checked={formData.enable_error_tracking || false}
+                      onCheckedChange={(checked) => handleChange('enable_error_tracking', checked)}
+                    />
+                  </div>
+                  {formData.enable_error_tracking && (
+                    <div className="space-y-2">
+                      <Label htmlFor="sentry_dsn">Sentry DSN</Label>
+                      <Input
+                        id="sentry_dsn"
+                        type="password"
+                        value={formData.sentry_dsn || ''}
+                        onChange={(e) => handleChange('sentry_dsn', e.target.value)}
+                        placeholder="https://xxxxx@xxxxx.ingest.sentry.io/xxxxx"
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="enable_performance_monitoring" className="cursor-pointer">
+                      Enable Performance Monitoring
+                    </Label>
+                    <Switch
+                      id="enable_performance_monitoring"
+                      checked={formData.enable_performance_monitoring || false}
+                      onCheckedChange={(checked) => handleChange('enable_performance_monitoring', checked)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Backup Settings */}
+              <div className="space-y-4 border rounded-lg p-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Archive className="h-5 w-5" />
+                  Backup Configuration
+                </h3>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="enable_auto_backup" className="cursor-pointer">
+                    Enable Automatic Backups
+                  </Label>
+                  <Switch
+                    id="enable_auto_backup"
+                    checked={formData.enable_auto_backup ?? true}
+                    onCheckedChange={(checked) => handleChange('enable_auto_backup', checked)}
+                  />
+                </div>
+                {formData.enable_auto_backup && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="backup_frequency_hours">Backup Frequency (Hours)</Label>
+                      <Input
+                        id="backup_frequency_hours"
+                        type="number"
+                        value={formData.backup_frequency_hours || 24}
+                        onChange={(e) => handleChange('backup_frequency_hours', parseInt(e.target.value) || 24)}
+                        min="1"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="backup_retention_days">Backup Retention (Days)</Label>
+                      <Input
+                        id="backup_retention_days"
+                        type="number"
+                        value={formData.backup_retention_days || 7}
+                        onChange={(e) => handleChange('backup_retention_days', parseInt(e.target.value) || 7)}
+                        min="1"
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="backup_storage_path">Backup Storage Path</Label>
+                      <Input
+                        id="backup_storage_path"
+                        value={formData.backup_storage_path || '/app/backups'}
+                        onChange={(e) => handleChange('backup_storage_path', e.target.value)}
+                        placeholder="/app/backups"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Docker/Environment Info (Read-only) */}
+              <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Server className="h-5 w-5" />
+                  Docker & Environment Information
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  These values are read-only and reflect your current Docker environment configuration.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Node.js Version</Label>
+                    <Input
+                      value={formData.node_version || import.meta.env.VITE_NODE_VERSION || 'N/A'}
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>PostgreSQL Version</Label>
+                    <Input
+                      value={formData.postgres_version || import.meta.env.VITE_POSTGRES_VERSION || 'N/A'}
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Docker Compose Version</Label>
+                    <Input
+                      value={formData.docker_compose_version || 'N/A'}
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Redis Enabled</Label>
+                    <Input
+                      value={formData.redis_enabled ? 'Yes' : 'No'}
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+                  {formData.redis_enabled && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Redis Host</Label>
+                        <Input
+                          value={formData.redis_host || import.meta.env.VITE_REDIS_HOST || 'redis'}
+                          disabled
+                          className="bg-muted"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Redis Port</Label>
+                        <Input
+                          value={formData.redis_port?.toString() || import.meta.env.VITE_REDIS_PORT || '6379'}
+                          disabled
+                          className="bg-muted"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </TabsContent>
           </Tabs>

@@ -9,6 +9,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { pool } = require('../config/database');
 const { authenticate, requireSuperAdmin, requireAdmin, requireRole } = require('../middleware/authMiddleware');
 const { getRecommendedPages, previewRecommendations } = require('../services/pageRecommendationService');
+const logger = require('../utils/logger');
 
 // ============================================================================
 // SUPER ADMIN ENDPOINTS
@@ -450,17 +451,17 @@ router.get(
       }
 
       // Enhanced error logging
-      console.error('[API] Recommendations preview error:', error);
-      console.error('[API] Recommendations preview error stack:', error.stack);
-      console.error('[API] Error details:', {
-        message: error.message,
+      logger.error('Recommendations preview error', {
+        error: error.message,
         code: error.code,
+        stack: error.stack,
         detail: error.detail,
         name: error.name,
         query: req.query,
         origin: origin,
         url: req.url,
-        method: req.method
+        method: req.method,
+        requestId: req.requestId,
       });
       
       // Determine error message and code
@@ -506,9 +507,105 @@ router.get(
       };
 
       // Log the error response for debugging
-      console.error('[API] Returning error response:', JSON.stringify(errorResponse, null, 2));
+      logger.error('Returning error response for recommendations preview', {
+        errorCode: errorResponse.error.code,
+        errorMessage: errorResponse.error.message,
+        requestId: req.requestId,
+      });
 
       res.status(500).json(errorResponse);
+    }
+  })
+);
+
+/**
+ * GET /api/system/agencies/me/pages
+ * Get assigned pages for current agency
+ * NOTE: This must come BEFORE /agencies/:agencyId/pages to avoid route matching conflict
+ */
+router.get(
+  '/agencies/me/pages',
+  authenticate,
+  asyncHandler(async (req, res) => {
+    // Look up agencyId from agencyDatabase if missing
+    // This ensures agencyId is always available even if JWT token doesn't have it
+    let agencyId = req.user?.agencyId || null;
+    const agencyDatabase = req.user?.agencyDatabase || null;
+    
+    if (!agencyId && agencyDatabase) {
+      const client = await pool.connect();
+      try {
+        const result = await client.query(
+          'SELECT id FROM public.agencies WHERE database_name = $1 AND is_active = true LIMIT 1',
+          [agencyDatabase]
+        );
+        if (result.rows.length > 0) {
+          agencyId = result.rows[0].id;
+          req.user.agencyId = agencyId; // Update req.user for downstream use
+        }
+      } catch (error) {
+        // Log error but continue - will return 403 below if agencyId is still missing
+        console.error('[PageCatalog] Error looking up agencyId:', error.message);
+      } finally {
+        client.release();
+      }
+    }
+    
+    if (!agencyId) {
+      return res.status(403).json({
+        success: false,
+        error: { message: 'No agency associated with user' }
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT 
+          apa.*,
+          pc.path,
+          pc.title,
+          pc.description,
+          pc.icon,
+          pc.category,
+          pc.base_cost,
+          COALESCE(apa.cost_override, pc.base_cost) as final_cost
+         FROM public.agency_page_assignments apa
+         INNER JOIN public.page_catalog pc ON apa.page_id = pc.id
+         WHERE apa.agency_id = $1 AND apa.status = 'active'
+         ORDER BY pc.category, pc.title`,
+        [agencyId]
+      );
+      
+      // Calculate total cost
+      const totalCost = result.rows.reduce((sum, row) => {
+        return sum + parseFloat(row.final_cost || 0);
+      }, 0);
+
+      res.json({
+        success: true,
+        data: result.rows.map(row => ({
+          id: row.id,
+          page_id: row.page_id,
+          path: row.path,
+          title: row.title,
+          description: row.description,
+          icon: row.icon,
+          category: row.category,
+          base_cost: parseFloat(row.base_cost) || 0,
+          cost_override: row.cost_override ? parseFloat(row.cost_override) : null,
+          final_cost: parseFloat(row.final_cost) || 0,
+          status: row.status,
+          assigned_at: row.assigned_at,
+          metadata: row.metadata || {}
+        })),
+        summary: {
+          total_pages: result.rows.length,
+          total_cost: totalCost
+        }
+      });
+    } finally {
+      client.release();
     }
   })
 );
@@ -901,61 +998,6 @@ router.put(
 // AGENCY ENDPOINTS
 // ============================================================================
 
-/**
- * GET /api/system/agencies/me/pages
- * Get assigned pages for current agency
- */
-router.get(
-  '/agencies/me/pages',
-  authenticate,
-  asyncHandler(async (req, res) => {
-    if (!req.user.agencyId) {
-      return res.status(403).json({
-        success: false,
-        error: { message: 'No agency associated with user' }
-      });
-    }
-
-    const client = await pool.connect();
-    try {
-      const result = await client.query(
-        `SELECT 
-          apa.*,
-          pc.path,
-          pc.title,
-          pc.description,
-          pc.icon,
-          pc.category,
-          pc.base_cost,
-          COALESCE(apa.cost_override, pc.base_cost) as final_cost
-         FROM public.agency_page_assignments apa
-         INNER JOIN public.page_catalog pc ON apa.page_id = pc.id
-         WHERE apa.agency_id = $1 AND apa.status = 'active'
-         ORDER BY pc.category, pc.title`,
-        [req.user.agencyId]
-      );
-
-      res.json({
-        success: true,
-        data: result.rows.map(row => ({
-          id: row.id,
-          page_id: row.page_id,
-          path: row.path,
-          title: row.title,
-          description: row.description,
-          icon: row.icon,
-          category: row.category,
-          base_cost: parseFloat(row.base_cost) || 0,
-          final_cost: parseFloat(row.final_cost) || 0,
-          status: row.status,
-          assigned_at: row.assigned_at
-        }))
-      });
-    } finally {
-      client.release();
-    }
-  })
-);
 
 /**
  * POST /api/system/agencies/me/page-requests

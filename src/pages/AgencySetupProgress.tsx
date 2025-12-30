@@ -287,7 +287,7 @@ export default function AgencySetupProgress() {
                 <Button
                   variant="outline"
                   className="w-full"
-                  onClick={() => navigate('/dashboard')}
+                  onClick={() => navigate('/agency')}
                 >
                   Go to dashboard
                 </Button>

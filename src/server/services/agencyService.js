@@ -819,14 +819,15 @@ async function createAgency(agencyData) {
       [adminUserId]
     );
 
-    // Assign super_admin role
-    // Note: user_roles has UNIQUE(user_id, role, agency_id), so we need to include agency_id (NULL for admin)
+    // Assign admin role for the agency
+    // Note: user_roles has UNIQUE(user_id, role, agency_id), so we need to include agency_id
+    // agency_id should be set to the agency's ID, not NULL (NULL is only for system-level super_admin)
     await agencyDbClient.query(
       `INSERT INTO public.user_roles (
         id, user_id, role, agency_id, assigned_at
-      ) VALUES ($1, $2, $3, NULL, NOW())
+      ) VALUES ($1, $2, $3, $4, NOW())
       ON CONFLICT (user_id, role, agency_id) DO NOTHING`,
-      [userRoleId, adminUserId, 'super_admin']
+      [userRoleId, adminUserId, 'admin', agencyId]
     );
 
       // Commit transaction (all user creation operations complete)

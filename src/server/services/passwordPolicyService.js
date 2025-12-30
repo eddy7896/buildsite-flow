@@ -7,14 +7,43 @@ const bcrypt = require('bcrypt');
 const { getAgencyPool } = require('../utils/poolManager');
 
 /**
+ * Get system-wide password policy from system settings or use defaults
+ */
+async function getSystemPasswordPolicy() {
+  try {
+    const { getSecurityConfig } = require('../utils/systemSettings');
+    const securityConfig = await getSecurityConfig();
+    
+    return {
+      minLength: securityConfig.password.minLength,
+      requireUppercase: securityConfig.password.requireUppercase,
+      requireLowercase: securityConfig.password.requireLowercase,
+      requireNumbers: securityConfig.password.requireNumbers,
+      requireSpecialChars: securityConfig.password.requireSymbols,
+      maxAge: securityConfig.password.expiryDays,
+      minAge: 1, // days (prevent immediate change)
+      historyCount: 5, // Remember last 5 passwords
+      lockoutAttempts: securityConfig.login.maxAttempts,
+      lockoutDuration: securityConfig.login.lockoutDurationMinutes,
+      requireChangeOnFirstLogin: false,
+      preventCommonPasswords: true, // Enhanced common password checking
+    };
+  } catch (error) {
+    // Fall back to defaults if system settings not available
+    console.warn('[PasswordPolicy] Could not load system settings, using defaults:', error.message);
+    return DEFAULT_POLICY;
+  }
+}
+
+/**
  * Default password policy (Enterprise-grade)
  */
 const DEFAULT_POLICY = {
-  minLength: 12, // Increased from 8 to 12 for better security
+  minLength: 8, // Default, can be overridden by system settings
   requireUppercase: true,
   requireLowercase: true,
   requireNumbers: true,
-  requireSpecialChars: true,
+  requireSpecialChars: false, // Default to false, can be enabled in settings
   maxAge: 90, // days
   minAge: 1, // days (prevent immediate change)
   historyCount: 5, // Remember last 5 passwords
@@ -27,10 +56,14 @@ const DEFAULT_POLICY = {
 /**
  * Validate password against policy
  * @param {string} password - Password to validate
- * @param {Object} policy - Password policy (optional, uses default if not provided)
- * @returns {Object} Validation result { valid, errors }
+ * @param {Object} policy - Password policy (optional, uses system settings or default if not provided)
+ * @returns {Promise<Object>} Validation result { valid, errors }
  */
-function validatePassword(password, policy = DEFAULT_POLICY) {
+async function validatePassword(password, policy = null) {
+  // Get policy from system settings if not provided
+  if (!policy) {
+    policy = await getSystemPasswordPolicy();
+  }
   const errors = [];
 
   if (!password || password.length < policy.minLength) {

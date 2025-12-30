@@ -127,12 +127,35 @@ async function authenticate(req, res, next) {
       });
     }
 
+    // If agencyDatabase is present but agencyId is missing, look it up from the database
+    let agencyId = payload.agencyId;
+    if (!agencyId && payload.agencyDatabase) {
+      try {
+        const { pool } = require('../config/database');
+        const client = await pool.connect();
+        try {
+          const result = await client.query(
+            'SELECT id FROM public.agencies WHERE database_name = $1 AND is_active = true LIMIT 1',
+            [payload.agencyDatabase]
+          );
+          if (result.rows.length > 0) {
+            agencyId = result.rows[0].id;
+          }
+        } finally {
+          client.release();
+        }
+      } catch (error) {
+        // Log but don't fail authentication - agencyId lookup is a convenience feature
+        console.warn('[Auth] Failed to lookup agencyId from database:', error.message);
+      }
+    }
+
     // Attach minimal context for downstream handlers
     req.user = {
       id: payload.userId,
       userId: payload.userId, // Alias for compatibility
       email: payload.email,
-      agencyId: payload.agencyId,
+      agencyId: agencyId, // Use looked-up agencyId if available
       agencyDatabase: payload.agencyDatabase,
       exp: payload.exp,
       iat: payload.iat,
@@ -189,6 +212,8 @@ async function getUserRolesFromAgencyDb(userId, agencyDatabase) {
     const client = await agencyPool.connect();
 
     try {
+      // In isolated databases, agency_id may be NULL or set to the agency ID
+      // Query should return all roles for the user (since there's only one agency per database)
       const result = await client.query(
         'SELECT role FROM public.user_roles WHERE user_id = $1',
         [userId]
@@ -290,6 +315,7 @@ function requireAgencyContext(req, res, next) {
 /**
  * Helper: fetch all roles for a user from the MAIN database.
  * Used for system-level operations that don't require agency context.
+ * For super_admin role, only returns roles where agency_id IS NULL (system-level).
  */
 async function getUserRolesFromMainDb(userId) {
   if (!userId) {
@@ -323,8 +349,12 @@ async function getUserRolesFromMainDb(userId) {
         return [];
       }
 
+      // For super_admin role, only return roles where agency_id IS NULL (system-level)
+      // For other roles, return all roles
       const result = await client.query(
-        'SELECT role FROM public.user_roles WHERE user_id = $1',
+        `SELECT role FROM public.user_roles 
+         WHERE user_id = $1 
+         AND (role != 'super_admin' OR agency_id IS NULL)`,
         [userId]
       );
       return result.rows.map((row) => row.role);
@@ -339,7 +369,8 @@ async function getUserRolesFromMainDb(userId) {
 
 /**
  * Require that the authenticated user has the super_admin role
- * Checks both main database and agency database for system-level access
+ * ONLY checks main database for system-level super_admin role.
+ * Super admin users must NOT have agencyDatabase context.
  */
 async function requireSuperAdmin(req, res, next) {
   try {
@@ -355,29 +386,30 @@ async function requireSuperAdmin(req, res, next) {
     }
 
     const userId = req.user.id;
-    let userRoles = [];
 
-    // First, try to get roles from main database (for system-level super_admin)
-    userRoles = await getUserRolesFromMainDb(userId);
-
-    // If no roles in main DB and agencyDatabase exists, check agency DB
-    if (userRoles.length === 0 && req.user.agencyDatabase) {
-      userRoles = await getUserRolesFromAgencyDb(userId, req.user.agencyDatabase);
-    }
+    // Super admin role exists ONLY in main database with agency_id = NULL
+    // Do NOT check agency databases for super_admin role
+    const userRoles = await getUserRolesFromMainDb(userId);
 
     req.user.roles = userRoles;
 
-    // Check if user has super_admin role
+    // Check if user has super_admin role in main database
     if (!userRoles.includes('super_admin')) {
       return res.status(403).json({
         success: false,
         error: {
           code: 'RBAC_INSUFFICIENT_ROLE',
-          message: 'Super admin role required',
+          message: 'Super admin role required (system-level only)',
         },
         message: 'Access denied: Super admin role required',
       });
     }
+
+    // Ensure super admin users do NOT have agency database context
+    // Clear any agency context that might have been set
+    req.user.agencyDatabase = null;
+    req.user.agencyId = null;
+    req.agencyDatabase = null;
 
     next();
   } catch (error) {
@@ -428,8 +460,9 @@ function requireRole(requiredRoles, allowHigherRoles = true) {
         // Check main database first for system-level roles
         userRoles = await getUserRolesFromMainDb(userId);
         
-        // If no roles in main DB and agencyDatabase exists, check agency DB
-        if (userRoles.length === 0 && agencyDatabase) {
+        // For super_admin, ONLY check main database (no agency fallback)
+        // For other system roles (admin, ceo), allow agency database fallback
+        if (userRoles.length === 0 && agencyDatabase && !roles.includes('super_admin')) {
           userRoles = await getUserRolesFromAgencyDb(userId, agencyDatabase);
         }
       } else {

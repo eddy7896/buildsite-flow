@@ -8,6 +8,7 @@ const { createHandler } = require('graphql-http/lib/use/express');
 const { execute, subscribe } = require('graphql');
 const schema = require('../graphql/schema');
 const { authenticate, requireAgencyContext } = require('../middleware/authMiddleware');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 
@@ -27,7 +28,12 @@ router.post(
       agencyDatabase: req.raw.user.agencyDatabase,
     }),
     formatError: (error) => {
-      console.error('[GraphQL] Error:', error);
+      logger.error('GraphQL error', {
+        error: error.message,
+        locations: error.locations,
+        path: error.path,
+        stack: error.stack,
+      });
       return {
         message: error.message,
         locations: error.locations,

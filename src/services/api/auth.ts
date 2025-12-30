@@ -169,34 +169,62 @@ export class AuthService extends BaseApiService {
 
   static setupAuthStateListener(callback: (event: string, session: any) => void) {
     // Check for token on storage change
-    const handleStorageChange = (e: StorageEvent | null) => {
+    const handleStorageChange = (e: Event | null) => {
       try {
-        // Safely access storage event properties with additional checks
+        // Safely access storage event properties with extensive checks
         // Ensure e is a valid StorageEvent object with the expected properties
-        if (e && 
-            typeof e === 'object' && 
-            e !== null && 
-            'key' in e && 
-            e.key === 'auth_token') {
-          // Check if newValue exists and is not null/undefined
-          const storageEvent = e as StorageEvent;
-          if (storageEvent && 'newValue' in storageEvent) {
-            const newValue = storageEvent.newValue;
-            if (newValue !== undefined && newValue !== null && newValue !== '') {
-              const token = newValue || localStorage.getItem('auth_token');
-              if (token) {
-                callback('SIGNED_IN', { user: { id: token } });
-              } else {
-                callback('SIGNED_OUT', null);
-              }
-              return;
-            } else if (newValue === null) {
-              // Token was removed
+        if (!e || typeof e !== 'object' || e === null) {
+          // Invalid event, fallback to localStorage check
+          const token = localStorage.getItem('auth_token');
+          if (token) {
+            callback('SIGNED_IN', { user: { id: token } });
+          } else {
+            callback('SIGNED_OUT', null);
+          }
+          return;
+        }
+
+        // Type guard: check if it's a StorageEvent
+        if (!('key' in e) || !('newValue' in e)) {
+          // Not a StorageEvent, fallback to localStorage check
+          const token = localStorage.getItem('auth_token');
+          if (token) {
+            callback('SIGNED_IN', { user: { id: token } });
+          } else {
+            callback('SIGNED_OUT', null);
+          }
+          return;
+        }
+
+        const storageEvent = e as StorageEvent;
+        
+        // Only process if it's the auth_token key
+        if (storageEvent.key !== 'auth_token') {
+          return;
+        }
+
+        // Safely access newValue with multiple checks
+        if ('newValue' in storageEvent) {
+          const newValue = storageEvent.newValue;
+          
+          // Handle null, undefined, or empty string
+          if (newValue === null) {
+            // Token was removed
+            callback('SIGNED_OUT', null);
+            return;
+          }
+          
+          if (newValue !== undefined && newValue !== null && newValue !== '') {
+            const token = newValue || localStorage.getItem('auth_token');
+            if (token) {
+              callback('SIGNED_IN', { user: { id: token } });
+            } else {
               callback('SIGNED_OUT', null);
-              return;
             }
+            return;
           }
         }
+        
         // Fallback: check localStorage directly
         const token = localStorage.getItem('auth_token');
         if (token) {
@@ -207,10 +235,15 @@ export class AuthService extends BaseApiService {
       } catch (error) {
         // If any error occurs, fallback to checking localStorage directly
         logWarn('Error handling storage event:', error);
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          callback('SIGNED_IN', { user: { id: token } });
-        } else {
+        try {
+          const token = localStorage.getItem('auth_token');
+          if (token) {
+            callback('SIGNED_IN', { user: { id: token } });
+          } else {
+            callback('SIGNED_OUT', null);
+          }
+        } catch (localStorageError) {
+          // Even localStorage access failed, just sign out
           callback('SIGNED_OUT', null);
         }
       }

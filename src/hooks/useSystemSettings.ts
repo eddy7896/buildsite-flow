@@ -1,20 +1,44 @@
 import { useState, useEffect } from 'react';
 import { fetchSystemSettings, type SystemSettings } from '@/services/system-settings';
+import { useAuth } from '@/hooks/useAuth';
 
 /**
  * Hook to fetch and apply system settings throughout the application
  * This hook can be used to apply SEO, analytics, branding, etc.
+ * Only fetches settings for super admin users.
  */
 export const useSystemSettings = () => {
+  const { isSystemSuperAdmin, userRole, loading: authLoading, user } = useAuth();
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const loadSettings = async () => {
+      // Wait for auth to finish loading
+      if (authLoading) {
+        setLoading(true);
+        return;
+      }
+
+      // Only fetch system settings for super admins
+      // Agency admins and other users don't have access to system settings
+      // Skip if:
+      // 1. No user is logged in
+      // 2. User is not a system super admin
+      // 3. User role is not super_admin
+      // 4. User role is null/undefined (not logged in or still loading)
+      if (!user || !isSystemSuperAdmin || userRole !== 'super_admin' || !userRole) {
+        setLoading(false);
+        setSettings(null);
+        setError(null);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
+        
         const data = await fetchSystemSettings();
         setSettings(data);
         
@@ -216,6 +240,7 @@ export const useSystemSettings = () => {
         }
         
       } catch (err: any) {
+        // Log error for super admins (they should have access)
         console.error('[useSystemSettings] Error loading system settings:', err);
         setError(err);
       } finally {
@@ -224,7 +249,7 @@ export const useSystemSettings = () => {
     };
     
     loadSettings();
-  }, []);
+  }, [isSystemSuperAdmin, userRole, authLoading, user]);
 
   return { settings, loading, error };
 };

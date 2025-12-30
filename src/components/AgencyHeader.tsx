@@ -276,7 +276,8 @@ export const AgencyHeader = () => {
     }
   };
 
-  const isDark = resolvedTheme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  // Determine if dark mode is active
+  const isDark = resolvedTheme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   // Mobile Layout: Clean, app-like header with clear hierarchy
   if (isMobile) {
@@ -439,6 +440,29 @@ export const AgencyHeader = () => {
               </kbd>
             </Button>
 
+            {/* Theme Toggle - Mobile */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 w-9 p-0 flex-shrink-0"
+                  onClick={handleThemeToggle}
+                  aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                  {isDark ? (
+                    <Sun className="h-4 w-4" />
+                  ) : (
+                    <Moon className="h-4 w-4" />
+                  )}
+                  <span className="sr-only">Toggle theme</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{isDark ? 'Switch to light mode' : 'Switch to dark mode'}</p>
+              </TooltipContent>
+            </Tooltip>
+
             {/* Notifications */}
             <div className="flex-shrink-0">
               <NotificationCenter />
@@ -535,6 +559,29 @@ export const AgencyHeader = () => {
             </TooltipTrigger>
             <TooltipContent>
               <p>Search (⌘K)</p>
+            </TooltipContent>
+          </Tooltip>
+
+          {/* Theme Toggle */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 flex-shrink-0"
+                onClick={handleThemeToggle}
+                aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {isDark ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
+                <span className="sr-only">Toggle theme</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{isDark ? 'Switch to light mode' : 'Switch to dark mode'}</p>
             </TooltipContent>
           </Tooltip>
 

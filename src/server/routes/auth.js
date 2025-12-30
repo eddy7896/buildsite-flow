@@ -11,6 +11,7 @@ const { findUserAcrossAgencies, generateToken, formatUserResponse } = require('.
 const passwordPolicyService = require('../services/passwordPolicyService');
 const { getAgencyPool } = require('../utils/poolManager');
 const { authLimiter, passwordResetLimiter, twoFactorLimiter } = require('../middleware/rateLimiter');
+const logger = require('../utils/logger');
 
 /**
  * POST /api/auth/login
@@ -48,12 +49,13 @@ router.post('/login',
   const userAgent = req.headers['user-agent'] || 'unknown';
 
   try {
-    console.log('[Auth] Login attempt:', {
+    logger.info('Login attempt', {
       email,
       hasTwoFactorToken: !!twoFactorToken,
       userAgent,
       origin: req.headers.origin,
       ip: ipAddress,
+      requestId: req.requestId,
     });
 
     // First, try to find user (this will check password)
@@ -170,7 +172,10 @@ router.post('/login',
         recoveryCodes = twoFactorResult.rows[0]?.recovery_codes || null;
       } else {
         // Columns don't exist, 2FA is not available - skip 2FA check
-        console.log('[Auth] 2FA columns not found in database, skipping 2FA check');
+        logger.debug('2FA columns not found in database, skipping 2FA check', {
+          agencyDatabase: user.agencyDatabase,
+          requestId: req.requestId,
+        });
       }
 
       // If 2FA is enabled, verify token
@@ -253,7 +258,13 @@ router.post('/login',
       // Don't close pool - it's managed by pool manager
     }
   } catch (error) {
-    console.error('[API] Login error:', error);
+    logger.error('Login error', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+      email,
+      requestId: req.requestId,
+    });
     res.status(500).json({
       success: false,
       error: error.message || 'Login failed',

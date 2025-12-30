@@ -12,6 +12,7 @@ const { isRedisAvailable, getRedisClient } = require('../config/redis');
 const { getStats } = require('../services/cacheService');
 const os = require('os');
 const fs = require('fs').promises;
+const logger = require('../utils/logger');
 
 // Cache health data for 5 seconds to reduce database load
 let healthCache = null;
@@ -97,14 +98,22 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
       status: 'error',
       error: dbHealth.reason?.message || 'Unknown error',
     };
-    console.error('[System Health] Database health check failed:', dbHealth.reason);
+    logger.error('Database health check failed', {
+      error: dbHealth.reason?.message,
+      code: dbHealth.reason?.code,
+      requestId: req.requestId,
+    });
   }
 
   // Process Detailed Database Metrics
   if (dbDetailedMetrics.status === 'fulfilled') {
     health.database = dbDetailedMetrics.value;
   } else {
-    console.error('[System Health] Detailed database metrics failed:', dbDetailedMetrics.reason);
+    logger.error('Detailed database metrics failed', {
+      error: dbDetailedMetrics.reason?.message,
+      code: dbDetailedMetrics.reason?.code,
+      requestId: req.requestId,
+    });
     health.database = { error: dbDetailedMetrics.reason?.message || 'Failed to get detailed metrics' };
   }
 
@@ -128,7 +137,11 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
     health.system = systemResources.value || {};
     health.system.disk = diskUsage.status === 'fulfilled' ? diskUsage.value : null;
   } else {
-    console.error('[System Health] System resources check failed:', systemResources.reason);
+    logger.error('System resources check failed', {
+      error: systemResources.reason?.message,
+      code: systemResources.reason?.code,
+      requestId: req.requestId,
+    });
     health.system = {
       error: systemResources.reason?.message || 'Unknown error',
     };
@@ -138,7 +151,11 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
   if (performanceMetrics.status === 'fulfilled') {
     health.performance = performanceMetrics.value || {};
   } else {
-    console.error('[System Health] Performance metrics check failed:', performanceMetrics.reason);
+    logger.error('Performance metrics check failed', {
+      error: performanceMetrics.reason?.message,
+      code: performanceMetrics.reason?.code,
+      requestId: req.requestId,
+    });
     health.performance = {
       error: performanceMetrics.reason?.message || 'Unknown error',
     };
@@ -149,13 +166,21 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
     const trends = await getHealthTrends();
     health.trends = trends;
   } catch (error) {
-    console.error('Error fetching trends:', error);
+    logger.error('Error fetching trends', {
+      error: error.message,
+      code: error.code,
+      requestId: req.requestId,
+    });
     health.trends = { available: false, error: error.message };
   }
 
   // Store health metrics in database (async, don't wait)
   storeHealthMetrics(health).catch(err => {
-    console.error('Error storing health metrics:', err);
+      logger.error('Error storing health metrics', {
+        error: err.message,
+        code: err.code,
+        requestId: req.requestId,
+      });
   });
 
     // Update cache
@@ -167,9 +192,12 @@ router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandle
       data: health,
     });
   } catch (error) {
-    console.error('[System Health] Error in health check:', error);
-    console.error('[System Health] Error stack:', error.stack);
-    console.error('[System Health] Error code:', error.code);
+    logger.error('Error in health check', {
+      error: error.message,
+      stack: error.stack,
+      code: error.code,
+      requestId: req.requestId,
+    });
     // Return partial health data even on error
     // Set CORS headers even on error
     const origin = req.headers.origin;
@@ -240,7 +268,11 @@ async function getDatabaseHealth() {
       },
     };
   } catch (error) {
-    console.error('[System Health] Error in getDatabaseHealth:', error);
+    logger.error('Error in getDatabaseHealth', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+    });
     return {
       status: 'error',
       error: error.message,
@@ -346,7 +378,11 @@ async function getDetailedDatabaseMetrics() {
 
     return metrics;
   } catch (error) {
-    console.error('Error getting detailed database metrics:', error);
+    logger.error('Error getting detailed database metrics', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+    });
     return { error: error.message };
   }
 }
@@ -520,7 +556,11 @@ async function getHealthTrends() {
       hourly: trends.rows,
     };
   } catch (error) {
-    console.error('Error getting trends:', error);
+    logger.error('Error getting trends', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+    });
     return { available: false, error: error.message };
   }
 }
@@ -598,7 +638,11 @@ async function storeHealthMetrics(health) {
     ]);
   } catch (error) {
     // Silently fail - don't break health endpoint if storage fails
-    console.error('Error storing health metrics:', error);
+    logger.error('Error storing health metrics', {
+      error: error.message,
+      code: error.code,
+      stack: error.stack,
+    });
   }
 }
 

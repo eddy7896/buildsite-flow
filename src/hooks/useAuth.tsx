@@ -44,6 +44,7 @@ interface AuthContextType {
   profile: Profile | null;
   userRole: AppRole | null;
   loading: boolean;
+  isSystemSuperAdmin: boolean; // Flag to identify system-level super admin
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -58,6 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isSystemSuperAdmin, setIsSystemSuperAdmin] = useState(false);
 
   // Helper to validate token format
   const isValidTokenFormat = (token: string): boolean => {
@@ -118,6 +120,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const storedRole = localStorage.getItem('user_role') as AppRole | null;
           if (storedRole) {
             setUserRole(storedRole);
+            // Check if stored role is super_admin and user has no agency context
+            if (storedRole === 'super_admin' && !localStorage.getItem('agency_database')) {
+              setIsSystemSuperAdmin(true);
+            }
           } else if (decoded.userId) {
             // Fallback to client-side DB lookup for legacy/mock flows
             fetchUserProfile(decoded.userId);
@@ -268,22 +274,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(result.user as any);
 
       // Check if user is super admin - super admins don't need agency profiles
-      const isSuperAdmin = ((result.user as any).roles || []).some((r: any) => r.role === 'super_admin' || r === 'super_admin');
+      const serverRoles = ((result.user as any).roles || []) as Array<{ role: AppRole } | AppRole>;
+      const hasSuperAdminRole = serverRoles.some((r: any) => {
+        const role = typeof r === 'string' ? r : r.role;
+        return role === 'super_admin';
+      });
+      
+      // Check if this is a system-level super admin (no agency database)
+      // IMPORTANT: Only system-level super admins (with super_admin role AND no agency database)
+      // should be treated as super_admin. Agency admins should NOT be treated as super_admin.
+      const userAgency = (result.user as any).agency;
+      const hasAgencyDatabase = !!(userAgency && userAgency.databaseName);
+      const isSystemLevelSuperAdmin = hasSuperAdminRole && !hasAgencyDatabase;
+      setIsSystemSuperAdmin(isSystemLevelSuperAdmin);
+      
+      // Clear agency context ONLY for system-level super admin
+      // Agency admins should keep their agency context
+      if (isSystemLevelSuperAdmin) {
+        localStorage.removeItem('agency_database');
+        localStorage.removeItem('agency_id');
+      } else if (userAgency) {
+        // Ensure agency context is set for agency users (including agency admins)
+        if (userAgency.databaseName) {
+          localStorage.setItem('agency_database', userAgency.databaseName);
+        }
+        if (userAgency.id) {
+          localStorage.setItem('agency_id', userAgency.id);
+        }
+      }
       
       // If profile came back from server, use it directly
       const serverProfile = (result.user as any).profile;
       if (serverProfile) {
         setProfile(serverProfile as any);
-      } else if (!isSuperAdmin) {
-        // Only fetch profile for non-super-admin users (super admins use main DB, not agency DB)
+      } else if (!isSystemLevelSuperAdmin) {
+        // Only fetch profile for non-system-super-admin users (system super admins use main DB, not agency DB)
         fetchUserProfile(result.user.id);
       } else {
-        // Super admin - set profile to null or minimal profile
+        // System-level super admin - set profile to null or minimal profile
         setProfile(null);
       }
 
-      // Prefer roles returned by the server (agency DB) to avoid main-DB mismatch
-      const serverRoles = ((result.user as any).roles || []) as Array<{ role: AppRole }>;
+      // Prefer roles returned by the server
       if (serverRoles.length > 0) {
         // Same hierarchy rules as fetchUserRole
         const roleHierarchy: Record<AppRole, number> = {
@@ -311,13 +343,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           'intern': 22
         };
 
-        const highestRole = serverRoles
-          .map(r => r.role)
-          .reduce((highest, current) => {
-            const currentPriority = roleHierarchy[current] || 99;
-            const highestPriority = roleHierarchy[highest] || 99;
-            return currentPriority < highestPriority ? current : highest;
-          });
+        const roleArray = serverRoles.map(r => typeof r === 'string' ? r : r.role);
+        const highestRole = roleArray.reduce((highest, current) => {
+          const currentPriority = roleHierarchy[current] || 99;
+          const highestPriority = roleHierarchy[highest] || 99;
+          return currentPriority < highestPriority ? current : highest;
+        });
 
         setUserRole(highestRole);
         // Persist role for future reloads so we don't have to guess
@@ -353,6 +384,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null);
       setProfile(null);
       setUserRole(null);
+      setIsSystemSuperAdmin(false);
       
       toast({
         title: "Logged out",
@@ -373,6 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     userRole,
     loading,
+    isSystemSuperAdmin,
     signUp,
     signIn,
     signOut,

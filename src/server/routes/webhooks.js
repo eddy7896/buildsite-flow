@@ -8,8 +8,9 @@ const router = express.Router();
 const { authenticate, requireAgencyContext } = require('../middleware/authMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
 const webhookService = require('../services/webhookService');
-const { parseDatabaseUrl } = require('../utils/poolManager');
-const { Pool } = require('pg');
+const { queryMany } = require('../utils/dbQuery');
+const { success, databaseError, send } = require('../utils/responseHelper');
+const logger = require('../utils/logger');
 
 async function getAgencyConnection(agencyDatabase) {
   const { host, port, user, password } = parseDatabaseUrl();
@@ -51,24 +52,31 @@ router.get('/', authenticate, requireAgencyContext, asyncHandler(async (req, res
   const agencyDatabase = req.user.agencyDatabase;
   const agencyId = req.user.agencyId;
 
-  const client = await getAgencyConnection(agencyDatabase);
   try {
-    const result = await client.query(
+    // Use queryMany helper - automatic connection management via agency pool
+    const webhooks = await queryMany(
       `SELECT id, agency_id, event_type, url, is_active, created_at, updated_at
        FROM public.webhooks 
        WHERE agency_id = $1 
        ORDER BY created_at DESC`,
-      [agencyId]
+      [agencyId],
+      { agencyDatabase }
     );
-    res.json({
-      success: true,
-      data: result.rows,
+
+    return send(res, success(
+      webhooks,
+      'Webhooks fetched successfully',
+      { requestId: req.requestId }
+    ));
+  } catch (error) {
+    logger.error('Error fetching webhooks', {
+      agencyId,
+      agencyDatabase,
+      error: error.message,
+      code: error.code,
+      requestId: req.requestId,
     });
-  } finally {
-    client.release();
-    if (client.pool) {
-      await client.pool.end();
-    }
+    return send(res, databaseError(error, 'Fetch webhooks'));
   }
 }));
 
