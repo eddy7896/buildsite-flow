@@ -64,6 +64,8 @@ import {
   Shield,
   Cog,
   Eye,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -89,6 +91,8 @@ import { canAccessRouteSync } from '@/utils/routePermissions';
 import { getAccessiblePagePaths } from '@/utils/agencyPageAccess';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useThemeSync } from '@/hooks/useThemeSync';
+import { Button } from '@/components/ui/button';
 
 // Icon mapping from string names to icon components
 const iconMap: Record<string, any> = {
@@ -185,6 +189,20 @@ export function AppSidebar() {
   const currentPath = location.pathname;
   const isMobile = useIsMobile();
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
+  const { theme, resolvedTheme, setTheme } = useThemeSync();
+  
+  // Determine if dark mode is active
+  const isDark = resolvedTheme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  
+  // Theme toggle handler
+  const handleThemeToggle = () => {
+    const currentResolved = resolvedTheme || theme;
+    if (currentResolved === 'dark') {
+      setTheme('light');
+    } else {
+      setTheme('dark');
+    }
+  };
   
   // Get accessible pages for agency (for non-super-admin users)
   // MUST be declared before any early returns to follow Rules of Hooks
@@ -600,6 +618,41 @@ export function AppSidebar() {
               </SidebarFooter>
             </>
           )}
+
+          {/* Theme Toggle */}
+          <SidebarSeparator className="mx-2 sm:mx-4" />
+          <SidebarFooter className="p-2 sm:p-3 border-t border-sidebar-border bg-muted/50 flex-shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "w-full justify-start gap-2 h-9",
+                    collapsed && !isMobile && "w-9 px-0 justify-center"
+                  )}
+                  onClick={handleThemeToggle}
+                  aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                >
+                  {isDark ? (
+                    <Sun className="h-4 w-4 flex-shrink-0" />
+                  ) : (
+                    <Moon className="h-4 w-4 flex-shrink-0" />
+                  )}
+                  {(!collapsed || isMobile) && (
+                    <span className="text-xs sm:text-sm font-medium">
+                      {isDark ? 'Light Mode' : 'Dark Mode'}
+                    </span>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              {collapsed && !isMobile && (
+                <TooltipContent side="right" className="ml-2">
+                  <p>{isDark ? 'Switch to light mode' : 'Switch to dark mode'}</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </SidebarFooter>
 
           {/* User Info Footer (when expanded) */}
           {(!collapsed || isMobile) && profile && (

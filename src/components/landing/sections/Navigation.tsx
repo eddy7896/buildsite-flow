@@ -52,7 +52,7 @@ export default function Navigation() {
             <button
               key={item.href}
               onClick={() => handleNavClick(item.href)}
-              className="relative px-4 py-2 text-[14px] text-[#888] hover:text-white transition-colors duration-200"
+              className="relative px-4 py-2 text-[14px] text-[#888] hover:text-zinc-900 hover:bg-zinc-100 dark:hover:text-white dark:hover:bg-white/10 transition-colors duration-200 rounded-lg"
               style={{ transitionDelay: `${i * 30}ms` }}
             >
               {item.label}
@@ -66,7 +66,7 @@ export default function Navigation() {
           </div>
 
         <button 
-          className="md:hidden p-2 -mr-2 text-[#888] hover:text-white transition-colors"
+          className="md:hidden p-2 -mr-2 text-[#888] hover:text-zinc-900 hover:bg-zinc-100 dark:hover:text-white dark:hover:bg-white/10 transition-colors rounded-lg"
           onClick={() => setMobileOpen(!mobileOpen)}
           aria-label="Toggle menu"
         >
@@ -93,7 +93,7 @@ export default function Navigation() {
               key={item.href}
               onClick={() => handleNavClick(item.href)}
               className={cn(
-                'block w-full text-left py-3 text-[#888] hover:text-white transition-all duration-300',
+                'block w-full text-left py-3 text-[#888] hover:text-white hover:bg-white/10 transition-all duration-300 rounded-lg px-2',
                 mobileOpen ? 'translate-x-0 opacity-100' : '-translate-x-4 opacity-0'
               )}
               style={{ transitionDelay: mobileOpen ? `${i * 50}ms` : '0ms' }}
@@ -107,7 +107,7 @@ export default function Navigation() {
             )}
             style={{ transitionDelay: mobileOpen ? '150ms' : '0ms' }}
             >
-              <Link to="/auth" className="block text-[#888] py-2">Sign in</Link>
+              <Link to="/auth" className="block text-[#888] hover:text-white hover:bg-white/10 py-2 px-2 rounded-lg transition-all duration-300">Sign in</Link>
               <Link 
                 to="/auth" 
                 className="block w-full py-2.5 text-center font-medium bg-white text-black rounded-lg"

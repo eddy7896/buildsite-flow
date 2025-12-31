@@ -22,6 +22,7 @@ export const useFinancialData = (user: any, profile: any) => {
     jobs,
     loading: jobsLoading,
     fetchJobs,
+    setJobs,
   } = useJobs(agencyId);
 
   const {
@@ -34,12 +35,14 @@ export const useFinancialData = (user: any, profile: any) => {
     chartOfAccounts,
     loading: accountsLoading,
     fetchChartOfAccounts,
+    setChartOfAccounts,
   } = useChartOfAccounts(agencyId);
 
   const {
     journalEntries,
     loading: entriesLoading,
     fetchJournalEntries,
+    setJournalEntries,
   } = useJournalEntries(agencyId);
 
   const {

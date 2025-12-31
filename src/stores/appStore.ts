@@ -46,6 +46,8 @@ interface AppState {
 
 const initialState = {
   sidebarCollapsed: false,
+  // Default to 'system' to respect user's OS preference on first visit
+  // If user has manually set a preference, Zustand persist will load it
   theme: 'system' as const,
   loading: false,
   notifications: [],

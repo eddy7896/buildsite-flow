@@ -58,7 +58,16 @@ const AppContent = () => {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <ThemeProvider 
+      attribute="class" 
+      defaultTheme="system" 
+      enableSystem
+      disableTransitionOnChange={false}
+      // enableSystem allows the theme to respect user's OS preference
+      // If OS is light mode -> website shows light mode
+      // If OS is dark mode -> website shows dark mode
+      // User can override by clicking theme toggle
+    >
       <TooltipProvider>
         <Toaster />
         <Sonner />

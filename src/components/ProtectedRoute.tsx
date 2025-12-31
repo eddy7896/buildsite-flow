@@ -14,6 +14,27 @@ interface ProtectedRouteProps {
   requiredRole?: AppRole | AppRole[]; // Optional: if not provided, will auto-detect from routePermissions
 }
 
+/**
+ * Essential pages that should always be accessible regardless of subscription plan.
+ * These are core system pages that all agencies need to function.
+ */
+const ESSENTIAL_PAGES = [
+  '/dashboard',
+  '/settings',
+  '/my-profile',
+  '/agency',
+  '/page-requests',
+  '/agency-setup',
+  '/agency-setup-progress',
+];
+
+/**
+ * Check if a path is an essential page that should always be accessible
+ */
+const isEssentialPage = (pathname: string): boolean => {
+  return ESSENTIAL_PAGES.includes(pathname);
+};
+
 const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   const { user, userRole, profile, loading } = useAuth();
   const location = useLocation();
@@ -26,7 +47,10 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
     // Only system-level super admins (no agency database) should skip page access check
     const isSystemSuperAdminCheck = userRole === 'super_admin' && !localStorage.getItem('agency_database');
     
-    if (userRole && !isSystemSuperAdminCheck && user) {
+    // Essential pages should always be accessible regardless of subscription
+    const isEssential = isEssentialPage(location.pathname);
+    
+    if (userRole && !isSystemSuperAdminCheck && user && !isEssential) {
       hasPageAccess(location.pathname).then(hasAccess => {
         setHasPageAccessResult(hasAccess);
         setPageAccessChecked(true);
@@ -59,13 +83,15 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   
   if (!isSystemSuperAdmin) {
     const agencyDatabase = localStorage.getItem('agency_database');
-    if (!agencyDatabase && location.pathname !== '/agency-setup' && location.pathname !== '/agency-setup-progress') {
+    const isSetupPage = location.pathname === '/agency-setup' || location.pathname === '/agency-setup-progress';
+    if (!agencyDatabase && !isSetupPage) {
       // If no agency database and not on setup pages, redirect to setup
       return <Navigate to="/agency-setup-progress" replace />;
     }
   } else {
     // System-level super admin - redirect away from agency setup pages
-    if (location.pathname === '/agency-setup-progress' || location.pathname === '/agency-setup') {
+    const isSetupPage = location.pathname === '/agency-setup-progress' || location.pathname === '/agency-setup';
+    if (isSetupPage) {
       return <Navigate to="/super-admin" replace />;
     }
   }
@@ -98,8 +124,10 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
 
   // Check page access first (for non-system-super-admin)
   // Only system-level super admins (no agency database) should skip page access check
+  // Essential pages should always be accessible regardless of subscription
   // Note: isSystemSuperAdmin is already declared above at line 68
-  if (userRole && !isSystemSuperAdmin && hasPageAccessResult === false) {
+  const isEssential = isEssentialPage(location.pathname);
+  if (userRole && !isSystemSuperAdmin && !isEssential && hasPageAccessResult === false) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">
         <Card className="w-full max-w-md">
