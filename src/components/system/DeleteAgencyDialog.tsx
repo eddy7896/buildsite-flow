@@ -101,13 +101,13 @@ export function DeleteAgencyDialog({
                   <span className="font-medium">Domain:</span> {agency.domain || 'Not set'}
                 </div>
                 <div>
-                  <span className="font-medium">Users:</span> {agency.user_count}
+                  <span className="font-medium">Users:</span> {agency.user_count ?? 0}
                 </div>
                 <div>
-                  <span className="font-medium">Projects:</span> {agency.project_count}
+                  <span className="font-medium">Projects:</span> {agency.project_count ?? 0}
                 </div>
                 <div>
-                  <span className="font-medium">Invoices:</span> {agency.invoice_count}
+                  <span className="font-medium">Invoices:</span> {agency.invoice_count ?? 0}
                 </div>
               </div>
             </div>

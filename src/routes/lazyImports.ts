@@ -13,6 +13,7 @@ export const SignupSuccess = React.lazy(() => import("../pages/SignupSuccess"));
 export const ForgotPassword = React.lazy(() => import("../pages/ForgotPassword"));
 export const NotFound = React.lazy(() => import("../pages/NotFound"));
 export const OnboardingWizard = React.lazy(() => import("../components/onboarding/OnboardingWizard"));
+export const SuperAdminSetup = React.lazy(() => import("../pages/SuperAdminSetup"));
 
 // Static Pages
 export const ContactPage = React.lazy(() => import("../pages/StaticPages").then(m => ({ default: m.ContactPage })));
@@ -39,8 +40,7 @@ export const AgencyDashboard = React.lazy(() => import("../pages/AgencyDashboard
 export const AgencyAdminDashboard = React.lazy(() => import("../pages/AgencyAdminDashboard"));
 export const AgencySetup = React.lazy(() => import("../pages/AgencySetup"));
 export const AgencySetupProgress = React.lazy(() => import("../pages/AgencySetupProgress"));
-export const SuperAdminDashboard = React.lazy(() => import("../pages/SuperAdminDashboard"));
-export const SuperAdminDashboardNew = React.lazy(() => import("../pages/super-admin/SuperAdminDashboard"));
+export const SuperAdminDashboard = React.lazy(() => import("../pages/super-admin/SuperAdminDashboard"));
 export const AgencyManagement = React.lazy(() => import("../pages/super-admin/AgencyManagement"));
 export const AgencyDataViewer = React.lazy(() => import("../pages/super-admin/AgencyDataViewer"));
 export const SystemSettings = React.lazy(() => import("../pages/super-admin/SystemSettings"));
@@ -53,6 +53,7 @@ export const SystemHealth = React.lazy(() => import("../pages/SystemHealth"));
 
 // Employee Management
 export const EmployeeManagement = React.lazy(() => import("../pages/EmployeeManagement"));
+export const MyTeam = React.lazy(() => import("../pages/MyTeam"));
 export const CreateEmployee = React.lazy(() => import("../pages/CreateEmployee"));
 export const AssignUserRoles = React.lazy(() => import("../pages/AssignUserRoles"));
 export const EmployeeProjects = React.lazy(() => import("../pages/EmployeeProjects"));

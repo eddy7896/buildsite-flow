@@ -9,6 +9,8 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const { pool } = require('../config/database');
 const { authenticate, requireSuperAdmin } = require('../middleware/authMiddleware');
 const { getAgencyPool } = require('../utils/poolManager');
+const { clearMaintenanceCache } = require('../middleware/maintenanceMode');
+const logger = require('../utils/logger');
 
 /**
  * GET /api/super-admin/agencies
@@ -21,6 +23,7 @@ router.get('/agencies', authenticate, requireSuperAdmin, asyncHandler(async (req
       SELECT 
         id, name, domain, database_name, 
         subscription_plan, is_active, 
+        maintenance_mode, maintenance_message,
         created_at, updated_at
       FROM public.agencies
       ORDER BY created_at DESC
@@ -48,6 +51,7 @@ router.get('/agencies/:id', authenticate, requireSuperAdmin, asyncHandler(async 
       SELECT 
         id, name, domain, database_name, 
         subscription_plan, is_active, 
+        maintenance_mode, maintenance_message,
         created_at, updated_at
       FROM public.agencies
       WHERE id = $1
@@ -316,6 +320,91 @@ router.get('/system/metrics', authenticate, requireSuperAdmin, asyncHandler(asyn
         activeAgencies: parseInt(activeAgenciesCount.rows[0].count) || 0,
         totalUsers: parseInt(totalUsersCount.rows[0].count) || 0,
       },
+    });
+  } finally {
+    client.release();
+  }
+}));
+
+/**
+ * PUT /api/super-admin/agencies/:id/maintenance
+ * Toggle maintenance mode for any agency (super admin only)
+ * Updates agencies table in main database (takes precedence over agency_settings)
+ */
+router.put('/agencies/:id/maintenance', authenticate, requireSuperAdmin, asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { maintenance_mode, maintenance_message } = req.body;
+  const client = await pool.connect();
+  
+  try {
+    // Validate input
+    if (typeof maintenance_mode !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request',
+        message: 'maintenance_mode must be a boolean',
+      });
+    }
+
+    // Check if agency exists
+    const agencyResult = await client.query(
+      'SELECT id, database_name FROM public.agencies WHERE id = $1',
+      [id]
+    );
+    
+    if (agencyResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'AGENCY_NOT_FOUND', message: 'Agency not found' },
+        message: 'Agency not found',
+      });
+    }
+
+    const databaseName = agencyResult.rows[0].database_name;
+
+    // Update agencies table in main database (super admin override)
+    await client.query(`
+      UPDATE public.agencies
+      SET 
+        maintenance_mode = $1,
+        maintenance_message = $2,
+        updated_at = NOW()
+      WHERE id = $3
+    `, [maintenance_mode, maintenance_message || null, id]);
+
+    // Clear cache
+    if (databaseName) {
+      clearMaintenanceCache(databaseName);
+    }
+
+    logger.info('Super admin updated agency maintenance mode', {
+      agencyId: id,
+      agencyDatabase: databaseName,
+      maintenance_mode,
+      userId: req.user?.id,
+      requestId: req.requestId,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        agency_id: id,
+        maintenance_mode,
+        maintenance_message: maintenance_message || null,
+      },
+      message: `Maintenance mode ${maintenance_mode ? 'enabled' : 'disabled'} for agency successfully`,
+    });
+  } catch (error) {
+    logger.error('Error updating agency maintenance mode', {
+      error: error.message,
+      code: error.code,
+      agencyId: id,
+      requestId: req.requestId,
+    });
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to update maintenance mode',
+      message: 'Failed to update maintenance mode',
     });
   } finally {
     client.release();

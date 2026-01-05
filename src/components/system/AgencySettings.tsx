@@ -246,12 +246,12 @@ export function AgencySettings({ agencies, onRefresh }: AgencySettingsProps) {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="capitalize">
-                            {agency.subscription_plan}
+                            {agency.subscription_plan || 'Not set'}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            {agency.user_count} / {agency.max_users || '∞'}
+                            {agency.user_count ?? 0} / {agency.max_users ?? '∞'}
                           </div>
                         </TableCell>
                         <TableCell>

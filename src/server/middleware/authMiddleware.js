@@ -16,6 +16,14 @@
  */
 
 const { parseDatabaseUrl } = require('../utils/poolManager');
+const {
+  getCachedTokenPayload,
+  setCachedTokenPayload,
+  isTokenDecoded,
+  getCachedUserRoles,
+  setCachedUserRoles,
+  areRolesCached,
+} = require('./authCache');
 
 // Rate limiting for error logging to prevent spam
 const errorLogCache = new Map();
@@ -75,9 +83,30 @@ function decodeToken(token) {
 /**
  * Authenticate requests using the Authorization: Bearer <token> header.
  * Attaches `req.user` and `req.agencyDatabase` on success.
+ * Uses request-level caching to prevent duplicate token decoding.
  */
 async function authenticate(req, res, next) {
   try {
+    // Check if token already decoded in this request
+    if (isTokenDecoded(req)) {
+      const cachedPayload = getCachedTokenPayload(req);
+      if (cachedPayload && cachedPayload.userId) {
+        // Use cached payload to build user object
+        const agencyId = cachedPayload.agencyId;
+        req.user = {
+          id: cachedPayload.userId,
+          userId: cachedPayload.userId,
+          email: cachedPayload.email,
+          agencyId: agencyId,
+          agencyDatabase: cachedPayload.agencyDatabase,
+          exp: cachedPayload.exp,
+          iat: cachedPayload.iat,
+        };
+        req.agencyDatabase = cachedPayload.agencyDatabase || null;
+        return next();
+      }
+    }
+
     const authHeader = req.headers.authorization || req.headers.Authorization;
 
     if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
@@ -116,6 +145,11 @@ async function authenticate(req, res, next) {
     }
 
     const payload = decodeToken(token);
+    
+    // Cache decoded token payload
+    if (payload) {
+      setCachedTokenPayload(req, payload);
+    }
     if (!payload || !payload.userId) {
       return res.status(401).json({
         success: false,
@@ -163,6 +197,15 @@ async function authenticate(req, res, next) {
 
     // Convenience alias commonly used elsewhere
     req.agencyDatabase = payload.agencyDatabase || null;
+
+    // Update cached payload with agencyId if we looked it up
+    if (agencyId && payload.agencyId !== agencyId) {
+      const cachedPayload = getCachedTokenPayload(req);
+      if (cachedPayload) {
+        cachedPayload.agencyId = agencyId;
+        setCachedTokenPayload(req, cachedPayload);
+      }
+    }
 
     return next();
   } catch (error) {
@@ -387,9 +430,17 @@ async function requireSuperAdmin(req, res, next) {
 
     const userId = req.user.id;
 
-    // Super admin role exists ONLY in main database with agency_id = NULL
-    // Do NOT check agency databases for super_admin role
-    const userRoles = await getUserRolesFromMainDb(userId);
+    // Check cache first
+    let userRoles = getCachedUserRoles(req);
+    
+    if (userRoles === null) {
+      // Super admin role exists ONLY in main database with agency_id = NULL
+      // Do NOT check agency databases for super_admin role
+      userRoles = await getUserRolesFromMainDb(userId);
+      
+      // Cache the result
+      setCachedUserRoles(req, userRoles);
+    }
 
     req.user.roles = userRoles;
 
@@ -450,36 +501,44 @@ function requireRole(requiredRoles, allowHigherRoles = true) {
 
       const userId = req.user.id;
       const agencyDatabase = req.user.agencyDatabase || req.agencyDatabase;
-      let userRoles = [];
-
-      // For system-level roles (super_admin, admin, ceo), check main database first
-      const systemRoles = ['super_admin', 'admin', 'ceo'];
-      const requiresSystemRole = roles.some(r => systemRoles.includes(r));
       
-      if (requiresSystemRole) {
-        // Check main database first for system-level roles
-        userRoles = await getUserRolesFromMainDb(userId);
+      // Check cache first to avoid duplicate DB queries
+      let userRoles = getCachedUserRoles(req);
+      
+      if (userRoles === null) {
+        // Not cached, need to fetch
+        // For system-level roles (super_admin, admin, ceo), check main database first
+        const systemRoles = ['super_admin', 'admin', 'ceo'];
+        const requiresSystemRole = roles.some(r => systemRoles.includes(r));
         
-        // For super_admin, ONLY check main database (no agency fallback)
-        // For other system roles (admin, ceo), allow agency database fallback
-        if (userRoles.length === 0 && agencyDatabase && !roles.includes('super_admin')) {
+        if (requiresSystemRole) {
+          // Check main database first for system-level roles
+          userRoles = await getUserRolesFromMainDb(userId);
+          
+          // For super_admin, ONLY check main database (no agency fallback)
+          // For other system roles (admin, ceo), allow agency database fallback
+          if (userRoles.length === 0 && agencyDatabase && !roles.includes('super_admin')) {
+            userRoles = await getUserRolesFromAgencyDb(userId, agencyDatabase);
+          }
+        } else {
+          // For agency-specific roles, require agency context
+          if (!agencyDatabase) {
+            return res.status(403).json({
+              success: false,
+              error: {
+                code: 'RBAC_NO_AGENCY_CONTEXT',
+                message: 'Agency context is missing for role check',
+              },
+              message: 'Access denied',
+            });
+          }
+          
+          // Fetch user roles from agency database
           userRoles = await getUserRolesFromAgencyDb(userId, agencyDatabase);
         }
-      } else {
-        // For agency-specific roles, require agency context
-        if (!agencyDatabase) {
-          return res.status(403).json({
-            success: false,
-            error: {
-              code: 'RBAC_NO_AGENCY_CONTEXT',
-              message: 'Agency context is missing for role check',
-            },
-            message: 'Access denied',
-          });
-        }
         
-        // Fetch user roles from agency database
-        userRoles = await getUserRolesFromAgencyDb(userId, agencyDatabase);
+        // Cache the result for subsequent checks in this request
+        setCachedUserRoles(req, userRoles);
       }
       
       req.user.roles = userRoles;
@@ -563,6 +622,70 @@ function requireRoleOrHigher(minimumRole) {
   return requireRole([minimumRole], true);
 }
 
+/**
+ * Get user roles with caching
+ * Checks request cache first, then fetches from database if needed
+ * @param {Object} req - Express request object
+ * @returns {Promise<string[]>} Array of user roles
+ */
+async function getUserRolesCached(req) {
+  // Check cache first
+  if (areRolesCached(req)) {
+    const cachedRoles = getCachedUserRoles(req);
+    if (cachedRoles !== null) {
+      return cachedRoles;
+    }
+  }
+
+  // Not cached, fetch from database
+  const userId = req.user?.id;
+  if (!userId) {
+    return [];
+  }
+
+  const agencyDatabase = req.user?.agencyDatabase || req.agencyDatabase;
+  const systemRoles = ['super_admin', 'admin', 'ceo'];
+  
+  // Check main database first for system-level roles
+  let userRoles = await getUserRolesFromMainDb(userId);
+  
+  // For non-super-admin system roles, allow agency database fallback
+  if (userRoles.length === 0 && agencyDatabase) {
+    const mainDbRoles = userRoles.filter(r => systemRoles.includes(r));
+    if (!mainDbRoles.includes('super_admin')) {
+      userRoles = await getUserRolesFromAgencyDb(userId, agencyDatabase);
+    }
+  } else if (!agencyDatabase || !systemRoles.some(r => userRoles.includes(r))) {
+    // For agency-specific roles, fetch from agency database
+    if (agencyDatabase) {
+      userRoles = await getUserRolesFromAgencyDb(userId, agencyDatabase);
+    }
+  }
+
+  // Cache the result
+  setCachedUserRoles(req, userRoles);
+  
+  return userRoles;
+}
+
+/**
+ * Check if user is system-level super admin
+ * System super admin = has super_admin role AND no agency database
+ * @param {Object} req - Express request object
+ * @returns {boolean} True if system super admin
+ */
+function isSystemSuperAdmin(req) {
+  if (!req.user) {
+    return false;
+  }
+  
+  const userRoles = req.user.roles || getCachedUserRoles(req) || [];
+  const hasSuperAdminRole = userRoles.includes('super_admin');
+  const hasAgencyDatabase = !!(req.user.agencyDatabase || req.agencyDatabase);
+  
+  return hasSuperAdminRole && !hasAgencyDatabase;
+}
+
 module.exports = {
   authenticate,
   requireSuperAdmin,
@@ -570,5 +693,7 @@ module.exports = {
   requireRoleOrHigher,
   requireAgencyContext,
   getUserRolesFromAgencyDb,
+  getUserRolesCached,
+  isSystemSuperAdmin,
 };
 

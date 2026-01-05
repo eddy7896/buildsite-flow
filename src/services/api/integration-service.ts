@@ -4,15 +4,9 @@
  */
 
 import { getApiBaseUrl } from '@/config/api';
+import { getApiHeaders } from './api-helpers';
 
 const API_BASE = getApiBaseUrl();
-
-/**
- * Get authentication token from localStorage
- */
-function getAuthToken(): string | null {
-  return localStorage.getItem('auth_token');
-}
 
 export interface Integration {
   id: string;
@@ -118,7 +112,6 @@ export async function getIntegrations(filters?: {
   const response = await fetch(`${API_BASE}/api/integrations?${queryParams.toString()}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -143,7 +136,6 @@ export async function getIntegrationById(integrationId: string): Promise<Integra
   const response = await fetch(`${API_BASE}/api/integrations/${integrationId}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -169,7 +161,6 @@ export async function createIntegration(data: Partial<Integration>): Promise<Int
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(data),
@@ -200,7 +191,6 @@ export async function updateIntegration(
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(data),
@@ -228,7 +218,6 @@ export async function deleteIntegration(integrationId: string): Promise<void> {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -276,7 +265,6 @@ export async function getIntegrationLogs(
   const response = await fetch(url, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -301,7 +289,6 @@ export async function getIntegrationStats(): Promise<IntegrationStats> {
   const response = await fetch(`${API_BASE}/api/integrations/stats`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -327,7 +314,6 @@ export async function testIntegration(integrationId: string): Promise<{ status: 
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -353,7 +339,6 @@ export async function syncIntegration(integrationId: string): Promise<void> {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -373,7 +358,6 @@ export async function getApiKeys(): Promise<ApiKey[]> {
   const response = await fetch(`${API_BASE}/api/api-keys`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -404,7 +388,6 @@ export async function createApiKey(data: {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(data),
@@ -429,7 +412,6 @@ export async function revokeApiKey(keyId: string): Promise<void> {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -448,7 +430,6 @@ export async function getApiKeyUsage(keyId: string, period: string = 'day'): Pro
   const response = await fetch(`${API_BASE}/api/api-keys/${keyId}/usage?period=${period}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 

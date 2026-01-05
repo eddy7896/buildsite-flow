@@ -2,6 +2,7 @@
 // Makes API calls to backend server that connects to PostgreSQL
 
 import { getApiRoot } from '@/config/api';
+import { getAgencyDatabase } from '@/utils/authContext';
 
 type QueryResult<T> = {
   rows: T[];
@@ -38,7 +39,7 @@ class HttpDatabaseClient {
 
       if (typeof window !== 'undefined') {
         const token = window.localStorage.getItem('auth_token') || '';
-        const agencyDatabase = window.localStorage.getItem('agency_database') || '';
+        const agencyDatabase = getAgencyDatabase() || '';
 
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;

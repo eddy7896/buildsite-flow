@@ -16,6 +16,7 @@ import { generateUUID } from '@/lib/uuid';
 import { Checkbox } from '@/components/ui/checkbox';
 import { insertRecord, updateRecord, selectOne } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
+import { checkHolidayExistsAPI } from '@/utils/validation';
 
 interface HolidayFormDialogProps {
   open: boolean;
@@ -127,14 +128,11 @@ export function HolidayFormDialog({
       }
       const holidayDate = format(formData.date, 'yyyy-MM-dd');
       
-      // Check for duplicate holiday on the same date (only for new holidays)
+      // Check for duplicate holiday on the same date using validation service
       if (!editHoliday) {
-        const existingHoliday = await selectOne('holidays', {
-          agency_id: agencyId,
-          date: holidayDate
-        });
+        const holidayExists = await checkHolidayExistsAPI(holidayDate, agencyId);
         
-        if (existingHoliday) {
+        if (holidayExists) {
           toast({
             title: "Duplicate Holiday",
             description: `A holiday already exists on ${format(formData.date, 'MMMM d, yyyy')}. Please choose a different date.`,
@@ -145,12 +143,9 @@ export function HolidayFormDialog({
         }
       } else {
         // For updates, check if another holiday exists on this date (excluding current one)
-        const existingHoliday = await selectOne('holidays', {
-          agency_id: agencyId,
-          date: holidayDate
-        });
+        const holidayExists = await checkHolidayExistsAPI(holidayDate, agencyId, editHoliday.id);
         
-        if (existingHoliday && existingHoliday.id !== editHoliday.id) {
+        if (holidayExists) {
           toast({
             title: "Duplicate Holiday",
             description: `Another holiday already exists on ${format(formData.date, 'MMMM d, yyyy')}. Please choose a different date.`,

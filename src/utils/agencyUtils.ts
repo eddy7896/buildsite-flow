@@ -5,6 +5,7 @@
 
 import { selectOne } from '@/services/api/postgresql-service';
 import { queryMainDatabase } from '@/integrations/postgresql/client-http';
+import { getAgencyDatabase } from './authContext';
 
 /**
  * Get agency_id from profile or fetch from database
@@ -83,7 +84,7 @@ export async function getAgencyId(
 
   // Try to get from agencies table by database name
   if (typeof window !== 'undefined') {
-    const agencyDatabase = window.localStorage.getItem('agency_database');
+    const agencyDatabase = getAgencyDatabase();
     if (agencyDatabase) {
       try {
         // Query main database for agency_id

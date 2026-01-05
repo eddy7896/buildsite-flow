@@ -232,7 +232,7 @@ const Sidebar = React.forwardRef<
         />
         <div
           className={cn(
-            "fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] md:flex",
+            "fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] md:flex overflow-hidden",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -261,19 +261,24 @@ const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   React.ComponentProps<typeof Button>
 >(({ className, onClick, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar, state, open } = useSidebar()
 
   return (
     <Button
       ref={ref}
       data-sidebar="trigger"
+      data-state={state}
       variant="ghost"
       size="icon"
       className={cn(
-        "h-9 w-9 sm:h-8 sm:w-8 touch-manipulation",
+        "h-10 w-10 touch-manipulation",
+        "rounded-lg transition-all duration-200 ease-in-out",
         "hover:bg-accent hover:text-accent-foreground",
-        "active:bg-accent/80 transition-colors",
+        "active:scale-95",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        open 
+          ? "bg-accent/60 text-accent-foreground" 
+          : "bg-transparent hover:bg-accent/50",
         className
       )}
       onClick={(event) => {
@@ -281,9 +286,13 @@ const SidebarTrigger = React.forwardRef<
         toggleSidebar()
       }}
       aria-label="Toggle Sidebar"
+      aria-expanded={open}
       {...props}
     >
-      <Menu className="h-5 w-5 sm:h-4 sm:w-4" />
+      <Menu className={cn(
+        "h-5 w-5 transition-all duration-200",
+        open && "opacity-80"
+      )} />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )
@@ -322,15 +331,22 @@ SidebarRail.displayName = "SidebarRail"
 const SidebarInset = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"main">
->(({ className, ...props }, ref) => {
+>(({ className, style, ...props }, ref) => {
   return (
     <main
       ref={ref}
       className={cn(
-        "relative flex min-h-svh flex-1 flex-col bg-background",
+        "relative flex min-h-svh flex-1 flex-col bg-background min-w-0",
         "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}
+      style={
+        {
+          "--sidebar-width": SIDEBAR_WIDTH,
+          "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
+          ...style,
+        } as React.CSSProperties
+      }
       {...props}
     />
   )

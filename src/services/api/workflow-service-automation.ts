@@ -4,15 +4,9 @@
  */
 
 import { getApiBaseUrl } from '@/config/api';
+import { getApiHeaders } from './api-helpers';
 
 const API_BASE = getApiBaseUrl();
-
-/**
- * Get authentication token from localStorage
- */
-function getAuthToken(): string | null {
-  return localStorage.getItem('auth_token');
-}
 
 export interface AutomationRule {
   id: string;
@@ -58,7 +52,6 @@ export async function getAutomationRules(filters?: {
   const response = await fetch(`${API_BASE}/api/workflows/automation?${queryParams.toString()}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -83,7 +76,6 @@ export async function getAutomationRuleById(ruleId: string): Promise<AutomationR
   const response = await fetch(`${API_BASE}/api/workflows/automation/${ruleId}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -110,7 +102,6 @@ export async function createAutomationRule(ruleData: Partial<AutomationRule>): P
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(ruleData),
   });
@@ -138,7 +129,6 @@ export async function updateAutomationRule(ruleId: string, ruleData: Partial<Aut
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(ruleData),
   });
@@ -165,7 +155,6 @@ export async function deleteAutomationRule(ruleId: string): Promise<void> {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 

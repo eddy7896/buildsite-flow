@@ -546,35 +546,6 @@ export function SystemSettings() {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Maintenance Mode</h3>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="maintenance_mode">Enable Maintenance Mode</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Show maintenance message to all users
-                    </p>
-                  </div>
-                  <Switch
-                    id="maintenance_mode"
-                    checked={formData.maintenance_mode || false}
-                    onCheckedChange={(checked) => handleChange('maintenance_mode', checked)}
-                  />
-                </div>
-                {formData.maintenance_mode && (
-                  <div className="space-y-2">
-                    <Label htmlFor="maintenance_message">Maintenance Message</Label>
-                    <Textarea
-                      id="maintenance_message"
-                      value={formData.maintenance_message || ''}
-                      onChange={(e) => handleChange('maintenance_message', e.target.value)}
-                      placeholder="We're currently performing scheduled maintenance. Please check back soon."
-                      rows={3}
-                    />
-                  </div>
-                )}
-              </div>
-
               {/* Logging & Monitoring */}
               <div className="space-y-4 border rounded-lg p-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">

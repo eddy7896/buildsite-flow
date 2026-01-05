@@ -17,6 +17,7 @@ import { getAgencyId } from '@/utils/agencyUtils';
 import { selectRecords, selectOne, deleteRecord, executeTransaction } from '@/services/api/postgresql-service';
 import { formatCurrencySymbol } from './financial/utils/financialFormatters';
 import { logWarn } from '@/utils/consoleLogger';
+import { getAgencyDatabase } from '@/utils/authContext';
 
 // Hooks
 import { useFinancialData } from './financial/hooks/useFinancialData';
@@ -350,7 +351,7 @@ const FinancialManagement = () => {
   };
 
   // Agency context check
-  const agencyDatabase = typeof window !== 'undefined' ? localStorage.getItem('agency_database') : null;
+  const agencyDatabase = getAgencyDatabase();
   const hasAgencyContext = agencyId || agencyDatabase;
   
   if (!hasAgencyContext && !loading && user?.id) {
@@ -364,7 +365,7 @@ const FinancialManagement = () => {
             <div className="flex gap-2 justify-center">
               <Button onClick={async () => {
                 const storedAgencyId = localStorage.getItem('agency_id');
-                const storedAgencyDatabase = localStorage.getItem('agency_database');
+                const storedAgencyDatabase = getAgencyDatabase();
                 let id: string | null = null;
                 
                 if (storedAgencyId) {

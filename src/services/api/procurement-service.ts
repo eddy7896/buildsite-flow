@@ -4,6 +4,7 @@
  */
 
 import { getApiBaseUrl } from '@/config/api';
+import { getApiHeaders } from './api-helpers';
 
 const API_BASE = getApiBaseUrl();
 
@@ -90,8 +91,8 @@ function getAuthToken(): string | null {
 export async function getPurchaseRequisitions(filters?: {
   status?: string;
 }): Promise<PurchaseRequisition[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -99,10 +100,7 @@ export async function getPurchaseRequisitions(filters?: {
   if (filters?.status) queryParams.append('status', filters.status);
 
   const response = await fetch(`${API_BASE}/api/procurement/requisitions?${queryParams}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -118,18 +116,14 @@ export async function getPurchaseRequisitions(filters?: {
  * Create purchase requisition
  */
 export async function createPurchaseRequisition(requisitionData: Partial<PurchaseRequisition>): Promise<PurchaseRequisition> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/requisitions`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(requisitionData),
   });
 
@@ -149,8 +143,8 @@ export async function getPurchaseOrders(filters?: {
   status?: string;
   supplier_id?: string;
 }): Promise<PurchaseOrder[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -159,10 +153,7 @@ export async function getPurchaseOrders(filters?: {
   if (filters?.supplier_id) queryParams.append('supplier_id', filters.supplier_id);
 
   const response = await fetch(`${API_BASE}/api/procurement/purchase-orders?${queryParams}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -178,18 +169,14 @@ export async function getPurchaseOrders(filters?: {
  * Create purchase order
  */
 export async function createPurchaseOrder(poData: Partial<PurchaseOrder>): Promise<PurchaseOrder> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/purchase-orders`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(poData),
   });
 
@@ -208,8 +195,8 @@ export async function createPurchaseOrder(poData: Partial<PurchaseOrder>): Promi
 export async function getGoodsReceipts(filters?: {
   status?: string;
 }): Promise<GoodsReceipt[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -217,10 +204,7 @@ export async function getGoodsReceipts(filters?: {
   if (filters?.status) queryParams.append('status', filters.status);
 
   const response = await fetch(`${API_BASE}/api/procurement/goods-receipts?${queryParams}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -236,18 +220,14 @@ export async function getGoodsReceipts(filters?: {
  * Create goods receipt
  */
 export async function createGoodsReceipt(grnData: Partial<GoodsReceipt>): Promise<GoodsReceipt> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/goods-receipts`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(grnData),
   });
 
@@ -310,8 +290,8 @@ export async function getSuppliers(filters?: {
   is_active?: boolean;
   search?: string;
 }): Promise<Supplier[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -320,10 +300,7 @@ export async function getSuppliers(filters?: {
   if (filters?.search) queryParams.append('search', filters.search);
 
   const response = await fetch(`${API_BASE}/api/procurement/suppliers?${queryParams}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -339,18 +316,14 @@ export async function getSuppliers(filters?: {
  * Create supplier
  */
 export async function createSupplier(supplierData: Partial<Supplier>): Promise<Supplier> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/suppliers`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(supplierData),
   });
 
@@ -367,16 +340,13 @@ export async function createSupplier(supplierData: Partial<Supplier>): Promise<S
  * Get a single supplier by ID
  */
 export async function getSupplierById(supplierId: string): Promise<Supplier> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/suppliers/${supplierId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -392,18 +362,14 @@ export async function getSupplierById(supplierId: string): Promise<Supplier> {
  * Update supplier
  */
 export async function updateSupplier(supplierId: string, supplierData: Partial<Supplier>): Promise<Supplier> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/suppliers/${supplierId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(supplierData),
   });
 
@@ -420,16 +386,13 @@ export async function updateSupplier(supplierId: string, supplierData: Partial<S
  * Get a single purchase order by ID
  */
 export async function getPurchaseOrderById(poId: string): Promise<PurchaseOrder> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/purchase-orders/${poId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -445,18 +408,14 @@ export async function getPurchaseOrderById(poId: string): Promise<PurchaseOrder>
  * Update purchase order
  */
 export async function updatePurchaseOrder(poId: string, poData: Partial<PurchaseOrder>): Promise<PurchaseOrder> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/purchase-orders/${poId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(poData),
   });
 
@@ -476,8 +435,8 @@ export async function getRfqRfp(filters?: {
   status?: string;
   type?: 'RFQ' | 'RFP';
 }): Promise<RfqRfp[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -486,10 +445,7 @@ export async function getRfqRfp(filters?: {
   if (filters?.type) queryParams.append('type', filters.type);
 
   const response = await fetch(`${API_BASE}/api/procurement/rfq?${queryParams}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -505,18 +461,14 @@ export async function getRfqRfp(filters?: {
  * Create RFQ/RFP
  */
 export async function createRfqRfp(rfqData: Partial<RfqRfp>): Promise<RfqRfp> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/rfq`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(rfqData),
   });
 
@@ -587,8 +539,8 @@ export async function getVendorContracts(filters?: {
   status?: string;
   contract_type?: string;
 }): Promise<VendorContract[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -598,10 +550,7 @@ export async function getVendorContracts(filters?: {
   if (filters?.contract_type) queryParams.append('contract_type', filters.contract_type);
 
   const response = await fetch(`${API_BASE}/api/procurement/vendor-contracts?${queryParams.toString()}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -617,16 +566,13 @@ export async function getVendorContracts(filters?: {
  * Get vendor contract by ID
  */
 export async function getVendorContractById(contractId: string): Promise<VendorContract> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/vendor-contracts/${contractId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -642,18 +588,14 @@ export async function getVendorContractById(contractId: string): Promise<VendorC
  * Create vendor contract
  */
 export async function createVendorContract(contractData: Partial<VendorContract>): Promise<VendorContract> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/vendor-contracts`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(contractData),
   });
 
@@ -673,18 +615,14 @@ export async function updateVendorContract(
   contractId: string,
   contractData: Partial<VendorContract>
 ): Promise<VendorContract> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/vendor-contracts/${contractId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(contractData),
   });
 
@@ -701,17 +639,14 @@ export async function updateVendorContract(
  * Delete vendor contract
  */
 export async function deleteVendorContract(contractId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/vendor-contracts/${contractId}`, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -728,8 +663,8 @@ export async function getVendorPerformance(filters?: {
   period_start?: string;
   period_end?: string;
 }): Promise<VendorPerformance[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -739,10 +674,7 @@ export async function getVendorPerformance(filters?: {
   if (filters?.period_end) queryParams.append('period_end', filters.period_end);
 
   const response = await fetch(`${API_BASE}/api/procurement/vendor-performance?${queryParams.toString()}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -758,16 +690,13 @@ export async function getVendorPerformance(filters?: {
  * Get vendor performance by ID
  */
 export async function getVendorPerformanceById(performanceId: string): Promise<VendorPerformance> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/vendor-performance/${performanceId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -785,18 +714,14 @@ export async function getVendorPerformanceById(performanceId: string): Promise<V
 export async function createVendorPerformance(
   performanceData: Partial<VendorPerformance>
 ): Promise<VendorPerformance> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/vendor-performance`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(performanceData),
   });
 
@@ -816,18 +741,14 @@ export async function updateVendorPerformance(
   performanceId: string,
   performanceData: Partial<VendorPerformance>
 ): Promise<VendorPerformance> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/vendor-performance/${performanceId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(performanceData),
   });
 
@@ -844,17 +765,14 @@ export async function updateVendorPerformance(
  * Delete vendor performance record
  */
 export async function deleteVendorPerformance(performanceId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/procurement/vendor-performance/${performanceId}`, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -911,8 +829,8 @@ export async function getProcurementReports(filters?: {
   date_from?: string;
   date_to?: string;
 }): Promise<ProcurementReports> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -921,10 +839,7 @@ export async function getProcurementReports(filters?: {
   if (filters?.date_to) queryParams.append('date_to', filters.date_to);
 
   const response = await fetch(`${API_BASE}/api/procurement/reports?${queryParams.toString()}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {

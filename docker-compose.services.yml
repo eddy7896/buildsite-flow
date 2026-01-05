@@ -1,0 +1,73 @@
+# ============================================================================
+# BuildFlow - Services Only (Database & Redis)
+# ============================================================================
+# Use this when running frontend/backend locally with hot reload
+# Run: docker-compose -f docker-compose.services.yml up
+# ============================================================================
+
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL Database
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:15-alpine
+    container_name: buildflow-postgres-services
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      POSTGRES_DB: buildflow_db
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data_services:/var/lib/postgresql/data
+      - ./src/database/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - buildflow-network-services
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Redis Cache
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: buildflow-redis-services
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data_services:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - buildflow-network-services
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  buildflow-network-services:
+    driver: bridge
+    name: buildflow-network-services
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  postgres_data_services:
+    driver: local
+    name: buildflow-postgres-data-services
+  redis_data_services:
+    driver: local
+    name: buildflow-redis-data-services
+

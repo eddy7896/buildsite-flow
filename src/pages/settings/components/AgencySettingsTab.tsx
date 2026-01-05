@@ -8,15 +8,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, Building, Palette, Globe, Clock, DollarSign, Loader2 } from "lucide-react";
+import { Save, Building, Palette, Globe, Clock, DollarSign, Loader2, Wrench } from "lucide-react";
 import { useAgencySettingsExtended } from '../hooks/useAgencySettings';
 import { useCurrency } from "@/hooks/useCurrency";
 import { LogoUpload } from './LogoUpload';
 import { COLOR_PRESETS, TIMEZONES, DATE_FORMATS, FISCAL_YEAR_OPTIONS, WEEKDAYS } from '../utils/settingsConstants';
+import { useState, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 export const AgencySettingsTab = () => {
   const { availableCurrencies } = useCurrency();
+  const { toast } = useToast();
   const {
     agencySettings,
     setAgencySettings,
@@ -27,6 +32,10 @@ export const AgencySettingsTab = () => {
     setLogoPreview,
     saveAgencySettings,
   } = useAgencySettingsExtended();
+  
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState('');
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
 
   const applyColorPreset = (preset: { primary: string; secondary: string }) => {
     setAgencySettings(prev => ({
@@ -54,6 +63,83 @@ export const AgencySettingsTab = () => {
     setLogoFile(null);
     setLogoPreview('');
     setAgencySettings(prev => ({ ...prev, logo_url: '' }));
+  };
+
+  // Load maintenance status on mount
+  useEffect(() => {
+    const loadMaintenanceStatus = async () => {
+      try {
+        const agencyDatabase = localStorage.getItem('agencyDatabase');
+        if (!agencyDatabase) return;
+
+        const response = await fetch('/api/agencies/maintenance-status', {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-agency-database': agencyDatabase,
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setMaintenanceMode(data.data.maintenance_mode || false);
+            setMaintenanceMessage(data.data.maintenance_message || '');
+          }
+        }
+      } catch (error) {
+        console.error('Error loading maintenance status:', error);
+      }
+    };
+
+    loadMaintenanceStatus();
+  }, []);
+
+  const handleSaveMaintenance = async () => {
+    try {
+      setMaintenanceLoading(true);
+      const agencyDatabase = localStorage.getItem('agencyDatabase');
+      if (!agencyDatabase) {
+        toast({
+          title: 'Error',
+          description: 'Agency database not found',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const response = await fetch('/api/agencies/maintenance', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-agency-database': agencyDatabase,
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({
+          maintenance_mode: maintenanceMode,
+          maintenance_message: maintenanceMessage || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        toast({
+          title: 'Success',
+          description: `Maintenance mode ${maintenanceMode ? 'enabled' : 'disabled'} successfully`,
+        });
+      } else {
+        throw new Error(data.message || 'Failed to update maintenance mode');
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update maintenance mode',
+        variant: 'destructive',
+      });
+    } finally {
+      setMaintenanceLoading(false);
+    }
   };
 
   return (
@@ -354,6 +440,62 @@ export const AgencySettingsTab = () => {
               <Save className="mr-2 h-4 w-4" />
             )}
             Save Agency Settings
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Maintenance Mode */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wrench className="h-5 w-5" />
+            Maintenance Mode
+          </CardTitle>
+          <CardDescription>
+            Temporarily disable access for all agency users (except admins)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label htmlFor="maintenance_mode">Enable Maintenance Mode</Label>
+              <p className="text-sm text-muted-foreground">
+                Show maintenance message to all agency users
+              </p>
+            </div>
+            <Switch
+              id="maintenance_mode"
+              checked={maintenanceMode}
+              onCheckedChange={setMaintenanceMode}
+            />
+          </div>
+          {maintenanceMode && (
+            <div className="space-y-2">
+              <Label htmlFor="maintenance_message">Maintenance Message</Label>
+              <Textarea
+                id="maintenance_message"
+                value={maintenanceMessage}
+                onChange={(e) => setMaintenanceMessage(e.target.value)}
+                placeholder="We're currently performing scheduled maintenance. Please check back soon."
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                This message will be displayed to all agency users when maintenance mode is enabled.
+              </p>
+            </div>
+          )}
+          <Button 
+            onClick={handleSaveMaintenance} 
+            disabled={maintenanceLoading}
+            variant={maintenanceMode ? "destructive" : "default"}
+            className="w-full md:w-auto"
+          >
+            {maintenanceLoading ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            Save Maintenance Settings
           </Button>
         </CardContent>
       </Card>

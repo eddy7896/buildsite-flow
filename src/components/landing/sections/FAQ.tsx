@@ -104,7 +104,7 @@ export const FAQ = () => {
   const activeFaqs = faqs.find(f => f.category === activeCategory)?.questions || [];
   
   return (
-    <section ref={ref} className="relative py-24 lg:py-32 px-4 overflow-hidden">
+    <section id="faq" ref={ref} className="relative py-24 lg:py-32 px-4 overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(16,185,129,0.05),transparent_50%)]" />
       
       <div className="relative z-10 max-w-4xl mx-auto">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { getApiBaseUrl } from '@/config/api';
+import { getAgencyDatabase } from '@/utils/authContext';
 
 export function AuthRedirect() {
   const { user, userRole, loading } = useAuth();
@@ -23,7 +24,7 @@ export function AuthRedirect() {
     const checkSetupStatus = async () => {
       if (user && userRole === 'admin' && !setupChecked && location.pathname === '/auth') {
         try {
-          const agencyDatabase = localStorage.getItem('agency_database');
+          const agencyDatabase = getAgencyDatabase();
           if (!agencyDatabase) {
             // No agency database, go to dashboard
             setHasRedirected(true);

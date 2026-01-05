@@ -98,15 +98,20 @@ export default defineConfig(({ mode }) => ({
     },
   },
   server: {
-    host: process.env.VITE_DEV_SERVER_HOST || "::",
+    host: process.env.VITE_DEV_SERVER_HOST || "0.0.0.0",
     port: parseInt(process.env.VITE_DEV_SERVER_PORT || "5173"),
+    strictPort: false, // Allow Vite to automatically use next available port (5174, 5175, etc.) if 5173 is busy
     watch: {
-      usePolling: true, // Enable polling for Docker volume mounts
-      interval: 1000,
+      usePolling: process.env.CHOKIDAR_USEPOLLING === "true" || true, // Enable polling for Docker volume mounts (Windows/WSL)
+      interval: parseInt(process.env.CHOKIDAR_INTERVAL || "1000"),
     },
     hmr: {
-      host: process.env.VITE_DEV_SERVER_HOST || "localhost",
-      port: parseInt(process.env.VITE_DEV_SERVER_PORT || "5173"),
+      // HMR will automatically use the same port as the server when strictPort is false
+      // Only set explicit values if environment variables are provided
+      host: process.env.VITE_HMR_HOST || process.env.VITE_DEV_SERVER_HOST || "localhost",
+      ...(process.env.VITE_HMR_PORT && { port: parseInt(process.env.VITE_HMR_PORT) }),
+      ...(process.env.VITE_HMR_CLIENT_PORT && { clientPort: parseInt(process.env.VITE_HMR_CLIENT_PORT) }),
+      ...(process.env.VITE_HMR_PROTOCOL && { protocol: process.env.VITE_HMR_PROTOCOL }),
     },
   },
   plugins: [

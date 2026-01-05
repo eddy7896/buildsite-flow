@@ -5,6 +5,7 @@
 
 import { BaseApiService } from './base';
 import { getApiBaseUrl } from '@/config/api';
+import { getApiHeaders } from './api-helpers';
 
 const API_BASE = getApiBaseUrl();
 
@@ -12,18 +13,13 @@ const API_BASE = getApiBaseUrl();
  * Get inventory settings
  */
 export async function getInventorySettings() {
-  const token = localStorage.getItem('auth_token');
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
-
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
   
   const response = await fetch(`${API_BASE}/api/settings/inventory`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': agencyDatabase,
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -39,20 +35,14 @@ export async function getInventorySettings() {
  * Update inventory settings
  */
 export async function updateInventorySettings(settings: any) {
-  const token = localStorage.getItem('auth_token');
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
-
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
   
   const response = await fetch(`${API_BASE}/api/settings/inventory`, {
     method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': agencyDatabase,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(settings),
   });
 
@@ -74,7 +64,8 @@ export async function getProcurementSettings() {
     throw new Error('Authentication required');
   }
 
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
+  const headers = getApiHeaders();
+  const agencyDatabase = headers['X-Agency-Database'] || '';
   
   const response = await fetch(`${API_BASE}/api/settings/procurement`, {
     headers: {
@@ -101,7 +92,8 @@ export async function updateProcurementSettings(settings: any) {
     throw new Error('Authentication required');
   }
 
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
+  const headers = getApiHeaders();
+  const agencyDatabase = headers['X-Agency-Database'] || '';
   
   const response = await fetch(`${API_BASE}/api/settings/procurement`, {
     method: 'PUT',
@@ -131,7 +123,8 @@ export async function getAssetSettings() {
     throw new Error('Authentication required');
   }
 
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
+  const headers = getApiHeaders();
+  const agencyDatabase = headers['X-Agency-Database'] || '';
   
   const response = await fetch(`${API_BASE}/api/settings/assets`, {
     headers: {
@@ -158,7 +151,8 @@ export async function updateAssetSettings(settings: any) {
     throw new Error('Authentication required');
   }
 
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
+  const headers = getApiHeaders();
+  const agencyDatabase = headers['X-Agency-Database'] || '';
   
   const response = await fetch(`${API_BASE}/api/settings/assets`, {
     method: 'PUT',
@@ -188,7 +182,8 @@ export async function getWorkflowSettings() {
     throw new Error('Authentication required');
   }
 
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
+  const headers = getApiHeaders();
+  const agencyDatabase = headers['X-Agency-Database'] || '';
   
   const response = await fetch(`${API_BASE}/api/settings/workflow`, {
     headers: {
@@ -215,7 +210,8 @@ export async function updateWorkflowSettings(settings: any) {
     throw new Error('Authentication required');
   }
 
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
+  const headers = getApiHeaders();
+  const agencyDatabase = headers['X-Agency-Database'] || '';
   
   const response = await fetch(`${API_BASE}/api/settings/workflow`, {
     method: 'PUT',
@@ -245,7 +241,8 @@ export async function getIntegrationSettings() {
     throw new Error('Authentication required');
   }
 
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
+  const headers = getApiHeaders();
+  const agencyDatabase = headers['X-Agency-Database'] || '';
   
   const response = await fetch(`${API_BASE}/api/settings/integration`, {
     headers: {
@@ -272,7 +269,8 @@ export async function updateIntegrationSettings(settings: any) {
     throw new Error('Authentication required');
   }
 
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
+  const headers = getApiHeaders();
+  const agencyDatabase = headers['X-Agency-Database'] || '';
   
   const response = await fetch(`${API_BASE}/api/settings/integration`, {
     method: 'PUT',

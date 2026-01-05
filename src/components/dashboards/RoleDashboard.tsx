@@ -224,17 +224,17 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
           </div>
           
           {/* Quick Actions */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <Button variant="outline" size="sm" asChild>
+          <div className="flex flex-row items-center gap-2 flex-wrap">
+            <Button variant="outline" size="sm" asChild className="flex-shrink-0">
               <Link to="/my-profile">
-                <User className="h-4 w-4 mr-2" />
-                My Profile
+                <User className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">My Profile</span>
               </Link>
             </Button>
-            <Button variant="outline" size="sm" asChild>
+            <Button variant="outline" size="sm" asChild className="flex-shrink-0">
               <Link to="/notifications">
-                <Bell className="h-4 w-4 mr-2" />
-                Notifications
+                <Bell className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Notifications</span>
                 {dashboardStats.pendingLeaveRequests > 0 && (
                   <Badge variant="destructive" className="ml-2 h-5 w-5 p-0 text-xs flex items-center justify-center">
                     {dashboardStats.pendingLeaveRequests}
@@ -242,9 +242,9 @@ export function RoleDashboard({ role }: RoleDashboardProps) {
                 )}
               </Link>
             </Button>
-            <Button variant="destructive" size="sm" onClick={signOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
+            <Button variant="destructive" size="sm" onClick={signOut} className="flex-shrink-0">
+              <LogOut className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Sign Out</span>
             </Button>
           </div>
         </div>

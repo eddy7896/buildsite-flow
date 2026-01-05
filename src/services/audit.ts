@@ -1,4 +1,5 @@
 import { getApiEndpoint } from '@/config/services';
+import { getAgencyDatabase } from '@/utils/authContext';
 
 interface ApiSuccess<T> {
   success: true;
@@ -42,7 +43,7 @@ function getAuthHeaders() {
   }
 
   const token = window.localStorage.getItem('auth_token') || '';
-  const agencyDatabase = window.localStorage.getItem('agency_database') || '';
+  const agencyDatabase = getAgencyDatabase() || '';
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

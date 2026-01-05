@@ -1,9 +1,10 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, ReactNode } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { AppRole } from '@/utils/roleUtils';
 import { selectRecords, selectOne } from '@/services/api/postgresql-service';
 import { loginUser, registerUser } from '@/services/api/auth-postgresql';
 import { logWarn, logError } from '@/utils/consoleLogger';
+import { getAgencyDatabase, isSystemSuperAdmin as checkIsSystemSuperAdmin, invalidateAuthContextCache } from '@/utils/authContext';
 
 interface User {
   id: string;
@@ -44,7 +45,8 @@ interface AuthContextType {
   profile: Profile | null;
   userRole: AppRole | null;
   loading: boolean;
-  isSystemSuperAdmin: boolean; // Flag to identify system-level super admin
+  isSystemSuperAdmin: boolean; // Flag to identify system-level super admin (computed)
+  agencyDatabase: string | null; // Agency database (computed, cached)
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -60,6 +62,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [isSystemSuperAdmin, setIsSystemSuperAdmin] = useState(false);
+  const [agencyDatabaseState, setAgencyDatabaseState] = useState<string | null>(null);
+
+  // Computed values using useMemo to avoid recalculation
+  const agencyDatabase = useMemo(() => {
+    // Use state if available, otherwise fetch from localStorage via utility
+    return agencyDatabaseState !== null ? agencyDatabaseState : getAgencyDatabase();
+  }, [agencyDatabaseState]);
+
+  const computedIsSystemSuperAdmin = useMemo(() => {
+    return checkIsSystemSuperAdmin(userRole, agencyDatabase);
+  }, [userRole, agencyDatabase]);
 
   // Helper to validate token format
   const isValidTokenFormat = (token: string): boolean => {
@@ -120,8 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const storedRole = localStorage.getItem('user_role') as AppRole | null;
           if (storedRole) {
             setUserRole(storedRole);
+            const agencyDb = getAgencyDatabase();
+            setAgencyDatabaseState(agencyDb);
             // Check if stored role is super_admin and user has no agency context
-            if (storedRole === 'super_admin' && !localStorage.getItem('agency_database')) {
+            if (checkIsSystemSuperAdmin(storedRole, agencyDb)) {
               setIsSystemSuperAdmin(true);
             }
           } else if (decoded.userId) {
@@ -286,22 +301,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userAgency = (result.user as any).agency;
       const hasAgencyDatabase = !!(userAgency && userAgency.databaseName);
       const isSystemLevelSuperAdmin = hasSuperAdminRole && !hasAgencyDatabase;
-      setIsSystemSuperAdmin(isSystemLevelSuperAdmin);
       
       // Clear agency context ONLY for system-level super admin
       // Agency admins should keep their agency context
       if (isSystemLevelSuperAdmin) {
         localStorage.removeItem('agency_database');
         localStorage.removeItem('agency_id');
+        setAgencyDatabaseState(null);
       } else if (userAgency) {
         // Ensure agency context is set for agency users (including agency admins)
         if (userAgency.databaseName) {
           localStorage.setItem('agency_database', userAgency.databaseName);
+          setAgencyDatabaseState(userAgency.databaseName);
         }
         if (userAgency.id) {
           localStorage.setItem('agency_id', userAgency.id);
         }
       }
+      
+      // Invalidate auth context cache and update state
+      invalidateAuthContextCache();
+      setIsSystemSuperAdmin(isSystemLevelSuperAdmin);
       
       // If profile came back from server, use it directly
       const serverProfile = (result.user as any).profile;
@@ -385,6 +405,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       setUserRole(null);
       setIsSystemSuperAdmin(false);
+      setAgencyDatabaseState(null);
+      
+      // Invalidate auth context cache
+      invalidateAuthContextCache();
       
       toast({
         title: "Logged out",
@@ -405,7 +429,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     userRole,
     loading,
-    isSystemSuperAdmin,
+    isSystemSuperAdmin: computedIsSystemSuperAdmin,
+    agencyDatabase,
     signUp,
     signIn,
     signOut,

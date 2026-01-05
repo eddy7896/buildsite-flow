@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, MoreHorizontal, Users, Building2, Calendar, DollarSign, Eye, Settings, Activity, FileText, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Search, MoreHorizontal, Users, Building2, Calendar, DollarSign, Eye, Settings, Activity, FileText, Loader2, CheckCircle, XCircle, Wrench } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import type { AgencySummary as AgencyData } from '@/types/system';
 import {
@@ -44,8 +44,9 @@ export const AgencyManagement = ({ agencies, onRefresh }: AgencyManagementProps)
   const [editForm, setEditForm] = useState<Partial<AgencyDetails>>({});
 
   const filteredAgencies = agencies.filter(agency => {
-    const matchesSearch = agency.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         agency.domain.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = agency.name.toLowerCase().includes(searchLower) ||
+                         (agency.domain?.toLowerCase().includes(searchLower) ?? false);
     const matchesPlan = selectedPlan === 'all' || agency.subscription_plan === selectedPlan;
     return matchesSearch && matchesPlan;
   });
@@ -54,7 +55,7 @@ export const AgencyManagement = ({ agencies, onRefresh }: AgencyManagementProps)
     return new Date(dateString).toLocaleDateString();
   };
 
-  const getPlanColor = (plan: string) => {
+  const getPlanColor = (plan: string | null) => {
     switch (plan) {
       case 'basic': return 'bg-blue-100 text-blue-800';
       case 'pro': return 'bg-green-100 text-green-800';
@@ -136,6 +137,47 @@ export const AgencyManagement = ({ agencies, onRefresh }: AgencyManagementProps)
       toast({
         title: 'Error',
         description: error.message || 'Failed to update agency status',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleToggleMaintenance = async (agencyId: string, currentStatus: boolean) => {
+    if (!confirm(`Are you sure you want to ${currentStatus ? 'disable' : 'enable'} maintenance mode for this agency?`)) {
+      return;
+    }
+
+    try {
+      setIsUpdating(true);
+      const response = await fetch(`/api/super-admin/agencies/${agencyId}/maintenance`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({
+          maintenance_mode: !currentStatus,
+          maintenance_message: currentStatus ? null : 'This agency is currently under maintenance. Please check back later.',
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        toast({
+          title: 'Success',
+          description: `Maintenance mode ${currentStatus ? 'disabled' : 'enabled'} successfully`,
+        });
+        onRefresh();
+      } else {
+        throw new Error(data.message || 'Failed to update maintenance mode');
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to update maintenance mode',
         variant: 'destructive',
       });
     } finally {
@@ -256,17 +298,17 @@ export const AgencyManagement = ({ agencies, onRefresh }: AgencyManagementProps)
                     </TableCell>
                     <TableCell>
                       <Badge className={`capitalize ${getPlanColor(agency.subscription_plan)}`}>
-                        {agency.subscription_plan}
+                        {agency.subscription_plan || 'Not set'}
                       </Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Users className="h-3 w-3 text-muted-foreground" />
-                        <span className="text-sm">{agency.user_count}/{agency.max_users || '∞'}</span>
+                        <span className="text-sm">{agency.user_count ?? 0}/{agency.max_users ?? '∞'}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm">{agency.project_count}</div>
+                      <div className="text-sm">{agency.project_count ?? 0}</div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
@@ -275,9 +317,17 @@ export const AgencyManagement = ({ agencies, onRefresh }: AgencyManagementProps)
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={agency.is_active ? "default" : "secondary"}>
-                        {agency.is_active ? "Active" : "Inactive"}
-                      </Badge>
+                      <div className="flex flex-col gap-1">
+                        <Badge variant={agency.is_active ? "default" : "secondary"}>
+                          {agency.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                        {agency.maintenance_mode && (
+                          <Badge variant="destructive" className="text-xs">
+                            <Wrench className="h-3 w-3 mr-1" />
+                            Maintenance
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -313,6 +363,18 @@ export const AgencyManagement = ({ agencies, onRefresh }: AgencyManagementProps)
                           }}>
                             <Settings className="mr-2 h-4 w-4" />
                             Edit Agency
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className={agency.maintenance_mode ? "text-orange-600" : "text-blue-600"}
+                            onClick={() => handleToggleMaintenance(agency.id, agency.maintenance_mode || false)}
+                            disabled={isUpdating}
+                          >
+                            {isUpdating ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Wrench className="mr-2 h-4 w-4" />
+                            )}
+                            {agency.maintenance_mode ? 'Disable Maintenance' : 'Enable Maintenance'}
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className={agency.is_active ? "text-destructive" : "text-green-600"}

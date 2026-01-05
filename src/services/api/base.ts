@@ -1,6 +1,7 @@
 import { TIMEOUT_CONFIG, RETRY_CONFIG, ERROR_MESSAGES } from '@/constants';
 import { useAppStore } from '@/stores/appStore';
 import { pgClient } from '@/integrations/postgresql/client';
+import { getAgencyDatabase } from '@/utils/authContext';
 
 export interface ApiResponse<T = any> {
   data: T | null;
@@ -27,6 +28,68 @@ class ApiError extends Error {
 }
 
 export class BaseApiService {
+  // Cached agency database value to avoid repeated localStorage reads
+  private static cachedAgencyDatabase: string | null = null;
+  private static cacheTimestamp: number = 0;
+  private static readonly CACHE_DURATION = 1000; // 1 second
+
+  /**
+   * Get agency database with caching
+   */
+  private static getAgencyDatabaseCached(): string | null {
+    const now = Date.now();
+    if (this.cachedAgencyDatabase !== null && (now - this.cacheTimestamp) < this.CACHE_DURATION) {
+      return this.cachedAgencyDatabase;
+    }
+    
+    this.cachedAgencyDatabase = getAgencyDatabase();
+    this.cacheTimestamp = now;
+    return this.cachedAgencyDatabase;
+  }
+
+  /**
+   * Get default headers with authentication and agency context
+   * Centralizes header injection to avoid duplication
+   */
+  protected static getDefaultHeaders(): Record<string, string> {
+    const token = typeof window !== 'undefined' 
+      ? localStorage.getItem('auth_token') || localStorage.getItem('token')
+      : null;
+    
+    const agencyDatabase = this.getAgencyDatabaseCached();
+    
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (agencyDatabase) {
+      headers['X-Agency-Database'] = agencyDatabase;
+    }
+
+    return headers;
+  }
+
+  /**
+   * Get default headers (public static method for use in non-class contexts)
+   * Use this in service files that don't extend BaseApiService
+   */
+  public static getHeaders(): Record<string, string> {
+    return this.getDefaultHeaders();
+  }
+
+  /**
+   * Clear agency database cache
+   * Call this when agency context changes
+   */
+  public static clearAgencyDatabaseCache(): void {
+    this.cachedAgencyDatabase = null;
+    this.cacheTimestamp = 0;
+  }
+
   private static async withRetry<T>(
     operation: () => Promise<T>,
     options: ApiOptions = {}

@@ -21,6 +21,8 @@ export const PublicRoutes = () => [
   <Route key="/forgot-password" path="/forgot-password" element={<SuspenseRoute><Pages.ForgotPassword /></SuspenseRoute>} />,
   <Route key="/login" path="/login" element={<SuspenseRoute><Pages.Auth /></SuspenseRoute>} />,
   <Route key="/register" path="/register" element={<SuspenseRoute><Pages.Auth /></SuspenseRoute>} />,
+  <Route key="/super-admin-setup" path="/super-admin-setup" element={<SuspenseRoute><Pages.SuperAdminSetup /></SuspenseRoute>} />,
+  <Route key="/setup" path="/setup" element={<SuspenseRoute><Pages.SuperAdminSetup /></SuspenseRoute>} />,
 ];
 
 /**
@@ -100,7 +102,7 @@ export const DashboardRoutes = () => [
     element={
       <ProtectedRoute requiredRole="super_admin">
         <Pages.SuperAdminLayout>
-          <SuspenseRoute><Pages.SuperAdminDashboardNew /></SuspenseRoute>
+          <SuspenseRoute><Pages.SuperAdminDashboard /></SuspenseRoute>
         </Pages.SuperAdminLayout>
       </ProtectedRoute>
     }
@@ -184,7 +186,7 @@ export const DashboardRoutes = () => [
     key="/system-health"
     path="/system-health"
     element={
-      <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+      <ProtectedRoute requiredRole={["admin", "cto", "super_admin"]}>
         <DashboardLayout>
           <SuspenseRoute><Pages.SystemHealth /></SuspenseRoute>
         </DashboardLayout>
@@ -208,7 +210,17 @@ export const EmployeeRoutes = () => [
       </ProtectedRoute>
     }
   />,
-  <Route key="/my-team" path="/my-team" element={<Navigate to="/employee-management" replace />} />,
+  <Route
+    key="/my-team"
+    path="/my-team"
+    element={
+      <ProtectedRoute>
+        <DashboardLayout>
+          <SuspenseRoute><Pages.MyTeam /></SuspenseRoute>
+        </DashboardLayout>
+      </ProtectedRoute>
+    }
+  />,
   <Route key="/users" path="/users" element={<Navigate to="/employee-management" replace />} />,
   <Route key="/employees" path="/employees" element={<Navigate to="/employee-management" replace />} />,
   <Route
@@ -984,7 +996,7 @@ export const WorkflowRoutes = () => [
     key="/workflows"
     path="/workflows"
     element={
-      <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+      <ProtectedRoute requiredRole={["admin", "cto", "super_admin"]}>
         <DashboardLayout>
           <SuspenseRoute><Pages.Workflows /></SuspenseRoute>
         </DashboardLayout>
@@ -995,7 +1007,7 @@ export const WorkflowRoutes = () => [
     key="/workflows/instances"
     path="/workflows/instances"
     element={
-      <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+      <ProtectedRoute requiredRole={["admin", "cto", "super_admin"]}>
         <DashboardLayout>
           <SuspenseRoute><Pages.WorkflowInstances /></SuspenseRoute>
         </DashboardLayout>
@@ -1006,7 +1018,7 @@ export const WorkflowRoutes = () => [
     key="/workflows/approvals"
     path="/workflows/approvals"
     element={
-      <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+      <ProtectedRoute requiredRole={["admin", "cto", "super_admin"]}>
         <DashboardLayout>
           <SuspenseRoute><Pages.WorkflowApprovals /></SuspenseRoute>
         </DashboardLayout>
@@ -1017,7 +1029,7 @@ export const WorkflowRoutes = () => [
     key="/workflows/automation"
     path="/workflows/automation"
     element={
-      <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+      <ProtectedRoute requiredRole={["admin", "cto", "super_admin"]}>
         <DashboardLayout>
           <SuspenseRoute><Pages.WorkflowAutomation /></SuspenseRoute>
         </DashboardLayout>
@@ -1028,7 +1040,7 @@ export const WorkflowRoutes = () => [
     key="/workflows/settings"
     path="/workflows/settings"
     element={
-      <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+      <ProtectedRoute requiredRole={["admin", "cto", "super_admin"]}>
         <DashboardLayout>
           <SuspenseRoute><Pages.WorkflowSettings /></SuspenseRoute>
         </DashboardLayout>
@@ -1039,7 +1051,7 @@ export const WorkflowRoutes = () => [
     key="/workflows/builder"
     path="/workflows/builder"
     element={
-      <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+      <ProtectedRoute requiredRole={["admin", "cto", "super_admin"]}>
         <DashboardLayout>
           <SuspenseRoute><Pages.WorkflowBuilder /></SuspenseRoute>
         </DashboardLayout>
@@ -1056,7 +1068,7 @@ export const IntegrationRoutes = () => [
     key="/integrations"
     path="/integrations"
     element={
-      <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+      <ProtectedRoute requiredRole={["admin", "cto", "super_admin"]}>
         <DashboardLayout>
           <SuspenseRoute><Pages.Integrations /></SuspenseRoute>
         </DashboardLayout>
@@ -1067,7 +1079,7 @@ export const IntegrationRoutes = () => [
     key="/integrations/settings"
     path="/integrations/settings"
     element={
-      <ProtectedRoute requiredRole={["admin", "super_admin"]}>
+      <ProtectedRoute requiredRole={["admin", "cto", "super_admin"]}>
         <DashboardLayout>
           <SuspenseRoute><Pages.IntegrationSettings /></SuspenseRoute>
         </DashboardLayout>

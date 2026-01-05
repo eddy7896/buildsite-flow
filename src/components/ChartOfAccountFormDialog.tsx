@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { insertRecord, updateRecord, selectRecords, selectOne } from '@/services/api/postgresql-service';
 import { useAuth } from '@/hooks/useAuth';
 import { getAgencyId } from '@/utils/agencyUtils';
+import { getAgencyDatabase } from '@/utils/authContext';
 
 interface ChartOfAccount {
   id?: string;
@@ -134,7 +135,7 @@ const ChartOfAccountFormDialog: React.FC<ChartOfAccountFormDialogProps> = ({
       const agencyId = await getAgencyId(userProfile, user?.id);
       
       // Check if we have agency context (either agency_id or agency_database)
-      const agencyDatabase = localStorage.getItem('agency_database');
+      const agencyDatabase = getAgencyDatabase();
       const hasAgencyContext = agencyId || agencyDatabase;
       
       if (!hasAgencyContext && !account?.id) {

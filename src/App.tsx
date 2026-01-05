@@ -19,7 +19,7 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { useAuth } from "@/hooks/useAuth";
 import { useSystemSettings } from "@/hooks/useSystemSettings";
 import { useMaintenanceMode } from "@/hooks/useMaintenanceMode";
-import { MaintenanceMode } from "@/components/MaintenanceMode";
+import { AgencyMaintenanceMode } from "@/components/AgencyMaintenanceMode";
 import HoverReceiver from "@/visual-edits/VisualEditsMessenger";
 import { ThemeSync } from "@/components/ThemeSync";
 import { AppRoutes } from "@/routes";
@@ -38,9 +38,9 @@ const AppContent = () => {
   // Check maintenance mode (super admins bypass)
   const { maintenanceMode, maintenanceMessage, loading: maintenanceLoading } = useMaintenanceMode();
   
-  // Show maintenance mode if enabled and user is not super admin
+  // Show agency maintenance mode if enabled and user is not super admin
   if (!maintenanceLoading && maintenanceMode && !isSystemSuperAdmin && userRole !== 'super_admin') {
-    return <MaintenanceMode message={maintenanceMessage || undefined} />;
+    return <AgencyMaintenanceMode message={maintenanceMessage || undefined} />;
   }
   
   return (

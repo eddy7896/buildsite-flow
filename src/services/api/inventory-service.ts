@@ -4,6 +4,7 @@
  */
 
 import { getApiBaseUrl } from '@/config/api';
+import { getApiHeaders } from './api-helpers';
 
 const API_BASE = getApiBaseUrl();
 
@@ -91,25 +92,18 @@ export interface InventoryTransaction {
 /**
  * Get authentication token from localStorage
  */
-function getAuthToken(): string | null {
-  return localStorage.getItem('auth_token');
-}
-
 /**
  * Get warehouses
  */
 export async function getWarehouses(): Promise<Warehouse[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   try {
     const response = await fetch(`${API_BASE}/api/inventory/warehouses`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'X-Agency-Database': localStorage.getItem('agency_database') || '',
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -134,18 +128,14 @@ export async function getWarehouses(): Promise<Warehouse[]> {
  * Create warehouse
  */
 export async function createWarehouse(warehouseData: Partial<Warehouse>): Promise<Warehouse> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/inventory/warehouses`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+    headers,
     body: JSON.stringify(warehouseData),
   });
 
@@ -167,8 +157,8 @@ export async function getProducts(filters?: {
   search?: string;
   limit?: number;
 }): Promise<Product[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -180,10 +170,7 @@ export async function getProducts(filters?: {
     if (filters?.limit) queryParams.append('limit', String(filters.limit));
 
     const response = await fetch(`${API_BASE}/api/inventory/products?${queryParams}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'X-Agency-Database': localStorage.getItem('agency_database') || '',
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -208,18 +195,14 @@ export async function getProducts(filters?: {
  * Create product
  */
 export async function createProduct(productData: Partial<Product>): Promise<Product> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/inventory/products`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+    headers,
     body: JSON.stringify(productData),
   });
 
@@ -236,8 +219,8 @@ export async function createProduct(productData: Partial<Product>): Promise<Prod
  * Get inventory levels for a product
  */
 export async function getInventoryLevels(productId: string, variantId?: string): Promise<InventoryLevel[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -247,7 +230,6 @@ export async function getInventoryLevels(productId: string, variantId?: string):
   const response = await fetch(`${API_BASE}/api/inventory/products/${productId}/levels?${queryParams}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -264,8 +246,8 @@ export async function getInventoryLevels(productId: string, variantId?: string):
  * Create inventory transaction
  */
 export async function createInventoryTransaction(transactionData: Partial<InventoryTransaction>): Promise<InventoryTransaction> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -274,7 +256,6 @@ export async function createInventoryTransaction(transactionData: Partial<Invent
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(transactionData),
   });
@@ -292,15 +273,14 @@ export async function createInventoryTransaction(transactionData: Partial<Invent
  * Get low stock alerts
  */
 export async function getLowStockAlerts(): Promise<InventoryLevel[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/inventory/alerts/low-stock`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -317,15 +297,14 @@ export async function getLowStockAlerts(): Promise<InventoryLevel[]> {
  * Get a single product by ID
  */
 export async function getProductById(productId: string): Promise<Product> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/inventory/products/${productId}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -342,8 +321,8 @@ export async function getProductById(productId: string): Promise<Product> {
  * Update a product
  */
 export async function updateProduct(productId: string, productData: Partial<Product>): Promise<Product> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -352,7 +331,6 @@ export async function updateProduct(productId: string, productData: Partial<Prod
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(productData),
   });
@@ -370,8 +348,8 @@ export async function updateProduct(productId: string, productData: Partial<Prod
  * Delete a product
  */
 export async function deleteProduct(productId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -379,7 +357,6 @@ export async function deleteProduct(productId: string): Promise<void> {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -393,8 +370,8 @@ export async function deleteProduct(productId: string): Promise<void> {
  * Update a warehouse
  */
 export async function updateWarehouse(warehouseId: string, warehouseData: Partial<Warehouse>): Promise<Warehouse> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -403,7 +380,6 @@ export async function updateWarehouse(warehouseId: string, warehouseData: Partia
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(warehouseData),
   });
@@ -421,8 +397,8 @@ export async function updateWarehouse(warehouseId: string, warehouseData: Partia
  * Delete a warehouse
  */
 export async function deleteWarehouse(warehouseId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -430,7 +406,6 @@ export async function deleteWarehouse(warehouseId: string): Promise<void> {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -444,15 +419,14 @@ export async function deleteWarehouse(warehouseId: string): Promise<void> {
  * Get product categories
  */
 export async function getProductCategories(): Promise<Array<{ id: string; name: string; description?: string; parent_id?: string }>> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/inventory/categories`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -469,8 +443,8 @@ export async function getProductCategories(): Promise<Array<{ id: string; name: 
  * Create product category
  */
 export async function createProductCategory(categoryData: { name: string; description?: string; parent_id?: string }): Promise<any> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -479,7 +453,6 @@ export async function createProductCategory(categoryData: { name: string; descri
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(categoryData),
   });
@@ -504,8 +477,8 @@ export async function createTransfer(transferData: {
   quantity: number;
   notes?: string;
 }): Promise<any> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -514,7 +487,6 @@ export async function createTransfer(transferData: {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(transferData),
   });
@@ -540,8 +512,8 @@ export async function createAdjustment(adjustmentData: {
   reason?: string;
   notes?: string;
 }): Promise<any> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -550,7 +522,6 @@ export async function createAdjustment(adjustmentData: {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(adjustmentData),
   });
@@ -575,8 +546,8 @@ export async function getInventoryTransactions(filters?: {
   end_date?: string;
   limit?: number;
 }): Promise<InventoryTransaction[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -589,10 +560,7 @@ export async function getInventoryTransactions(filters?: {
   if (filters?.limit) queryParams.append('limit', String(filters.limit));
 
   const response = await fetch(`${API_BASE}/api/inventory/transactions?${queryParams}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -662,8 +630,8 @@ export async function getSerialNumbers(filters?: {
   status?: string;
   search?: string;
 }): Promise<SerialNumber[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -676,7 +644,6 @@ export async function getSerialNumbers(filters?: {
   const response = await fetch(`${API_BASE}/api/inventory/serial-numbers?${queryParams.toString()}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -693,8 +660,8 @@ export async function getSerialNumbers(filters?: {
  * Create a serial number
  */
 export async function createSerialNumber(serialData: Partial<SerialNumber>): Promise<SerialNumber> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -703,7 +670,6 @@ export async function createSerialNumber(serialData: Partial<SerialNumber>): Pro
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(serialData),
   });
@@ -721,8 +687,8 @@ export async function createSerialNumber(serialData: Partial<SerialNumber>): Pro
  * Update a serial number
  */
 export async function updateSerialNumber(serialId: string, serialData: Partial<SerialNumber>): Promise<SerialNumber> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -731,7 +697,6 @@ export async function updateSerialNumber(serialId: string, serialData: Partial<S
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(serialData),
   });
@@ -749,8 +714,8 @@ export async function updateSerialNumber(serialId: string, serialData: Partial<S
  * Delete a serial number
  */
 export async function deleteSerialNumber(serialId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -758,7 +723,6 @@ export async function deleteSerialNumber(serialId: string): Promise<void> {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -778,8 +742,8 @@ export async function getBatches(filters?: {
   expiring_soon?: number;
   search?: string;
 }): Promise<Batch[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -793,7 +757,6 @@ export async function getBatches(filters?: {
   const response = await fetch(`${API_BASE}/api/inventory/batches?${queryParams.toString()}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -810,8 +773,8 @@ export async function getBatches(filters?: {
  * Create a batch
  */
 export async function createBatch(batchData: Partial<Batch>): Promise<Batch> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -820,7 +783,6 @@ export async function createBatch(batchData: Partial<Batch>): Promise<Batch> {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(batchData),
   });
@@ -838,8 +800,8 @@ export async function createBatch(batchData: Partial<Batch>): Promise<Batch> {
  * Update a batch
  */
 export async function updateBatch(batchId: string, batchData: Partial<Batch>): Promise<Batch> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -848,7 +810,6 @@ export async function updateBatch(batchId: string, batchData: Partial<Batch>): P
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(batchData),
   });
@@ -866,8 +827,8 @@ export async function updateBatch(batchId: string, batchData: Partial<Batch>): P
  * Delete a batch
  */
 export async function deleteBatch(batchId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -875,7 +836,6 @@ export async function deleteBatch(batchId: string): Promise<void> {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -975,8 +935,8 @@ export async function getInventoryReports(filters?: {
   date_from?: string;
   date_to?: string;
 }): Promise<InventoryReportSummary> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -987,7 +947,6 @@ export async function getInventoryReports(filters?: {
   const response = await fetch(`${API_BASE}/api/inventory/reports?${queryParams.toString()}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -1008,8 +967,8 @@ export async function getStockValueReport(filters?: {
   category_id?: string;
   low_stock_only?: boolean;
 }): Promise<StockValueReportItem[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -1021,7 +980,6 @@ export async function getStockValueReport(filters?: {
   const response = await fetch(`${API_BASE}/api/inventory/reports/stock-value?${queryParams.toString()}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -1044,8 +1002,8 @@ export async function getMovementReport(filters?: {
   warehouse_id?: string;
   transaction_type?: string;
 }): Promise<MovementReportItem[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -1059,7 +1017,6 @@ export async function getMovementReport(filters?: {
   const response = await fetch(`${API_BASE}/api/inventory/reports/movement?${queryParams.toString()}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -1076,15 +1033,14 @@ export async function getMovementReport(filters?: {
  * Get warehouse utilization report
  */
 export async function getWarehouseUtilizationReport(): Promise<WarehouseUtilizationItem[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/inventory/reports/warehouse-utilization`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -1101,8 +1057,8 @@ export async function getWarehouseUtilizationReport(): Promise<WarehouseUtilizat
  * Generate product code (barcode/QR)
  */
 export async function generateProductCode(productId: string, codeType: 'barcode' | 'qr' = 'barcode'): Promise<string> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -1111,7 +1067,6 @@ export async function generateProductCode(productId: string, codeType: 'barcode'
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify({ codeType }),
   });
@@ -1166,8 +1121,8 @@ export async function getBoms(filters?: {
   is_active?: boolean;
   limit?: number;
 }): Promise<Bom[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -1181,7 +1136,6 @@ export async function getBoms(filters?: {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -1198,8 +1152,8 @@ export async function getBoms(filters?: {
  * Get a single BOM by ID
  */
 export async function getBomById(bomId: string): Promise<Bom> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -1208,7 +1162,6 @@ export async function getBomById(bomId: string): Promise<Bom> {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -1225,8 +1178,8 @@ export async function getBomById(bomId: string): Promise<Bom> {
  * Create a new BOM
  */
 export async function createBom(bomData: Partial<Bom>): Promise<Bom> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -1235,7 +1188,6 @@ export async function createBom(bomData: Partial<Bom>): Promise<Bom> {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(bomData),
   });
@@ -1253,8 +1205,8 @@ export async function createBom(bomData: Partial<Bom>): Promise<Bom> {
  * Update a BOM
  */
 export async function updateBom(bomId: string, bomData: Partial<Bom>): Promise<Bom> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -1263,7 +1215,6 @@ export async function updateBom(bomId: string, bomData: Partial<Bom>): Promise<B
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(bomData),
   });
@@ -1281,8 +1232,8 @@ export async function updateBom(bomId: string, bomData: Partial<Bom>): Promise<B
  * Delete a BOM
  */
 export async function deleteBom(bomId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -1291,7 +1242,6 @@ export async function deleteBom(bomId: string): Promise<void> {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 

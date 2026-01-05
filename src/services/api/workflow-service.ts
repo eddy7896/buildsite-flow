@@ -4,15 +4,9 @@
  */
 
 import { getApiBaseUrl } from '@/config/api';
+import { getApiHeaders } from './api-helpers';
 
 const API_BASE = getApiBaseUrl();
-
-/**
- * Get authentication token from localStorage
- */
-function getAuthToken(): string | null {
-  return localStorage.getItem('auth_token');
-}
 
 export interface Workflow {
   id: string;
@@ -82,7 +76,6 @@ export async function getWorkflows(filters?: {
   const response = await fetch(`${API_BASE}/api/workflows?${queryParams.toString()}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -107,7 +100,6 @@ export async function getWorkflowById(workflowId: string): Promise<Workflow> {
   const response = await fetch(`${API_BASE}/api/workflows/${workflowId}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -124,18 +116,14 @@ export async function getWorkflowById(workflowId: string): Promise<Workflow> {
  * Create a workflow
  */
 export async function createWorkflow(workflowData: Partial<Workflow>): Promise<Workflow> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/workflows`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+    headers,
     body: JSON.stringify(workflowData),
   });
 
@@ -162,7 +150,6 @@ export async function updateWorkflow(workflowId: string, workflowData: Partial<W
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(workflowData),
   });
@@ -189,7 +176,6 @@ export async function deleteWorkflow(workflowId: string): Promise<void> {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -211,7 +197,6 @@ export async function getWorkflowSteps(workflowId: string): Promise<WorkflowStep
   const response = await fetch(`${API_BASE}/api/workflows/${workflowId}/steps`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -238,7 +223,6 @@ export async function createWorkflowStep(workflowId: string, stepData: Partial<W
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(stepData),
   });
@@ -266,7 +250,6 @@ export async function updateWorkflowStep(workflowId: string, stepId: string, ste
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(stepData),
   });
@@ -293,7 +276,6 @@ export async function deleteWorkflowStep(workflowId: string, stepId: string): Pr
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -378,7 +360,6 @@ export async function getWorkflowInstances(filters?: {
   const response = await fetch(`${API_BASE}/api/workflows/instances?${queryParams.toString()}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -403,7 +384,6 @@ export async function getWorkflowInstanceById(instanceId: string): Promise<Workf
   const response = await fetch(`${API_BASE}/api/workflows/instances/${instanceId}`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -428,7 +408,6 @@ export async function getWorkflowApprovals(instanceId: string): Promise<Workflow
   const response = await fetch(`${API_BASE}/api/workflows/instances/${instanceId}/approvals`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -453,7 +432,6 @@ export async function getAllPendingApprovals(): Promise<WorkflowApproval[]> {
   const response = await fetch(`${API_BASE}/api/workflows/approvals/pending`, {
     headers: {
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -486,7 +464,6 @@ export async function updateWorkflowApproval(
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(approvalData),
   });
@@ -514,7 +491,6 @@ export async function createWorkflowInstance(instanceData: Partial<WorkflowInsta
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(instanceData),
   });
@@ -542,7 +518,6 @@ export async function updateWorkflowInstance(instanceId: string, instanceData: P
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify(instanceData),
   });
@@ -570,7 +545,6 @@ export async function cancelWorkflowInstance(instanceId: string, reason?: string
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify({ reason }),
   });

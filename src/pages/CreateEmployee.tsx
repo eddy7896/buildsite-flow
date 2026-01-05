@@ -8,12 +8,13 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
-import { ArrowLeft, CalendarIcon, Save, User, Mail, Phone, Building, MapPin, Upload, FileText, X, Eye } from "lucide-react";
+import { ArrowLeft, CalendarIcon, Save, User, Mail, Phone, Building, MapPin, Upload, FileText, X, Eye, Copy, CheckCircle2, LogIn } from "lucide-react";
 import { z } from "zod";
 import { cn } from "@/lib/utils";
 import { db } from '@/lib/database';
@@ -23,13 +24,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { insertRecord, updateRecord, selectOne, selectRecords, deleteRecord } from '@/services/api/postgresql-service';
 import { getAgencyId } from '@/utils/agencyUtils';
 import bcrypt from '@/lib/bcrypt';
-import { logError } from '@/utils/consoleLogger';
+import { logError, logWarn } from '@/utils/consoleLogger';
+import { AppRole, ROLE_DISPLAY_NAMES } from '@/utils/roleUtils';
+import { useAgencySettings } from '@/hooks/useAgencySettings';
 
 const formSchema = z.object({
   // Personal Information
   firstName: z.string().min(2, "First name must be at least 2 characters"),
   lastName: z.string().min(2, "Last name must be at least 2 characters"),
-  email: z.string().email("Please enter a valid email address"),
+  personalEmail: z.string().email("Please enter a valid email address").optional().or(z.literal("")),
   phone: z.string().min(10, "Phone number must be at least 10 digits"),
   address: z.string().min(5, "Address must be at least 5 characters"),
   dateOfBirth: z.date({
@@ -42,7 +45,7 @@ const formSchema = z.object({
   // Employment Details
   employeeId: z.string().optional(), // Auto-generated, optional in form
   position: z.string().min(2, "Position is required"),
-  department: z.string().min(1, "Department is required"),
+  department: z.string().optional(), // Department is now optional
   role: z.string().min(1, "Role is required"), // Dynamic based on database
   hireDate: z.date({
     required_error: "Hire date is required",
@@ -87,6 +90,7 @@ interface Department {
 const CreateEmployee = () => {
   const { toast } = useToast();
   const { user, profile } = useAuth();
+  const { settings: agencySettings } = useAgencySettings();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [profileImage, setProfileImage] = useState<File | null>(null);
@@ -96,6 +100,19 @@ const CreateEmployee = () => {
   const [hireDateOpen, setHireDateOpen] = useState(false);
   const [dateOfBirthInput, setDateOfBirthInput] = useState<string>('');
   const [hireDateInput, setHireDateInput] = useState<string>('');
+  
+  // State for success dialog and credentials
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [createdEmployee, setCreatedEmployee] = useState<{
+    name: string;
+    email: string;
+    employeeId: string;
+    password: string;
+    role: string;
+    department: string;
+    position: string;
+  } | null>(null);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
   
   // State for database-fetched options
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -109,7 +126,7 @@ const CreateEmployee = () => {
     defaultValues: {
       firstName: "",
       lastName: "",
-      email: "",
+      personalEmail: "",
       phone: "",
       address: "",
       panCardNumber: "",
@@ -117,7 +134,7 @@ const CreateEmployee = () => {
       maritalStatus: "single",
       employeeId: "", // Will be auto-generated
       position: "",
-      department: "",
+      department: "__no_department__", // Default to no department
       role: "employee",
       salary: "",
       employmentType: "full-time",
@@ -130,6 +147,41 @@ const CreateEmployee = () => {
     },
   });
 
+  // Generate company email from name and domain
+  const generateCompanyEmail = (firstName: string, lastName: string): string => {
+    if (!firstName || !lastName) return '';
+    
+    const domain = agencySettings?.domain || 'company.com';
+    // Clean domain (remove @ if present)
+    const cleanDomain = domain.replace(/^@+/, '');
+    
+    // Generate email: firstname.lastname@domain
+    const firstNameClean = firstName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    const lastNameClean = lastName.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+    
+    if (!firstNameClean || !lastNameClean) return '';
+    
+    return `${firstNameClean}.${lastNameClean}@${cleanDomain}`;
+  };
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      toast({
+        title: "Copied!",
+        description: `${field === 'email' ? 'Email' : 'Password'} copied to clipboard`,
+      });
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (err) {
+      toast({
+        title: "Failed to copy",
+        description: "Please copy manually",
+        variant: "destructive",
+      });
+    }
+  };
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
     try {
@@ -137,6 +189,17 @@ const CreateEmployee = () => {
       const currentUserId = user?.id;
       if (!currentUserId) {
         throw new Error('You must be logged in to create an employee');
+      }
+
+      // Check if company domain is configured
+      if (!agencySettings?.domain || !agencySettings.domain.trim()) {
+        throw new Error('Company email domain is not configured. Please set up the email domain in Agency Settings before creating employees.');
+      }
+
+      // Generate company email for login
+      const companyEmail = generateCompanyEmail(values.firstName, values.lastName);
+      if (!companyEmail) {
+        throw new Error('Unable to generate company email. Please ensure first name and last name are provided.');
       }
 
       // Generate a new user ID for the employee
@@ -152,12 +215,15 @@ const CreateEmployee = () => {
         throw new Error('Agency ID not found. Please ensure you are logged in to an agency account.');
       }
 
-      // Check if user with this email already exists
-      const existingUser = await selectOne('users', { email: values.email.toLowerCase().trim() });
-      if (existingUser) {
-        // Check if this is an orphaned user (user exists but no employee_details)
-        // This can happen if a previous creation attempt failed
-        const existingEmployeeDetails = await selectOne('employee_details', { user_id: existingUser.id });
+      // Check if user with this company email already exists using validation service
+      const emailExists = await checkEmailExistsAPI(companyEmail.toLowerCase().trim());
+      if (emailExists) {
+        // Need to check if this is an orphaned user (user exists but no employee_details)
+        const existingUser = await selectOne('users', { email: companyEmail.toLowerCase().trim() });
+        if (existingUser) {
+          // Check if this is an orphaned user (user exists but no employee_details)
+          // This can happen if a previous creation attempt failed
+          const existingEmployeeDetails = await selectOne('employee_details', { user_id: existingUser.id });
         if (!existingEmployeeDetails) {
           // Orphaned user - delete it and continue with creation
           logWarn('Found orphaned user, cleaning up and retrying...');
@@ -173,11 +239,11 @@ const CreateEmployee = () => {
             });
           } catch (cleanupError) {
             logError('Failed to cleanup orphaned user:', cleanupError);
-            throw new Error(`A user with email "${values.email}" exists but is incomplete. Please contact support or use a different email.`);
+            throw new Error(`A user with email "${companyEmail}" exists but is incomplete. Please contact support.`);
           }
         } else {
           // User exists with complete employee details - this is a real duplicate
-          throw new Error(`A user with email "${values.email}" already exists. Please use a different email address.`);
+          throw new Error(`A user with email "${companyEmail}" already exists. This email is already in use.`);
         }
       }
 
@@ -226,11 +292,11 @@ const CreateEmployee = () => {
       }
 
       // Create user record with current user context for audit logs
-      // Normalize email to lowercase
+      // Use company email for login (normalize to lowercase)
       await insertRecord('users', {
           id: userId,
-          email: values.email.toLowerCase().trim(),
-        password_hash: passwordHash,
+          email: companyEmail.toLowerCase().trim(),
+          password_hash: passwordHash,
           is_active: true,
           email_confirmed: true,
       }, currentUserId);
@@ -238,7 +304,7 @@ const CreateEmployee = () => {
       // If a department was selected, resolve its name and ensure we have a valid department_id
       let selectedDepartmentId: string | null = null;
       let selectedDepartmentName: string | null = null;
-      if (values.department && values.department.trim() && values.department !== '__no_departments__') {
+      if (values.department && values.department.trim() && values.department !== '__no_departments__' && values.department !== '__no_department__' && values.department !== '') {
         // values.department contains the department ID from the dropdown
         const departmentRecord = await selectOne<Department>('departments', { id: values.department });
         if (departmentRecord) {
@@ -289,6 +355,15 @@ const CreateEmployee = () => {
         }
       }
       
+      // Prepare notes with personal email if provided
+      let notesWithPersonalEmail = values.notes || '';
+      if (values.personalEmail && values.personalEmail.trim()) {
+        const personalEmailNote = `Personal Email: ${values.personalEmail.trim()}`;
+        notesWithPersonalEmail = notesWithPersonalEmail 
+          ? `${notesWithPersonalEmail}\n${personalEmailNote}`
+          : personalEmailNote;
+      }
+
       await insertRecord('employee_details', {
           id: employeeDetailsId,
           user_id: userId,
@@ -307,7 +382,7 @@ const CreateEmployee = () => {
           emergency_contact_name: values.emergencyContactName,
           emergency_contact_phone: values.emergencyContactPhone,
           emergency_contact_relationship: values.emergencyContactRelationship,
-          notes: values.notes,
+          notes: notesWithPersonalEmail,
           agency_id: agencyId,
           is_active: true,
       }, currentUserId);
@@ -372,10 +447,19 @@ const CreateEmployee = () => {
         }, currentUserId, agencyId);
       }
 
-      toast({
-        title: "Success",
-        description: `Employee created successfully! Temporary password: ${tempPassword}`,
+      // Store employee credentials for success dialog
+      setCreatedEmployee({
+        name: `${values.firstName} ${values.lastName}`,
+        email: companyEmail.toLowerCase().trim(),
+        employeeId: employeeId,
+        password: tempPassword,
+        role: finalRole,
+        department: selectedDepartmentName || values.department || 'No Department',
+        position: values.position,
       });
+
+      // Open success dialog
+      setShowSuccessDialog(true);
 
       // Reset form
       form.reset();
@@ -396,7 +480,8 @@ const CreateEmployee = () => {
         if (errorStr.includes('duplicate key value violates unique constraint "users_email_key"') ||
             errorStr.includes('already exists') ||
             errorStr.includes('23505')) {
-          errorMessage = `A user with email "${values.email}" already exists. Please use a different email address.`;
+          const companyEmail = generateCompanyEmail(values.firstName, values.lastName);
+          errorMessage = `A user with email "${companyEmail}" already exists. This company email is already in use.`;
         } 
         // Check for invalid enum value
         else if (errorStr.includes('invalid input value for enum app_role') ||
@@ -548,17 +633,11 @@ const CreateEmployee = () => {
     }
   };
 
-  // Fetch distinct roles from user_roles table
+  // Fetch all available system roles from roleUtils
   const fetchRoles = async () => {
     try {
-      const agencyId = await getAgencyId(profile, user?.id);
-      if (!agencyId) {
-        logWarn('No agency_id available for fetching roles');
-        return;
-      }
-
-      // Valid enum values for app_role (must match database enum)
-      const validRoles = [
+      // Get all roles from the system role definitions
+      const allSystemRoles: AppRole[] = [
         'super_admin', 'ceo', 'cto', 'cfo', 'coo', 'admin', 
         'operations_manager', 'department_head', 'team_lead', 
         'project_manager', 'hr', 'finance_manager', 'sales_manager',
@@ -567,31 +646,26 @@ const CreateEmployee = () => {
         'employee', 'contractor', 'intern'
       ];
 
-      // Fetch distinct roles from user_roles filtered by agency
-      const rolesData = await selectRecords('user_roles', {
-        select: 'role',
-        filters: [
-          { column: 'agency_id', operator: 'eq', value: agencyId }
-        ]
+      // Set all system roles (sorted by display name for better UX)
+      const sortedRoles = allSystemRoles.sort((a, b) => {
+        const nameA = ROLE_DISPLAY_NAMES[a] || a;
+        const nameB = ROLE_DISPLAY_NAMES[b] || b;
+        return nameA.localeCompare(nameB);
       });
-
-      // Get unique roles and filter to only valid enum values
-      const uniqueRoles = Array.from(new Set((rolesData || []).map((r: any) => r.role).filter(Boolean)));
-      const validUniqueRoles = uniqueRoles.filter((role: string) => validRoles.includes(role.toLowerCase()));
       
-      // If no valid roles found, use default valid roles
-      if (validUniqueRoles.length === 0) {
-        setRoles(['employee', 'hr', 'finance_manager', 'admin', 'super_admin']);
-      } else {
-        // Always include common roles even if not in database yet
-        const defaultRoles = ['employee', 'hr', 'admin'];
-        const combinedRoles = Array.from(new Set([...defaultRoles, ...validUniqueRoles]));
-        setRoles(combinedRoles.sort());
-      }
+      setRoles(sortedRoles);
     } catch (error) {
       logError('Error fetching roles:', error);
-      // Fallback to default valid roles
-      setRoles(['employee', 'hr', 'finance_manager', 'admin', 'super_admin']);
+      // Fallback to all system roles
+      const fallbackRoles: AppRole[] = [
+        'super_admin', 'ceo', 'cto', 'cfo', 'coo', 'admin', 
+        'operations_manager', 'department_head', 'team_lead', 
+        'project_manager', 'hr', 'finance_manager', 'sales_manager',
+        'marketing_manager', 'quality_assurance', 'it_support', 
+        'legal_counsel', 'business_analyst', 'customer_success',
+        'employee', 'contractor', 'intern'
+      ];
+      setRoles(fallbackRoles);
     }
   };
 
@@ -830,22 +904,56 @@ const CreateEmployee = () => {
                     />
                   </div>
 
-                  <FormField
-                    control={form.control}
-                    name="email"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Email Address</FormLabel>
-                        <FormControl>
-                          <div className="relative">
-                            <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                            <Input placeholder="john.doe@company.com" className="pl-10" {...field} />
-                          </div>
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="personalEmail"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Personal Email (Optional)</FormLabel>
+                          <FormControl>
+                            <div className="relative">
+                              <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                              <Input 
+                                placeholder="john.doe@gmail.com" 
+                                className="pl-10" 
+                                {...field}
+                                value={field.value || ''}
+                              />
+                            </div>
+                          </FormControl>
+                          <FormMessage />
+                          <p className="text-xs text-muted-foreground">
+                            Used for sending notifications and communications (mailing system coming soon)
+                          </p>
+                        </FormItem>
+                      )}
+                    />
+                    <div className="space-y-2">
+                      <Label>Company Email (Login Email)</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input 
+                          value={
+                            !agencySettings?.domain 
+                              ? 'Configure domain in Agency Settings'
+                              : form.watch('firstName') && form.watch('lastName') 
+                                ? generateCompanyEmail(form.watch('firstName'), form.watch('lastName'))
+                                : 'Enter name to generate email'
+                          }
+                          readOnly
+                          className="pl-10 bg-muted cursor-not-allowed"
+                          placeholder="Auto-generated from name"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {agencySettings?.domain 
+                          ? `Auto-generated from name + ${agencySettings.domain}. This will be used for login.`
+                          : 'Please configure email domain in Agency Settings first.'
+                        }
+                      </p>
+                    </div>
+                  </div>
 
                   <FormField
                     control={form.control}
@@ -1170,14 +1278,19 @@ const CreateEmployee = () => {
                       name="department"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Department</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value} disabled={loadingOptions}>
+                          <FormLabel>Department (Optional)</FormLabel>
+                          <Select 
+                            onValueChange={field.onChange} 
+                            value={field.value || '__no_department__'} 
+                            disabled={loadingOptions}
+                          >
                             <FormControl>
                               <SelectTrigger>
-                                <SelectValue placeholder={loadingOptions ? "Loading departments..." : "Select department"} />
+                                <SelectValue placeholder={loadingOptions ? "Loading departments..." : "Select department (optional)"} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
+                              <SelectItem value="__no_department__">No Department</SelectItem>
                               {departments.length > 0 ? (
                                 departments.map((dept) => (
                                   <SelectItem key={dept.id} value={dept.id}>
@@ -1211,7 +1324,7 @@ const CreateEmployee = () => {
                               {roles.length > 0 ? (
                                 roles.map((role) => (
                                   <SelectItem key={role} value={role}>
-                                    {role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                                    {ROLE_DISPLAY_NAMES[role as AppRole] || role.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                                   </SelectItem>
                                 ))
                               ) : (
@@ -1633,6 +1746,183 @@ const CreateEmployee = () => {
           </div>
         </form>
       </Form>
+
+      {/* Success Dialog with Employee Credentials */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
+                <CheckCircle2 className="h-6 w-6 text-green-600 dark:text-green-400" />
+              </div>
+              <div>
+                <DialogTitle className="text-2xl">Employee Created Successfully!</DialogTitle>
+                <DialogDescription className="text-base mt-1">
+                  Employee account has been created. Share these credentials with the employee.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {createdEmployee && (
+            <div className="space-y-6 mt-4">
+              {/* Employee Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    Employee Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Full Name</Label>
+                      <p className="text-base font-semibold">{createdEmployee.name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Employee ID</Label>
+                      <p className="text-base font-semibold font-mono">{createdEmployee.employeeId}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Position</Label>
+                      <p className="text-base font-medium">{createdEmployee.position}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Department</Label>
+                      <p className="text-base font-medium">{createdEmployee.department}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm text-muted-foreground">Role</Label>
+                      <Badge variant="secondary" className="mt-1">
+                        {createdEmployee.role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Login Credentials */}
+              <Card className="border-2 border-primary/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <LogIn className="h-5 w-5" />
+                    Login Credentials
+                  </CardTitle>
+                  <CardDescription>
+                    These credentials are required for the employee to access their dashboard. Please save or share these securely.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Company Email for Login */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Company Email (Login Email)</Label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-muted rounded-lg border">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <code className="flex-1 text-sm font-mono">{createdEmployee.email}</code>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(createdEmployee.email, 'email')}
+                        className="shrink-0"
+                      >
+                        {copiedField === 'email' ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This is the company email generated from the employee's name. Use this email to log in to the dashboard.
+                    </p>
+                  </div>
+
+                  {/* Password */}
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium">Temporary Password</Label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 flex items-center gap-2 px-3 py-2.5 bg-muted rounded-lg border">
+                        <code className="flex-1 text-sm font-mono font-semibold tracking-wider">
+                          {createdEmployee.password}
+                        </code>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => copyToClipboard(createdEmployee.password, 'password')}
+                        className="shrink-0"
+                      >
+                        {copiedField === 'password' ? (
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      ⚠️ This password is temporary. The employee should change it on first login.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Dashboard Access Info */}
+              <Card className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Building className="h-4 w-4" />
+                    Dashboard Access
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-2 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-600 dark:text-blue-400 mt-0.5">•</span>
+                      <span>The employee can now log in to their dedicated dashboard using the credentials above.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-600 dark:text-blue-400 mt-0.5">•</span>
+                      <span>They will have access to pages and features based on their assigned role: <strong>{createdEmployee.role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</strong></span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-600 dark:text-blue-400 mt-0.5">•</span>
+                      <span>On first login, they will be prompted to change their temporary password.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="text-blue-600 dark:text-blue-400 mt-0.5">•</span>
+                      <span>They can access their dashboard at the same login URL used by all employees.</span>
+                    </li>
+                  </ul>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowSuccessDialog(false);
+                setCreatedEmployee(null);
+              }}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                const credentials = `Email: ${createdEmployee?.email}\nPassword: ${createdEmployee?.password}`;
+                copyToClipboard(credentials, 'all');
+              }}
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Copy All Credentials
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

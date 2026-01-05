@@ -401,6 +401,8 @@ router.get(
              subscription_plan,
              max_users,
              is_active,
+             maintenance_mode,
+             maintenance_message,
              created_at
            FROM public.agencies
            ORDER BY created_at DESC`,

@@ -56,6 +56,7 @@ import {
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getApiBaseUrl } from '@/config/api';
+import { getAgencyDatabase } from '@/utils/authContext';
 
 const SETUP_STEPS = [
   { id: 1, title: 'Company Profile', icon: Building2, description: 'Basic company information and branding' },
@@ -231,7 +232,7 @@ export default function AgencySetup() {
   useEffect(() => {
     const checkSetupStatus = async () => {
       try {
-        const agencyDatabase = localStorage.getItem('agency_database');
+        const agencyDatabase = getAgencyDatabase();
         if (!agencyDatabase) {
           navigate('/dashboard');
           return;
@@ -270,7 +271,7 @@ export default function AgencySetup() {
     const prefillFromSettings = async () => {
       try {
         const agencyId = localStorage.getItem('agency_id');
-        const agencyDatabase = localStorage.getItem('agency_database');
+        const agencyDatabase = getAgencyDatabase();
         
         if (!agencyId && !agencyDatabase) return;
 
@@ -637,7 +638,7 @@ export default function AgencySetup() {
     try {
       const apiBaseUrl = getApiBaseUrl();
       
-      const agencyDatabase = localStorage.getItem('agency_database');
+      const agencyDatabase = getAgencyDatabase();
       
       // Convert logo to base64 if present
       let logoBase64 = null;

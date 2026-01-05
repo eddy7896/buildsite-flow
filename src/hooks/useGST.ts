@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { GSTService, type GSTSettings, type GSTReturn, type GSTTransaction, type GSTLiability } from '@/services/api/gst-service';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { getAgencyDatabase } from '@/utils/authContext';
 
 // Re-export types for backward compatibility
 export type { GSTSettings, GSTReturn, GSTTransaction, GSTLiability };
@@ -372,7 +373,7 @@ export const useGST = () => {
   
   useEffect(() => {
     // Only fetch data ONCE when user is authenticated (with or without agency_id for super_admin)
-    const hasAgencyContext = typeof window !== 'undefined' && localStorage.getItem('agency_database');
+    const hasAgencyContext = !!getAgencyDatabase();
     const canFetch = user && (profile?.agency_id || hasAgencyContext);
     
     if (!authLoading && canFetch && !hasFetched) {
@@ -390,7 +391,7 @@ export const useGST = () => {
   }, [user?.id, profile?.agency_id, authLoading, hasFetched]); // Track if we've already fetched
 
   // For super_admin, check if they have agency_database context instead of agency_id
-  const hasAgencyContext = typeof window !== 'undefined' && localStorage.getItem('agency_database');
+  const hasAgencyContext = !!getAgencyDatabase();
   
   // Allow access if:
   // 1. User is authenticated AND has agency_id in profile, OR

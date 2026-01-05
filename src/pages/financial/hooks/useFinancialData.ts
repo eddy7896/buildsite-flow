@@ -53,7 +53,7 @@ export const useFinancialData = (user: any, profile: any) => {
 
   useEffect(() => {
     const initializeAgency = async () => {
-      const agencyDatabase = localStorage.getItem('agency_database');
+      const agencyDatabase = getAgencyDatabase();
       
       let id: string | null = null;
       

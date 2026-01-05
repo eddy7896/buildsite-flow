@@ -59,14 +59,16 @@ async function parseJson<T>(response: Response): Promise<T> {
 export interface AgencyDetails {
   id: string;
   name: string;
-  domain: string;
-  subscription_plan: string;
-  max_users: number;
+  domain: string | null;
+  subscription_plan: string | null;
+  max_users: number | null;
   is_active: boolean;
   created_at: string;
-  user_count: number;
-  project_count: number;
-  invoice_count: number;
+  user_count?: number;
+  project_count?: number;
+  invoice_count?: number;
+  maintenance_mode?: boolean;
+  maintenance_message?: string | null;
 }
 
 export interface AgencyUser {

@@ -104,6 +104,13 @@ export async function fetchSystemMetrics(): Promise<SystemMetricsResponse> {
 
   const data = await handleJsonResponse<SystemMetricsResponse>(response);
   // Runtime validation to guard against unexpected backend responses
-  return SystemMetricsResponseSchema.parse(data);
+  // Use safeParse to handle validation errors gracefully
+  const validationResult = SystemMetricsResponseSchema.safeParse(data);
+  if (!validationResult.success) {
+    console.error('System metrics validation error:', validationResult.error);
+    // Return data anyway but log the error - schema might be stricter than backend
+    return data;
+  }
+  return validationResult.data;
 }
 

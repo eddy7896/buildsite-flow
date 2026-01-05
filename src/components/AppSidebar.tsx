@@ -64,8 +64,6 @@ import {
   Shield,
   Cog,
   Eye,
-  Sun,
-  Moon,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -85,6 +83,7 @@ import { useAuthWithViewAs } from '@/hooks/useAuthWithViewAs';
 import { getApiBaseUrl } from '@/config/api';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getPagesForRole, type PageConfig } from '@/utils/rolePages';
+import { getAgencyDatabase } from '@/utils/authContext';
 import { AppRole } from '@/utils/roleUtils';
 import { useAgencySettings } from '@/hooks/useAgencySettings';
 import { canAccessRouteSync } from '@/utils/routePermissions';
@@ -92,7 +91,6 @@ import { getAccessiblePagePaths } from '@/utils/agencyPageAccess';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useThemeSync } from '@/hooks/useThemeSync';
-import { Button } from '@/components/ui/button';
 
 // Icon mapping from string names to icon components
 const iconMap: Record<string, any> = {
@@ -213,18 +211,19 @@ export function AppSidebar() {
   useEffect(() => {
     const checkSetup = async () => {
       try {
-        const agencyDatabase = localStorage.getItem('agency_database');
+        const agencyDatabase = getAgencyDatabase();
         if (!agencyDatabase) {
           setSetupComplete(true);
           return;
         }
 
         const apiBaseUrl = getApiBaseUrl();
+        const token = localStorage.getItem('auth_token');
         
         const response = await fetch(`${apiBaseUrl}/api/agencies/check-setup?database=${encodeURIComponent(agencyDatabase)}`, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+            'Authorization': `Bearer ${token}`,
             'X-Agency-Database': agencyDatabase || '',
           },
         });
@@ -288,6 +287,17 @@ export function AppSidebar() {
   const role = effectiveRole as AppRole;
   const rolePages = getPagesForRole(role);
   
+  // Core pages that don't require page catalog assignment (always accessible)
+  const corePages = [
+    '/dashboard',
+    '/my-profile',
+    '/my-team',
+    '/my-attendance',
+    '/my-leave',
+    '/employee-performance',
+    '/settings',
+  ];
+
   // Filter and organize pages by category
   const mainPages = rolePages
     .filter(page => {
@@ -295,18 +305,28 @@ export function AppSidebar() {
       if (page.category === 'settings') return false;
       
       // For non-super-admin, check if page is assigned to agency
+      // Core pages are always accessible without page catalog assignment
       if (effectiveRole && effectiveRole !== 'super_admin') {
-        if (!pagesLoaded) return false; // Wait for pages to load
-        if (accessiblePagePaths.length === 0) return false; // No pages assigned
-        const hasAccess = accessiblePagePaths.some(path => {
-          // Exact match
-          if (path === page.path) return true;
-          // Parameterized route match
-          const pathPattern = path.replace(/:[^/]+/g, '[^/]+');
-          const regex = new RegExp(`^${pathPattern}$`);
-          return regex.test(page.path);
-        });
-        if (!hasAccess) return false;
+        const isCorePage = corePages.includes(page.path);
+        
+        // Core pages are always accessible
+        if (isCorePage) {
+          // Skip page catalog check for core pages
+        } else {
+          // Non-core pages need to be in the page catalog
+          if (!pagesLoaded) return false; // Wait for pages to load
+          // If no pages are assigned at all, only show core pages
+          if (accessiblePagePaths.length === 0) return false;
+          const hasAccess = accessiblePagePaths.some(path => {
+            // Exact match
+            if (path === page.path) return true;
+            // Parameterized route match
+            const pathPattern = path.replace(/:[^/]+/g, '[^/]+');
+            const regex = new RegExp(`^${pathPattern}$`);
+            return regex.test(page.path);
+          });
+          if (!hasAccess) return false;
+        }
       }
       
       // Check role-based access
@@ -346,12 +366,36 @@ export function AppSidebar() {
   
   const collapsed = state === 'collapsed';
 
-  const isActive = (path: string) => {
-    if (path === '/dashboard') {
-      return currentPath === '/dashboard';
-    }
-    return currentPath.startsWith(path);
+  // Find the most specific matching route to ensure only one page is active
+  const getMostSpecificMatchingPath = (): string | null => {
+    const allPages = [...mainPages, settingsPage].filter(Boolean) as PageConfig[];
+    const matchingPages = allPages.filter(page => {
+      if (!page) return false;
+      const pagePath = page.path;
+      
+      // Exact match
+      if (currentPath === pagePath) return true;
+      
+      // Check if current path starts with page path followed by '/' (for parent routes)
+      // This handles cases like: page="/projects" matches currentPath="/projects/123"
+      if (currentPath.startsWith(pagePath + '/')) return true;
+      
+      return false;
+    });
+
+    if (matchingPages.length === 0) return null;
+    
+    // Return the most specific match (longest path)
+    // This ensures that if both "/projects" and "/projects/details" match,
+    // only "/projects/details" will be active
+    const mostSpecific = matchingPages.reduce((prev, current) => 
+      current.path.length > prev.path.length ? current : prev
+    );
+    
+    return mostSpecific.path;
   };
+
+  const mostSpecificPath = getMostSpecificMatchingPath();
 
   const getNavCls = ({ isActive }: { isActive: boolean }) =>
     cn(
@@ -382,12 +426,12 @@ export function AppSidebar() {
         <SidebarContent className="flex flex-col overflow-hidden">
           {/* Professional Header with Branding */}
           <SidebarHeader className={cn(
-            "border-b border-sidebar-border bg-sidebar-background flex-shrink-0",
+            "border-b border-sidebar-border bg-sidebar-background flex-shrink-0 relative z-0 overflow-hidden",
             collapsed && !isMobile ? "p-2 flex justify-center" : "p-3 sm:p-4"
           )}>
             <div className={cn(
-              "flex items-center min-w-0",
-              collapsed && !isMobile ? "justify-center w-full" : "gap-2 sm:gap-3"
+              "flex items-center min-w-0 w-full",
+              collapsed && !isMobile ? "justify-center" : "gap-2 sm:gap-3"
             )}>
               {agencySettings?.logo_url ? (
                 <div className="relative flex-shrink-0">
@@ -411,7 +455,7 @@ export function AppSidebar() {
                 />
               )}
               {(!collapsed || isMobile) && (
-                <div className="flex flex-col min-w-0 flex-1">
+                <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
                   <span className="text-sm sm:text-base font-bold text-foreground truncate">
                     {agencySettings?.agency_name || 'BuildFlow'}
                   </span>
@@ -424,7 +468,7 @@ export function AppSidebar() {
           </SidebarHeader>
           
           {/* Main Navigation - Scrollable */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 sm:py-3 px-1" data-sidebar="content">
+          <div className="flex-1 overflow-y-auto overflow-x-visible py-2 sm:py-3 px-1" data-sidebar="content">
             {/* Setup Progress - Special Highlight */}
             {setupComplete === false && (
               <div className={cn(
@@ -492,7 +536,8 @@ export function AppSidebar() {
                     )}>
                       {pages.map((page) => {
                         const IconComponent = iconMap[page.icon] || User;
-                        const active = isActive(page.path);
+                        // Check if this is the most specific matching route
+                        const isActive = mostSpecificPath === page.path;
                         
                         return (
                           <Tooltip key={page.path} delayDuration={300}>
@@ -505,29 +550,28 @@ export function AppSidebar() {
                                 )}>
                                   <NavLink 
                                     to={page.path} 
-                                    end={page.path === '/'}
-                                    className={({ isActive }) => getNavCls({ isActive: active || isActive })}
+                                    className={() => getNavCls({ isActive })}
                                   >
                                     <div className={cn(
                                       "flex items-center min-w-0 transition-all duration-200",
                                       collapsed && !isMobile 
                                         ? "justify-center px-0 py-2.5 sm:py-3 w-full" 
                                         : "w-full gap-2.5 sm:gap-3 px-2.5 sm:px-3 py-2 sm:py-2.5",
-                                      active && !collapsed && "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 sm:before:w-1 before:bg-primary before:rounded-r-full"
+                                      isActive && !collapsed && "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 sm:before:w-1 before:bg-primary before:rounded-r-full"
                                     )}>
                                       <IconComponent className={cn(
                                         "flex-shrink-0 transition-colors",
                                         collapsed && !isMobile 
                                           ? "h-5 w-5" 
                                           : "h-4 w-4 sm:h-4 sm:w-4",
-                                        active ? "text-primary" : "text-muted-foreground"
+                                        isActive ? "text-primary" : "text-muted-foreground"
                                       )} />
                                       {(!collapsed || isMobile) && (
                                         <span className="text-xs sm:text-sm font-medium flex-1 text-left truncate min-w-0">
                                           {page.title}
                                         </span>
                                       )}
-                                      {active && (!collapsed || isMobile) && (
+                                      {isActive && (!collapsed || isMobile) && (
                                         <div className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-primary flex-shrink-0" />
                                       )}
                                     </div>
@@ -536,11 +580,18 @@ export function AppSidebar() {
                               </SidebarMenuItem>
                             </TooltipTrigger>
                             {collapsed && !isMobile && (
-                              <TooltipContent side="right" className="ml-2">
-                                <p className="font-medium">{page.title}</p>
-                                {config && (
-                                  <p className="text-xs text-muted-foreground mt-0.5">{config.label}</p>
-                                )}
+                              <TooltipContent 
+                                side="right" 
+                                sideOffset={8}
+                                align="center"
+                                className="z-[100] max-w-[200px]"
+                              >
+                                <div className="py-0.5">
+                                  <p className="font-medium text-sm leading-tight">{page.title}</p>
+                                  {config && (
+                                    <p className="text-xs text-muted-foreground mt-0.5 leading-tight">{config.label}</p>
+                                  )}
+                                </div>
                               </TooltipContent>
                             )}
                           </Tooltip>
@@ -582,33 +633,48 @@ export function AppSidebar() {
                             )}>
                               <NavLink 
                                 to={settingsPage.path} 
-                                className={({ isActive }) => getNavCls({ isActive })}
+                                className={() => getNavCls({ isActive: mostSpecificPath === settingsPage.path })}
                               >
-                                <div className={cn(
-                                  "flex items-center",
-                                  collapsed && !isMobile 
-                                    ? "justify-center px-0 py-2.5 w-full" 
-                                    : "w-full gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5"
-                                )}>
-                                  <Settings className={cn(
-                                    "flex-shrink-0",
-                                    collapsed && !isMobile 
-                                      ? "h-5 w-5" 
-                                      : "h-3.5 w-3.5 sm:h-4 sm:w-4"
-                                  )} />
-                                  {(!collapsed || isMobile) && (
-                                    <span className="text-xs sm:text-sm font-medium flex-1 text-left truncate">
-                                      {settingsPage.title}
-                                    </span>
-                                  )}
-                                </div>
+                                {(() => {
+                                  const isActive = mostSpecificPath === settingsPage.path;
+                                  return (
+                                    <div className={cn(
+                                      "flex items-center min-w-0 transition-all duration-200",
+                                      collapsed && !isMobile 
+                                        ? "justify-center px-0 py-2.5 w-full" 
+                                        : "w-full gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-2.5",
+                                      isActive && !collapsed && "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-0.5 sm:before:w-1 before:bg-primary before:rounded-r-full"
+                                    )}>
+                                      <Settings className={cn(
+                                        "flex-shrink-0 transition-colors",
+                                        collapsed && !isMobile 
+                                          ? "h-5 w-5" 
+                                          : "h-3.5 w-3.5 sm:h-4 sm:w-4",
+                                        isActive ? "text-primary" : "text-muted-foreground"
+                                      )} />
+                                      {(!collapsed || isMobile) && (
+                                        <span className="text-xs sm:text-sm font-medium flex-1 text-left truncate">
+                                          {settingsPage.title}
+                                        </span>
+                                      )}
+                                      {isActive && (!collapsed || isMobile) && (
+                                        <div className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-primary flex-shrink-0" />
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </NavLink>
                             </SidebarMenuButton>
                           </SidebarMenuItem>
                         </TooltipTrigger>
                         {collapsed && !isMobile && (
-                          <TooltipContent side="right" className="ml-2">
-                            <p className="font-medium">{settingsPage.title}</p>
+                          <TooltipContent 
+                            side="right" 
+                            sideOffset={8}
+                            align="center"
+                            className="z-[100] max-w-[200px]"
+                          >
+                            <p className="font-medium text-sm leading-tight py-0.5">{settingsPage.title}</p>
                           </TooltipContent>
                         )}
                       </Tooltip>
@@ -619,46 +685,11 @@ export function AppSidebar() {
             </>
           )}
 
-          {/* Theme Toggle */}
-          <SidebarSeparator className="mx-2 sm:mx-4" />
-          <SidebarFooter className="p-2 sm:p-3 border-t border-sidebar-border bg-muted/50 flex-shrink-0">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "w-full justify-start gap-2 h-9",
-                    collapsed && !isMobile && "w-9 px-0 justify-center"
-                  )}
-                  onClick={handleThemeToggle}
-                  aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-                >
-                  {isDark ? (
-                    <Sun className="h-4 w-4 flex-shrink-0" />
-                  ) : (
-                    <Moon className="h-4 w-4 flex-shrink-0" />
-                  )}
-                  {(!collapsed || isMobile) && (
-                    <span className="text-xs sm:text-sm font-medium">
-                      {isDark ? 'Light Mode' : 'Dark Mode'}
-                    </span>
-                  )}
-                </Button>
-              </TooltipTrigger>
-              {collapsed && !isMobile && (
-                <TooltipContent side="right" className="ml-2">
-                  <p>{isDark ? 'Switch to light mode' : 'Switch to dark mode'}</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </SidebarFooter>
-
           {/* User Info Footer (when expanded) */}
           {(!collapsed || isMobile) && profile && (
             <>
               <SidebarSeparator className="mx-2 sm:mx-4" />
-              <SidebarFooter className="p-2 sm:p-3 border-t border-sidebar-border bg-muted/50 flex-shrink-0">
+              <SidebarFooter className="p-2 sm:p-3 bg-muted/50 flex-shrink-0">
                 <div className="flex items-center gap-2 sm:gap-3 px-1 sm:px-2 min-w-0">
                   <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-[10px] sm:text-xs font-semibold flex-shrink-0">
                     {(profile.full_name || 'U')

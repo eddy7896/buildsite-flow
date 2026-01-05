@@ -4,15 +4,10 @@
  */
 
 import { getApiBaseUrl } from '@/config/api';
+import { getApiHeaders } from './api-helpers';
 
 const API_BASE = getApiBaseUrl();
 
-/**
- * Get authentication token from localStorage
- */
-function getAuthToken(): string | null {
-  return typeof window === 'undefined' ? null : localStorage.getItem('auth_token');
-}
 
 export interface Asset {
   id: string;
@@ -150,8 +145,8 @@ export async function getAssets(filters?: {
   search?: string;
   limit?: number;
 }): Promise<Asset[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -163,10 +158,7 @@ export async function getAssets(filters?: {
   if (filters?.limit) queryParams.append('limit', filters.limit.toString());
 
   const response = await fetch(`${API_BASE}/api/assets?${queryParams}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -182,16 +174,13 @@ export async function getAssets(filters?: {
  * Get a single asset by ID
  */
 export async function getAssetById(assetId: string): Promise<Asset> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/${assetId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -207,18 +196,14 @@ export async function getAssetById(assetId: string): Promise<Asset> {
  * Create a new asset
  */
 export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(assetData),
   });
 
@@ -235,18 +220,14 @@ export async function createAsset(assetData: Partial<Asset>): Promise<Asset> {
  * Update an asset
  */
 export async function updateAsset(assetId: string, assetData: Partial<Asset>): Promise<Asset> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/${assetId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(assetData),
   });
 
@@ -263,16 +244,13 @@ export async function updateAsset(assetId: string, assetData: Partial<Asset>): P
  * Get all asset categories
  */
 export async function getAssetCategories(): Promise<AssetCategory[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/categories`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -288,18 +266,14 @@ export async function getAssetCategories(): Promise<AssetCategory[]> {
  * Create an asset category
  */
 export async function createAssetCategory(categoryData: Partial<AssetCategory>): Promise<AssetCategory> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/categories`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(categoryData),
   });
 
@@ -316,18 +290,14 @@ export async function createAssetCategory(categoryData: Partial<AssetCategory>):
  * Update an asset category
  */
 export async function updateAssetCategory(categoryId: string, categoryData: Partial<AssetCategory>): Promise<AssetCategory> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/categories/${categoryId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(categoryData),
   });
 
@@ -344,17 +314,14 @@ export async function updateAssetCategory(categoryId: string, categoryData: Part
  * Delete an asset category
  */
 export async function deleteAssetCategory(categoryId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/categories/${categoryId}`, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -367,16 +334,13 @@ export async function deleteAssetCategory(categoryId: string): Promise<void> {
  * Get all asset locations
  */
 export async function getAssetLocations(): Promise<AssetLocation[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/locations`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -392,18 +356,14 @@ export async function getAssetLocations(): Promise<AssetLocation[]> {
  * Create an asset location
  */
 export async function createAssetLocation(locationData: Partial<AssetLocation>): Promise<AssetLocation> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/locations`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(locationData),
   });
 
@@ -420,18 +380,14 @@ export async function createAssetLocation(locationData: Partial<AssetLocation>):
  * Update an asset location
  */
 export async function updateAssetLocation(locationId: string, locationData: Partial<AssetLocation>): Promise<AssetLocation> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/locations/${locationId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(locationData),
   });
 
@@ -448,17 +404,14 @@ export async function updateAssetLocation(locationId: string, locationData: Part
  * Delete an asset location
  */
 export async function deleteAssetLocation(locationId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/locations/${locationId}`, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -478,8 +431,8 @@ export async function getAllDepreciation(filters?: {
   date_to?: string;
   search?: string;
 }): Promise<DepreciationRecord[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -492,10 +445,7 @@ export async function getAllDepreciation(filters?: {
   if (filters?.search) queryParams.append('search', filters.search);
 
   const response = await fetch(`${API_BASE}/api/assets/depreciation?${queryParams.toString()}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -511,16 +461,13 @@ export async function getAllDepreciation(filters?: {
  * Get depreciation records for an asset
  */
 export async function getAssetDepreciation(assetId: string): Promise<DepreciationRecord[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/${assetId}/depreciation`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -536,18 +483,14 @@ export async function getAssetDepreciation(assetId: string): Promise<Depreciatio
  * Create a depreciation record
  */
 export async function createDepreciation(depreciationData: Partial<DepreciationRecord>): Promise<DepreciationRecord> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/depreciation`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(depreciationData),
   });
 
@@ -564,18 +507,14 @@ export async function createDepreciation(depreciationData: Partial<DepreciationR
  * Update a depreciation record
  */
 export async function updateDepreciation(depreciationId: string, depreciationData: Partial<DepreciationRecord>): Promise<DepreciationRecord> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/depreciation/${depreciationId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(depreciationData),
   });
 
@@ -592,17 +531,14 @@ export async function updateDepreciation(depreciationId: string, depreciationDat
  * Delete a depreciation record
  */
 export async function deleteDepreciation(depreciationId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/depreciation/${depreciationId}`, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -621,8 +557,8 @@ export async function getAllMaintenance(filters?: {
   priority?: string;
   search?: string;
 }): Promise<MaintenanceRecord[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -634,10 +570,7 @@ export async function getAllMaintenance(filters?: {
   if (filters?.search) queryParams.append('search', filters.search);
 
   const response = await fetch(`${API_BASE}/api/assets/maintenance?${queryParams.toString()}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -653,16 +586,13 @@ export async function getAllMaintenance(filters?: {
  * Get maintenance records for an asset
  */
 export async function getAssetMaintenance(assetId: string): Promise<MaintenanceRecord[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/${assetId}/maintenance`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -678,18 +608,14 @@ export async function getAssetMaintenance(assetId: string): Promise<MaintenanceR
  * Create a maintenance record
  */
 export async function createMaintenance(maintenanceData: Partial<MaintenanceRecord>): Promise<MaintenanceRecord> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/maintenance`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(maintenanceData),
   });
 
@@ -706,18 +632,14 @@ export async function createMaintenance(maintenanceData: Partial<MaintenanceReco
  * Update a maintenance record
  */
 export async function updateMaintenance(maintenanceId: string, maintenanceData: Partial<MaintenanceRecord>): Promise<MaintenanceRecord> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/maintenance/${maintenanceId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(maintenanceData),
   });
 
@@ -734,17 +656,14 @@ export async function updateMaintenance(maintenanceId: string, maintenanceData: 
  * Delete a maintenance record
  */
 export async function deleteMaintenance(maintenanceId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/maintenance/${maintenanceId}`, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -796,8 +715,8 @@ export async function getAllDisposals(filters?: {
   date_from?: string;
   date_to?: string;
 }): Promise<DisposalRecord[]> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -809,10 +728,7 @@ export async function getAllDisposals(filters?: {
   if (filters?.date_to) queryParams.append('date_to', filters.date_to);
 
   const response = await fetch(`${API_BASE}/api/assets/disposals?${queryParams.toString()}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -828,16 +744,13 @@ export async function getAllDisposals(filters?: {
  * Get asset disposal by ID
  */
 export async function getDisposalById(disposalId: string): Promise<DisposalRecord> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/disposals/${disposalId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -853,18 +766,14 @@ export async function getDisposalById(disposalId: string): Promise<DisposalRecor
  * Create asset disposal
  */
 export async function createDisposal(disposalData: Partial<DisposalRecord>): Promise<DisposalRecord> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/disposals`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(disposalData),
   });
 
@@ -884,18 +793,14 @@ export async function updateDisposal(
   disposalId: string,
   disposalData: Partial<DisposalRecord>
 ): Promise<DisposalRecord> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/disposals/${disposalId}`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
     body: JSON.stringify(disposalData),
   });
 
@@ -912,17 +817,14 @@ export async function updateDisposal(
  * Delete asset disposal
  */
 export async function deleteDisposal(disposalId: string): Promise<void> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/disposals/${disposalId}`, {
     method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -935,17 +837,14 @@ export async function deleteDisposal(disposalId: string): Promise<void> {
  * Approve asset disposal
  */
 export async function approveDisposal(disposalId: string): Promise<DisposalRecord> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/api/assets/disposals/${disposalId}/approve`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {
@@ -1015,8 +914,8 @@ export async function getAssetReports(filters?: {
   date_from?: string;
   date_to?: string;
 }): Promise<AssetReports> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -1025,10 +924,7 @@ export async function getAssetReports(filters?: {
   if (filters?.date_to) queryParams.append('date_to', filters.date_to);
 
   const response = await fetch(`${API_BASE}/api/assets/reports?${queryParams.toString()}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
-    },
+      headers,
   });
 
   if (!response.ok) {

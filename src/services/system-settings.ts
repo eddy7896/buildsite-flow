@@ -148,7 +148,7 @@ function getAuthHeaders() {
 
   const token = window.localStorage.getItem('auth_token') || '';
   const userRole = window.localStorage.getItem('user_role');
-  const agencyDatabase = window.localStorage.getItem('agency_database') || '';
+  const agencyDatabase = getAgencyDatabase() || '';
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

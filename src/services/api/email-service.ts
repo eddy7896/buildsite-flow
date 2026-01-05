@@ -4,16 +4,11 @@
  */
 
 import { getApiRoot } from '@/config/api';
+import { getAgencyDatabase } from '@/utils/authContext';
+import { getApiHeaders } from './api-helpers';
 
 const API_BASE = getApiRoot();
 
-function getAuthToken(): string | null {
-  return localStorage.getItem('auth_token');
-}
-
-function getAgencyDatabase(): string | null {
-  return localStorage.getItem('agency_database') || '';
-}
 
 export interface EmailProviderStatus {
   active: string;
@@ -75,16 +70,13 @@ export interface EmailResponse {
  * Get email provider status
  */
 export async function getEmailStatus(): Promise<EmailProviderStatus> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/email/status`, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': getAgencyDatabase(),
-    },
+    headers,
   });
 
   if (!response.ok) {
@@ -100,18 +92,14 @@ export async function getEmailStatus(): Promise<EmailProviderStatus> {
  * Test email configuration
  */
 export async function testEmail(request: TestEmailRequest): Promise<EmailResponse> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/email/test`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': getAgencyDatabase(),
-    },
+    headers,
     body: JSON.stringify(request),
   });
 
@@ -128,18 +116,14 @@ export async function testEmail(request: TestEmailRequest): Promise<EmailRespons
  * Send custom email
  */
 export async function sendEmail(request: SendEmailRequest): Promise<EmailResponse> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/email/send`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': getAgencyDatabase(),
-    },
+    headers,
     body: JSON.stringify(request),
   });
 
@@ -156,18 +140,14 @@ export async function sendEmail(request: SendEmailRequest): Promise<EmailRespons
  * Send notification email
  */
 export async function sendNotificationEmail(request: NotificationEmailRequest): Promise<EmailResponse> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
   const response = await fetch(`${API_BASE}/email/notification`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': getAgencyDatabase(),
-    },
+    headers,
     body: JSON.stringify(request),
   });
 
@@ -184,8 +164,8 @@ export async function sendNotificationEmail(request: NotificationEmailRequest): 
  * Send report email
  */
 export async function sendReportEmail(request: ReportEmailRequest): Promise<EmailResponse> {
-  const token = getAuthToken();
-  if (!token) {
+  const headers = getApiHeaders();
+  if (!headers['Authorization']) {
     throw new Error('Authentication required');
   }
 
@@ -196,11 +176,7 @@ export async function sendReportEmail(request: ReportEmailRequest): Promise<Emai
 
   const response = await fetch(`${API_BASE}/email/report`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': getAgencyDatabase(),
-    },
+    headers,
     body: JSON.stringify({
       ...request,
       reportData,

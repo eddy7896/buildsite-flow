@@ -1,6 +1,7 @@
 import { BaseApiService, ApiResponse, ApiOptions } from './base';
 import { pgClient } from '@/integrations/postgresql/client';
 import { getApiBaseUrl } from '@/config/api';
+import { getApiHeaders } from './api-helpers';
 
 // Helper function to safely access localStorage (handles SSR)
 const getStorageItem = (key: string): string | null => {
@@ -986,7 +987,6 @@ export class ReportService extends BaseApiService {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
-        'X-Agency-Database': localStorage.getItem('agency_database') || '',
       },
       body: JSON.stringify({
         module,
@@ -1176,7 +1176,7 @@ export class ReportService extends BaseApiService {
     date_to?: string;
     search?: string;
   }): Promise<ReportExport[]> {
-    return this.execute(async () => {
+    const response = await this.execute(async () => {
       const token = getStorageItem('auth_token');
       if (!token) {
         throw new Error('Authentication required');
@@ -1191,21 +1191,27 @@ export class ReportService extends BaseApiService {
 
       const agencyDatabase = getStorageItem('agency_database') || '';
       
-      const response = await fetch(`${API_BASE}/api/reports/exports?${queryParams.toString()}`, {
+      const fetchResponse = await fetch(`${API_BASE}/api/reports/exports?${queryParams.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'X-Agency-Database': agencyDatabase,
         },
       });
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Failed to fetch report exports' }));
+      if (!fetchResponse.ok) {
+        const error = await fetchResponse.json().catch(() => ({ error: 'Failed to fetch report exports' }));
         throw new Error(error.error || 'Failed to fetch report exports');
       }
 
-      const result = await response.json();
+      const result = await fetchResponse.json();
       return result.data || [];
     }, {});
+
+    // Unwrap ApiResponse and ensure we return an array
+    if (!response.success || !response.data) {
+      return [];
+    }
+    return Array.isArray(response.data) ? response.data : [];
   }
 
   /**

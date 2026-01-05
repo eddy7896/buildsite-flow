@@ -15,6 +15,8 @@ const {
   repairAgencyDatabase,
   completeAgencySetup,
 } = require('../services/agencyService');
+const { getAgencyPool } = require('../utils/poolManager');
+const { clearMaintenanceCache } = require('../middleware/maintenanceMode');
 const logger = require('../utils/logger');
 
 /**
@@ -414,6 +416,157 @@ router.post('/repair-database', asyncHandler(async (req, res) => {
       error: error.message || 'Failed to repair database',
       detail: error.detail,
       code: error.code,
+    });
+  }
+}));
+
+/**
+ * GET /api/agencies/maintenance-status
+ * Get current agency maintenance status
+ */
+router.get('/maintenance-status', authenticate, asyncHandler(async (req, res) => {
+  try {
+    const agencyDatabase = req.headers['x-agency-database'] || req.query.database;
+
+    if (!agencyDatabase) {
+      return res.status(400).json({
+        success: false,
+        error: 'Agency database not specified',
+        message: 'Provide database name in header: x-agency-database',
+      });
+    }
+
+    // Check user has admin role
+    const userRole = req.user?.role || req.user?.roles?.[0];
+    if (userRole !== 'admin' && userRole !== 'super_admin' && !req.user?.isSystemSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden',
+        message: 'Only admins can check maintenance status',
+      });
+    }
+
+    const agencyPool = getAgencyPool(agencyDatabase);
+    const client = await agencyPool.connect();
+
+    try {
+      const result = await client.query(`
+        SELECT maintenance_mode, maintenance_message
+        FROM public.agency_settings
+        LIMIT 1
+      `);
+
+      const maintenanceStatus = result.rows.length > 0 ? {
+        maintenance_mode: result.rows[0].maintenance_mode || false,
+        maintenance_message: result.rows[0].maintenance_message || null,
+      } : {
+        maintenance_mode: false,
+        maintenance_message: null,
+      };
+
+      return res.json({
+        success: true,
+        data: maintenanceStatus,
+        message: 'Maintenance status fetched successfully',
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    logger.error('Error fetching maintenance status', {
+      error: error.message,
+      code: error.code,
+      requestId: req.requestId,
+    });
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch maintenance status',
+      message: 'Failed to fetch maintenance status',
+    });
+  }
+}));
+
+/**
+ * PUT /api/agencies/maintenance
+ * Toggle agency maintenance mode (agency admin only)
+ */
+router.put('/maintenance', authenticate, asyncHandler(async (req, res) => {
+  try {
+    const agencyDatabase = req.headers['x-agency-database'];
+
+    if (!agencyDatabase) {
+      return res.status(400).json({
+        success: false,
+        error: 'Agency database not specified',
+        message: 'Provide database name in header: x-agency-database',
+      });
+    }
+
+    // Check user has admin role
+    const userRole = req.user?.role || req.user?.roles?.[0];
+    if (userRole !== 'admin' && userRole !== 'super_admin' && !req.user?.isSystemSuperAdmin) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden',
+        message: 'Only admins can toggle maintenance mode',
+      });
+    }
+
+    const { maintenance_mode, maintenance_message } = req.body;
+
+    if (typeof maintenance_mode !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid request',
+        message: 'maintenance_mode must be a boolean',
+      });
+    }
+
+    const agencyPool = getAgencyPool(agencyDatabase);
+    const client = await agencyPool.connect();
+
+    try {
+      // Update agency_settings in agency database
+      await client.query(`
+        UPDATE public.agency_settings
+        SET 
+          maintenance_mode = $1,
+          maintenance_message = $2,
+          updated_at = NOW()
+        WHERE id = (SELECT id FROM public.agency_settings LIMIT 1)
+      `, [maintenance_mode, maintenance_message || null]);
+
+      // Clear cache
+      clearMaintenanceCache(agencyDatabase);
+
+      logger.info('Agency maintenance mode updated', {
+        agencyDatabase,
+        maintenance_mode,
+        userId: req.user?.id,
+        requestId: req.requestId,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          maintenance_mode,
+          maintenance_message: maintenance_message || null,
+        },
+        message: `Maintenance mode ${maintenance_mode ? 'enabled' : 'disabled'} successfully`,
+      });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    logger.error('Error updating maintenance mode', {
+      error: error.message,
+      code: error.code,
+      requestId: req.requestId,
+    });
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to update maintenance mode',
+      message: 'Failed to update maintenance mode',
     });
   }
 }));

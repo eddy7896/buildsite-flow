@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { getApiBaseUrl } from '@/config/api';
+import { getAgencyDatabase } from '@/utils/authContext';
 import {
   Activity,
   Database,
@@ -179,7 +180,7 @@ export default function SystemHealth() {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'X-Agency-Database': localStorage.getItem('agency_database') || '',
+          'X-Agency-Database': getAgencyDatabase() || '',
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },

@@ -99,11 +99,18 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      
+      # File Watching Configuration (Windows/WSL compatibility)
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: 1000
+      WATCHPACK_POLLING: "true"
+      # Nodemon polling (handled via nodemon.json, but env var as fallback)
+      NODEMON_POLLING: "true"
     volumes:
       # Mount source code for hot-reloading
       - ./src/server:/app
       - backend_storage_dev:/app/storage
-      - /app/node_modules  # Anonymous volume to prevent overwriting node_modules
+      - backend_node_modules_dev:/app/node_modules  # Named volume for better control
     ports:
       - "${BACKEND_PORT:-3000}:${BACKEND_PORT:-3000}"
     depends_on:
@@ -114,7 +121,19 @@ services:
     networks:
       - buildflow-network-dev
     restart: unless-stopped
-    command: sh -c "cd /app && if [ ! -d node_modules ]; then npm install; fi && npm run dev"
+    # Improved command: checks package.json timestamp to detect dependency changes
+    command: >
+      sh -c "
+        cd /app &&
+        if [ ! -d node_modules ] || [ ! -f node_modules/.package-lock-check ] || [ package.json -nt node_modules/.package-lock-check ]; then
+          echo '[Backend] Installing/updating dependencies...' &&
+          npm install &&
+          mkdir -p node_modules &&
+          touch node_modules/.package-lock-check
+        fi &&
+        echo '[Backend] Starting dev server with hot reload...' &&
+        npm run dev
+      "
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\" || exit 1"]
       interval: 15s
@@ -139,11 +158,22 @@ services:
       # Vite dev server configuration
       VITE_DEV_SERVER_HOST: 0.0.0.0
       VITE_DEV_SERVER_PORT: 5173
+      # File Watching Configuration (Windows/WSL compatibility)
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: 1000
+      WATCHPACK_POLLING: "true"
+      # Vite HMR configuration for Docker
+      # HMR host should be accessible from browser (use localhost when accessing via host machine)
+      VITE_HMR_PORT: 5173
+      VITE_HMR_HOST: localhost
+      VITE_HMR_CLIENT_PORT: 5173
     volumes:
-      # Mount source code for hot-reloading
+      # Mount root directory: Vite needs root-level config files (vite.config.ts, package.json, 
+      # index.html, tailwind.config.ts, etc.) and frontend source is in src/
+      # Backend is isolated at ./src/server, so no cross-contamination
       - .:/app
-      - /app/node_modules  # Anonymous volume to prevent overwriting node_modules
-      - /app/dist  # Anonymous volume for build output
+      - frontend_node_modules_dev:/app/node_modules  # Named volume for better control
+      - frontend_dist_dev:/app/dist  # Named volume for build output
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     depends_on:
@@ -152,7 +182,18 @@ services:
     networks:
       - buildflow-network-dev
     restart: unless-stopped
-    command: sh -c "if [ ! -d node_modules ]; then npm install; fi && npm run dev -- --host 0.0.0.0"
+    # Improved command: checks package.json timestamp to detect dependency changes
+    command: >
+      sh -c "
+        if [ ! -d node_modules ] || [ ! -f node_modules/.package-lock-check ] || [ package.json -nt node_modules/.package-lock-check ]; then
+          echo '[Frontend] Installing/updating dependencies...' &&
+          npm install &&
+          mkdir -p node_modules &&
+          touch node_modules/.package-lock-check
+        fi &&
+        echo '[Frontend] Starting Vite dev server with hot reload...' &&
+        npm run dev -- --host 0.0.0.0
+      "
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:5173', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\" || exit 1"]
       interval: 15s
@@ -181,4 +222,13 @@ volumes:
   backend_storage_dev:
     driver: local
     name: buildflow-backend-storage-dev
+  backend_node_modules_dev:
+    driver: local
+    name: buildflow-backend-node-modules-dev
+  frontend_node_modules_dev:
+    driver: local
+    name: buildflow-frontend-node-modules-dev
+  frontend_dist_dev:
+    driver: local
+    name: buildflow-frontend-dist-dev
 

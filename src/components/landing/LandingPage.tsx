@@ -1,6 +1,7 @@
 import {
   Navigation,
   Hero,
+  StickyNav,
   LogoCloud,
   BentoFeatures,
   ProductShowcase,
@@ -14,18 +15,23 @@ import {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#000000] text-white antialiased selection:bg-blue-500/20 selection:text-white overflow-x-hidden">
-      <Navigation />
-      <Hero />
-      <LogoCloud />
-      <BentoFeatures />
-      <ProductShowcase />
-      <Stats />
-      <Testimonials />
-      <Pricing />
-      <FAQ />
-      <CTA />
-      <Footer />
+    <div className="min-h-screen bg-[#000000] text-white antialiased selection:bg-blue-500/20 selection:text-white">
+      <div className="overflow-x-hidden">
+        <Navigation />
+        <Hero />
+        <LogoCloud />
+      </div>
+      <StickyNav />
+      <div className="overflow-x-hidden">
+        <BentoFeatures />
+        <ProductShowcase />
+        <Stats />
+        <Testimonials />
+        <Pricing />
+        <FAQ />
+        <CTA />
+        <Footer />
+      </div>
     </div>
   );
 }

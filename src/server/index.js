@@ -4,7 +4,30 @@
  */
 
 // Load environment variables from .env file (must be first)
-require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+// Path resolution: src/server/index.js -> src/server -> src -> root
+// Use absolute path to ensure it works regardless of working directory
+const path = require('path');
+const fs = require('fs');
+
+// Get absolute path to root .env file
+const rootEnvPath = path.resolve(__dirname, '..', '..', '.env');
+
+// Load .env file - MUST use override: true to ensure variables are set
+// Nodemon sometimes interferes with env loading, so we force it
+const result = require('dotenv').config({ 
+  path: rootEnvPath,
+  override: true
+});
+
+// Verify critical variables are loaded
+if (!process.env.POSTGRES_PASSWORD || !process.env.VITE_JWT_SECRET) {
+  // If still not loaded, the file might not be at expected location
+  // Try to find it by going up from current working directory
+  const cwdEnvPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(cwdEnvPath) && cwdEnvPath !== rootEnvPath) {
+    require('dotenv').config({ path: cwdEnvPath, override: true });
+  }
+}
 
 /**
  * Validate required secrets on startup
@@ -122,12 +145,18 @@ const settingsRoutes = require('./routes/settings');
 const pageCatalogRoutes = require('./routes/pageCatalog');
 const schemaAdminRoutes = require('./routes/schemaAdmin');
 const superAdminRoutes = require('./routes/superAdmin');
+const superAdminSetupRoutes = require('./routes/superAdminSetup');
+const validationRoutes = require('./routes/validation');
 
 // Create Express app
 const app = express();
 
 // Configure middleware
 configureMiddleware(app);
+
+// Initialize auth cache for all requests (before authentication)
+const { initAuthCache } = require('./middleware/authCache');
+app.use(initAuthCache);
 
 // Request logging (after CORS, before routes)
 app.use(requestLogger);
@@ -154,6 +183,7 @@ app.use('/api/agencies', agenciesRoutes);
 app.use('/api/schema', schemaRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/super-admin', superAdminRoutes);
+app.use('/api/setup', superAdminSetupRoutes);
 app.use('/api/permissions', permissionsRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/reports', reportsRoutes);
@@ -183,6 +213,7 @@ app.use('/api/workflows', workflowsRoutes);
 app.use('/api/integrations', integrationsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/system/page-catalog', pageCatalogRoutes);
+app.use('/api/validation', validationRoutes);
 app.use('/health', schemaAdminRoutes); // Health check routes (no /api prefix)
 app.use('/admin', schemaAdminRoutes); // Admin routes (no /api prefix)
 
@@ -284,7 +315,9 @@ async function initializeMainDatabase() {
               subscription_plan TEXT DEFAULT 'basic',
               max_users INTEGER DEFAULT 50,
               database_name TEXT UNIQUE,
-              owner_user_id UUID
+              owner_user_id UUID,
+              maintenance_mode BOOLEAN DEFAULT false,
+              maintenance_message TEXT
             );
             
             CREATE INDEX IF NOT EXISTS idx_agencies_created_at ON public.agencies(created_at);
@@ -296,6 +329,44 @@ async function initializeMainDatabase() {
         }
       } else {
         logger.info('✅ Main database schema verified');
+        
+        // Ensure maintenance mode columns exist (for existing databases)
+        try {
+          const maintenanceCheck = await client.query(`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_schema = 'public' 
+            AND table_name = 'agencies' 
+            AND column_name IN ('maintenance_mode', 'maintenance_message')
+          `);
+          
+          const existingColumns = maintenanceCheck.rows.map(r => r.column_name);
+          
+          if (!existingColumns.includes('maintenance_mode')) {
+            await client.query(`
+              ALTER TABLE public.agencies
+              ADD COLUMN IF NOT EXISTS maintenance_mode BOOLEAN DEFAULT false
+            `);
+            logger.info('✅ Added maintenance_mode column to agencies table');
+          }
+          
+          if (!existingColumns.includes('maintenance_message')) {
+            await client.query(`
+              ALTER TABLE public.agencies
+              ADD COLUMN IF NOT EXISTS maintenance_message TEXT
+            `);
+            logger.info('✅ Added maintenance_message column to agencies table');
+          }
+          
+          // Create index if it doesn't exist
+          await client.query(`
+            CREATE INDEX IF NOT EXISTS idx_agencies_maintenance_mode 
+            ON public.agencies(maintenance_mode) 
+            WHERE maintenance_mode = true
+          `);
+        } catch (migrationError) {
+          logger.warn('Could not add maintenance mode columns (may already exist):', migrationError.message);
+        }
       }
       
       // Ensure notifications table exists

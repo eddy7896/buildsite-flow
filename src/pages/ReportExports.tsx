@@ -94,13 +94,16 @@ export default function ReportExports() {
         date_to: dateTo || undefined,
         search: searchTerm || undefined,
       });
-      setExports(data);
+      
+      // Ensure data is always an array
+      setExports(Array.isArray(data) ? data : []);
     } catch (error: any) {
       toast({
         title: 'Error',
         description: error.message || 'Failed to load exports',
         variant: 'destructive',
       });
+      setExports([]); // Ensure exports is always an array
     } finally {
       setLoading(false);
     }
@@ -203,19 +206,22 @@ export default function ReportExports() {
     );
   };
 
+  // Ensure exports is always an array
+  const exportsArray = Array.isArray(exports) ? exports : [];
+
   // Statistics
   const stats = {
-    total: exports.length,
-    completed: exports.filter((e) => e.status === 'completed').length,
-    pending: exports.filter((e) => e.status === 'pending' || e.status === 'processing').length,
-    totalSize: exports.reduce((sum, e) => sum + (e.file_size || 0), 0),
+    total: exportsArray.length,
+    completed: exportsArray.filter((e) => e.status === 'completed').length,
+    pending: exportsArray.filter((e) => e.status === 'pending' || e.status === 'processing').length,
+    totalSize: exportsArray.reduce((sum, e) => sum + (e.file_size || 0), 0),
   };
 
   // Filter data
-  const uniqueTypes = Array.from(new Set(exports.map((e) => e.report_type)));
-  const uniqueFormats = Array.from(new Set(exports.map((e) => e.format)));
+  const uniqueTypes = Array.from(new Set(exportsArray.map((e) => e.report_type)));
+  const uniqueFormats = Array.from(new Set(exportsArray.map((e) => e.format)));
 
-  let filteredExports = exports;
+  let filteredExports = exportsArray;
   if (searchTerm) {
     filteredExports = filteredExports.filter(
       (e) =>
@@ -276,7 +282,7 @@ export default function ReportExports() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {exports.reduce((sum, e) => sum + (e.download_count || 0), 0)}
+              {exportsArray.reduce((sum, e) => sum + (e.download_count || 0), 0)}
             </div>
             <p className="text-xs text-muted-foreground">Total downloads</p>
           </CardContent>

@@ -14,7 +14,16 @@ const { parseDatabaseUrl } = require('../utils/poolManager');
  * @returns {Promise<Object|null>} User data with agency info or null
  */
 async function findUserAcrossAgencies(email, password) {
-  console.log('[Auth] findUserAcrossAgencies called with email:', email);
+  // Normalize email to lowercase for consistent lookup
+  const normalizedEmail = email ? email.toLowerCase().trim() : '';
+  if (!normalizedEmail) {
+    throw new Error('Email is required');
+  }
+  if (!password) {
+    throw new Error('Password is required');
+  }
+  
+  console.log('[Auth] findUserAcrossAgencies called with email:', normalizedEmail);
   const mainClient = await pool.connect();
 
   try {
@@ -24,6 +33,7 @@ async function findUserAcrossAgencies(email, password) {
       console.log('[Auth] Checking for super admin with email:', email);
       
       // Query only columns that definitely exist in buildflow_db users table
+      // Note: profiles table uses 'phone' column, not 'phone_number'
       const superAdminCheck = await mainClient.query(`
         SELECT 
           u.id, 
@@ -36,17 +46,17 @@ async function findUserAcrossAgencies(email, password) {
           u.last_sign_in_at,
           ur.role,
           p.full_name,
-          p.phone_number as phone,
+          p.phone,
           p.avatar_url
         FROM public.users u
         LEFT JOIN public.user_roles ur ON u.id = ur.user_id 
           AND ur.role = 'super_admin' 
           AND ur.agency_id IS NULL
         LEFT JOIN public.profiles p ON u.id = p.user_id
-        WHERE u.email = $1 
+        WHERE LOWER(u.email) = LOWER($1)
           AND ur.role = 'super_admin'
           AND u.is_active = true
-      `, [email]);
+      `, [normalizedEmail]);
       
       console.log('[Auth] Super admin check result:', {
         found: superAdminCheck.rows.length > 0,
@@ -103,11 +113,16 @@ async function findUserAcrossAgencies(email, password) {
         });
         
         if (passwordMatch) {
-          // Update last sign in time
-          await mainClient.query(
-            'UPDATE public.users SET last_sign_in_at = NOW() WHERE id = $1',
-            [dbUser.id]
-          );
+          // Update last sign in time (if column exists)
+          try {
+            await mainClient.query(
+              'UPDATE public.users SET last_sign_in_at = NOW() WHERE id = $1',
+              [dbUser.id]
+            );
+          } catch (updateError) {
+            // Column might not exist, ignore error
+            console.warn(`[Auth] Could not update last_sign_in_at for super admin ${dbUser.id}:`, updateError.message);
+          }
 
           // Return super admin user with special agency object
           return {
@@ -228,19 +243,31 @@ async function findUserAcrossAgencies(email, password) {
           // Build query with all columns (they should all exist now)
           const selectColumns = 'id, email, password_hash, email_confirmed, is_active, two_factor_enabled, two_factor_secret, password_policy_id';
           
-          // Check if user exists in this agency database
+          // Check if user exists in this agency database (case-insensitive email lookup)
           const userResult = await agencyClient.query(
             `SELECT ${selectColumns}
              FROM public.users 
-             WHERE email = $1`,
-            [email]
+             WHERE LOWER(email) = LOWER($1)`,
+            [normalizedEmail]
           );
 
           if (userResult.rows.length > 0) {
             const dbUser = userResult.rows[0];
             
+            // Verify password - check if password_hash exists
+            if (!dbUser.password_hash) {
+              console.warn(`[Auth] User ${normalizedEmail} has no password hash`);
+              continue; // Skip this user, continue searching
+            }
+            
             // Verify password
-            const passwordMatch = await bcrypt.compare(password, dbUser.password_hash);
+            let passwordMatch = false;
+            try {
+              passwordMatch = await bcrypt.compare(password, dbUser.password_hash);
+            } catch (bcryptError) {
+              console.error(`[Auth] Password comparison error for ${normalizedEmail}:`, bcryptError.message);
+              continue; // Skip this user, continue searching
+            }
             if (passwordMatch) {
               // Get user profile
               const profileResult = await agencyClient.query(
@@ -264,11 +291,16 @@ async function findUserAcrossAgencies(email, password) {
               userProfile = profileResult.rows[0] || null;
               userRoles = rolesResult.rows.map(r => r.role);
               
-              // Update last sign in time
-              await agencyClient.query(
-                'UPDATE public.users SET last_sign_in_at = NOW() WHERE id = $1',
-                [dbUser.id]
-              );
+              // Update last sign in time (if column exists)
+              try {
+                await agencyClient.query(
+                  'UPDATE public.users SET last_sign_in_at = NOW() WHERE id = $1',
+                  [dbUser.id]
+                );
+              } catch (updateError) {
+                // Column might not exist, ignore error
+                console.warn(`[Auth] Could not update last_sign_in_at for user ${dbUser.id}:`, updateError.message);
+              }
               
               break; // Found user, stop searching
             }

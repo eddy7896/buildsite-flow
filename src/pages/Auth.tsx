@@ -12,7 +12,8 @@ import { loginUser } from '@/services/api/auth-postgresql';
 import { 
   Loader2, CheckCircle2, ArrowRight, KeyRound, Mail,
   Shield, BarChart3, Users, Briefcase, Eye, EyeOff,
-  Sparkles, TrendingUp, FolderKanban, Zap, Home
+  Sparkles, TrendingUp, FolderKanban, Zap, Home,
+  Building2
 } from 'lucide-react';
 
 const GridPattern = () => (
@@ -506,8 +507,8 @@ const Auth = () => {
                     <Home className="w-4 h-4" />
                     <span>Home</span>
                   </Link>
-                  <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-white" />
+                  <div className="h-8 w-8 rounded-lg bg-primary/10 dark:bg-primary/20 border border-primary/20 dark:border-primary/30 flex items-center justify-center">
+                    <Building2 className="w-4 h-4 text-primary" />
                   </div>
                 </div>
                 

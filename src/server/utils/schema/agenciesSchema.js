@@ -179,6 +179,18 @@ async function ensureAgencySettingsTable(client) {
       EXCEPTION WHEN duplicate_column THEN
         NULL;
       END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS maintenance_mode BOOLEAN DEFAULT false;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
+
+      BEGIN
+        ALTER TABLE public.agency_settings ADD COLUMN IF NOT EXISTS maintenance_message TEXT;
+      EXCEPTION WHEN duplicate_column THEN
+        NULL;
+      END;
     END $$;
   `);
 

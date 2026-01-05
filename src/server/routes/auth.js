@@ -45,12 +45,29 @@ router.post('/login',
   asyncHandler(async (req, res) => {
   const { email, password, twoFactorToken, recoveryCode } = req.body;
 
+  // Normalize email to lowercase for consistent lookup
+  const normalizedEmail = email ? email.toLowerCase().trim() : '';
+  if (!normalizedEmail) {
+    return res.status(400).json({
+      success: false,
+      error: 'Email is required',
+      message: 'Email is required',
+    });
+  }
+  if (!password) {
+    return res.status(400).json({
+      success: false,
+      error: 'Password is required',
+      message: 'Password is required',
+    });
+  }
+
   const ipAddress = req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for'] || 'unknown';
   const userAgent = req.headers['user-agent'] || 'unknown';
 
   try {
     logger.info('Login attempt', {
-      email,
+      email: normalizedEmail,
       hasTwoFactorToken: !!twoFactorToken,
       userAgent,
       origin: req.headers.origin,
@@ -59,7 +76,7 @@ router.post('/login',
     });
 
     // First, try to find user (this will check password)
-    const userData = await findUserAcrossAgencies(email, password);
+    const userData = await findUserAcrossAgencies(normalizedEmail, password);
 
     // Get agency database for lockout checking (even if user not found, to prevent enumeration)
     let agencyDatabase = null;
@@ -91,7 +108,7 @@ router.post('/login',
         await passwordPolicyService.recordLoginAttempt(
           agencyDatabase,
           userData.user.id,
-          email,
+          normalizedEmail,
           false,
           ipAddress,
           userAgent
@@ -113,7 +130,7 @@ router.post('/login',
         await passwordPolicyService.recordLoginAttempt(
           agencyDatabase,
           null, // User ID unknown
-          email,
+          normalizedEmail,
           false,
           ipAddress,
           userAgent
@@ -236,7 +253,7 @@ router.post('/login',
         await passwordPolicyService.recordLoginAttempt(
           userData.agency.database_name,
           userData.user.id,
-          email,
+          normalizedEmail,
           true,
           ipAddress,
           userAgent
@@ -262,7 +279,7 @@ router.post('/login',
       error: error.message,
       code: error.code,
       stack: error.stack,
-      email,
+      email: normalizedEmail,
       requestId: req.requestId,
     });
     res.status(500).json({

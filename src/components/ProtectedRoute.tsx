@@ -1,9 +1,8 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { hasRoleOrHigher, getRoleDisplayName } from '@/utils/roleUtils';
 import { getRoutePermission, canAccessRouteSync, canAccessRoute } from '@/utils/routePermissions';
-import { hasPageAccess } from '@/utils/agencyPageAccess';
+import { usePageAccess } from '@/hooks/usePageAccess';
 import { Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +21,10 @@ const ESSENTIAL_PAGES = [
   '/dashboard',
   '/settings',
   '/my-profile',
+  '/my-team',
+  '/my-attendance',
+  '/my-leave',
+  '/employee-performance',
   '/agency',
   '/page-requests',
   '/agency-setup',
@@ -36,33 +39,20 @@ const isEssentialPage = (pathname: string): boolean => {
 };
 
 const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
-  const { user, userRole, profile, loading } = useAuth();
+  const { user, userRole, profile, loading, isSystemSuperAdmin, agencyDatabase } = useAuth();
   const location = useLocation();
-  const [pageAccessChecked, setPageAccessChecked] = useState(false);
-  const [hasPageAccessResult, setHasPageAccessResult] = useState<boolean | null>(null);
-
-  // Check page access for non-system-super-admin users
-  // MUST be declared before any early returns to follow Rules of Hooks
-  useEffect(() => {
-    // Only system-level super admins (no agency database) should skip page access check
-    const isSystemSuperAdminCheck = userRole === 'super_admin' && !localStorage.getItem('agency_database');
-    
-    // Essential pages should always be accessible regardless of subscription
-    const isEssential = isEssentialPage(location.pathname);
-    
-    if (userRole && !isSystemSuperAdminCheck && user && !isEssential) {
-      hasPageAccess(location.pathname).then(hasAccess => {
-        setHasPageAccessResult(hasAccess);
-        setPageAccessChecked(true);
-      }).catch((error) => {
-        setHasPageAccessResult(true); // Default to allowing if check fails
-        setPageAccessChecked(true);
-      });
-    } else {
-      setPageAccessChecked(true);
-      setHasPageAccessResult(true);
-    }
-  }, [location.pathname, userRole, user]);
+  
+  // Essential pages should always be accessible regardless of subscription
+  const isEssential = isEssentialPage(location.pathname);
+  
+  // Use page access hook for non-system-super-admin users on non-essential pages
+  const shouldCheckPageAccess = userRole && !isSystemSuperAdmin && user && !isEssential;
+  const { hasAccess: pageAccessResult, loading: pageAccessLoading } = usePageAccess(
+    shouldCheckPageAccess ? location.pathname : ''
+  );
+  
+  // For system super admins or essential pages, always allow
+  const hasPageAccessResult = isSystemSuperAdmin || isEssential ? true : pageAccessResult;
 
   if (loading) {
     return (
@@ -79,10 +69,7 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   // Validate agency context (skip for system-level super admins - they use main database)
   // IMPORTANT: Only system-level super_admin (no agency database) should skip agency context check
   // Agency admins (role='admin' with agency database) should have agency context
-  const isSystemSuperAdmin = userRole === 'super_admin' && !localStorage.getItem('agency_database');
-  
   if (!isSystemSuperAdmin) {
-    const agencyDatabase = localStorage.getItem('agency_database');
     const isSetupPage = location.pathname === '/agency-setup' || location.pathname === '/agency-setup-progress';
     if (!agencyDatabase && !isSetupPage) {
       // If no agency database and not on setup pages, redirect to setup
@@ -114,7 +101,7 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   }
 
   // Show loading while checking page access
-  if (!pageAccessChecked) {
+  if (shouldCheckPageAccess && pageAccessLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -125,8 +112,6 @@ const ProtectedRoute = ({ children, requiredRole }: ProtectedRouteProps) => {
   // Check page access first (for non-system-super-admin)
   // Only system-level super admins (no agency database) should skip page access check
   // Essential pages should always be accessible regardless of subscription
-  // Note: isSystemSuperAdmin is already declared above at line 68
-  const isEssential = isEssentialPage(location.pathname);
   if (userRole && !isSystemSuperAdmin && !isEssential && hasPageAccessResult === false) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4 bg-muted/30">

@@ -4,6 +4,8 @@
  */
 
 import { getApiBaseUrl } from '@/config/api';
+import { getApiHeaders } from './api-helpers';
+import { getAgencyDatabase } from '@/utils/authContext';
 
 // Get API base URL as a function to ensure it's called at runtime, not module load time
 function getApiBase(): string {
@@ -55,7 +57,6 @@ export async function setupTwoFactor(): Promise<TwoFactorSetupResponse> {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
   });
 
@@ -81,7 +82,6 @@ export async function verifyAndEnableTwoFactor(token: string): Promise<{ success
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${authToken}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify({ token }),
   });
@@ -138,7 +138,6 @@ export async function disableTwoFactor(password: string): Promise<{ success: boo
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`,
-      'X-Agency-Database': localStorage.getItem('agency_database') || '',
     },
     body: JSON.stringify({ password }),
   });
@@ -160,9 +159,9 @@ export async function getTwoFactorStatus(): Promise<TwoFactorStatusResponse> {
     throw new Error('Authentication required');
   }
 
-  const agencyDatabase = localStorage.getItem('agency_database') || '';
+  const agencyDatabase = getAgencyDatabase() || '';
   if (!agencyDatabase) {
-    console.warn('[2FA] Agency database not found in localStorage');
+    console.warn('[2FA] Agency database not found');
   }
 
   try {

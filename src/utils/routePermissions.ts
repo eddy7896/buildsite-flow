@@ -13,6 +13,7 @@
 
 import { AppRole, hasRoleOrHigher } from './roleUtils';
 import { hasPageAccess } from './agencyPageAccess';
+import { isSystemSuperAdmin, getAgencyDatabase } from './authContext';
 
 /**
  * Route permission configuration
@@ -73,6 +74,12 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     requiredRoles: ['admin'], 
     allowHigherRoles: true,
     description: 'Employee management and administration'
+  },
+  '/my-team': { 
+    path: '/my-team', 
+    requiredRoles: [], // All authenticated users can access their team
+    allowHigherRoles: false,
+    description: 'View team members based on role and relationships'
   },
   '/create-employee': { 
     path: '/create-employee', 
@@ -405,7 +412,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   },
   '/system-health': { 
     path: '/system-health', 
-    requiredRoles: ['super_admin'], 
+    requiredRoles: ['super_admin', 'cto', 'admin'], 
     allowHigherRoles: false,
     description: 'System health monitoring'
   },
@@ -721,10 +728,7 @@ export async function canAccessRoute(userRole: AppRole | null, routePath: string
 
   // Only system-level super admin (no agency database) always has access to all routes
   // Agency admins (role='admin' with agency database) should go through page access check
-  const hasAgencyDatabase = typeof window !== 'undefined' && !!localStorage.getItem('agency_database');
-  const isSystemSuperAdmin = userRole === 'super_admin' && !hasAgencyDatabase;
-  
-  if (isSystemSuperAdmin) {
+  if (isSystemSuperAdmin(userRole)) {
     return true;
   }
 

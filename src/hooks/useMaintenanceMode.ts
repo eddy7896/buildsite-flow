@@ -1,9 +1,10 @@
 /**
- * Hook to check maintenance mode status
+ * Hook to check agency-specific maintenance mode status
  */
 
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
+import { getAgencyDatabase } from '@/utils/authContext';
 
 interface MaintenanceStatus {
   maintenance_mode: boolean;
@@ -23,13 +24,24 @@ export function useMaintenanceMode() {
       return;
     }
 
-    // Check maintenance mode from API
+    // Check agency-specific maintenance mode from API
     const checkMaintenanceMode = async () => {
       try {
-        const response = await fetch('/api/system/maintenance-status', {
+        const agencyDatabase = getAgencyDatabase();
+        if (!agencyDatabase) {
+          // No agency database means user is not logged into an agency
+          setMaintenanceStatus({ maintenance_mode: false, maintenance_message: null });
+          setLoading(false);
+          return;
+        }
+
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/agencies/maintenance-status', {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
+            'x-agency-database': agencyDatabase,
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
           },
         });
 
@@ -42,10 +54,14 @@ export function useMaintenanceMode() {
           });
         } else if (response.ok) {
           const data = await response.json();
-          setMaintenanceStatus({
-            maintenance_mode: data.maintenance_mode || false,
-            maintenance_message: data.maintenance_message || null,
-          });
+          if (data.success && data.data) {
+            setMaintenanceStatus({
+              maintenance_mode: data.data.maintenance_mode || false,
+              maintenance_message: data.data.maintenance_message || null,
+            });
+          } else {
+            setMaintenanceStatus({ maintenance_mode: false, maintenance_message: null });
+          }
         } else {
           // Assume no maintenance mode if check fails
           setMaintenanceStatus({ maintenance_mode: false, maintenance_message: null });
@@ -72,4 +88,3 @@ export function useMaintenanceMode() {
     loading,
   };
 }
-

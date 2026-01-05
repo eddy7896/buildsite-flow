@@ -243,28 +243,6 @@ export const AgencyHeader = () => {
 
   // Get current page title for display
   const currentPageTitle = breadcrumbs[breadcrumbs.length - 1]?.label || 'Dashboard';
-  
-  // Get page icon based on route
-  const getPageIcon = (path: string) => {
-    const iconMap: Record<string, any> = {
-      '/dashboard': Home,
-      '/employees': Users,
-      '/projects': Briefcase,
-      '/attendance': Calendar,
-      '/payroll': DollarSign,
-      '/clients': Users,
-      '/crm': Briefcase,
-      '/financial-management': DollarSign,
-      '/reports': FileText,
-      '/analytics': BarChart3,
-      '/settings': Settings,
-      '/my-profile': User,
-      '/system-dashboard': Shield,
-    };
-    return iconMap[path] || FileText;
-  };
-
-  const CurrentPageIcon = getPageIcon(location.pathname);
 
   // Theme toggle handler
   const handleThemeToggle = () => {
@@ -283,14 +261,11 @@ export const AgencyHeader = () => {
   if (isMobile) {
     return (
       <TooltipProvider>
-        <div className="flex flex-col w-full gap-2 min-w-0">
-          {/* Top Row: Page Title + User Menu */}
+        <div className="flex flex-col w-full gap-2.5 min-w-0">
+          {/* Top Row: Page Title + Avatar */}
           <div className="flex items-center justify-between gap-2 w-full min-w-0">
-            {/* Page Title Section - Prominent on Mobile */}
-            <div className="flex items-center gap-2.5 flex-1 min-w-0">
-              <div className="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-                <CurrentPageIcon className="h-4 w-4 text-primary" />
-              </div>
+            {/* Page Title Section */}
+            <div className="flex items-center gap-2 flex-1 min-w-0">
               <div className="flex flex-col min-w-0 flex-1">
                 <h1 className="text-base font-bold text-foreground truncate leading-tight">
                   {currentPageTitle}
@@ -320,8 +295,8 @@ export const AgencyHeader = () => {
             {/* User Menu - Right Side */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0 flex-shrink-0">
-                  <Avatar className="h-10 w-10">
+                <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0 flex-shrink-0">
+                  <Avatar className="h-9 w-9">
                     <AvatarImage
                       src={
                         profile?.avatar_url && 
@@ -424,23 +399,20 @@ export const AgencyHeader = () => {
             </DropdownMenu>
           </div>
 
-          {/* Bottom Row: Essential Actions Only */}
-          <div className="flex items-center justify-between gap-2 w-full">
-            {/* Search Button - Full Width on Mobile */}
+          {/* Bottom Row: Search + Actions */}
+          <div className="flex items-center gap-2 w-full">
+            {/* Search Button */}
             <Button
               variant="outline"
               size="sm"
-              className="flex-1 h-9 justify-start text-muted-foreground"
+              className="flex-1 h-9 justify-start text-muted-foreground min-w-0"
               onClick={() => setSearchOpen(true)}
             >
-              <Search className="h-4 w-4 mr-2" />
-              <span className="text-sm">Search...</span>
-              <kbd className="ml-auto pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
-                <span className="text-xs">⌘</span>K
-              </kbd>
+              <Search className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span className="text-sm truncate">Search...</span>
             </Button>
 
-            {/* Theme Toggle - Mobile */}
+            {/* Theme Toggle */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -479,11 +451,8 @@ export const AgencyHeader = () => {
       <div className="flex flex-row items-center justify-between w-full gap-3 lg:gap-4 min-w-0">
         {/* Left Section: Enhanced Breadcrumbs with Page Context */}
         <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0 overflow-hidden">
-          {/* Current Page Icon & Title */}
+          {/* Current Page Title */}
           <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-shrink-0">
-            <div className="h-8 w-8 md:h-9 md:w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-              <CurrentPageIcon className="h-3.5 w-3.5 md:h-4 md:w-4 text-primary" />
-            </div>
             <div className="flex flex-col min-w-0 flex-1">
               <h1 className="text-sm md:text-base font-bold text-foreground truncate leading-tight max-w-full">
                 {currentPageTitle}

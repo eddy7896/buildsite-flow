@@ -258,7 +258,7 @@ export const ProductShowcase = () => {
   const ActiveView = views[activeTab];
   
   return (
-    <section ref={ref} className="relative py-16 sm:py-24 lg:py-32 px-4 overflow-hidden">
+    <section id="premium-features" ref={ref} className="relative py-16 sm:py-24 lg:py-32 px-4 overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom,rgba(16,185,129,0.05),transparent_50%)]" />
       
       <div className="relative z-10 max-w-6xl mx-auto">

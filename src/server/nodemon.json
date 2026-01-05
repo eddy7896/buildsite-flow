@@ -6,6 +6,9 @@
   "env": {
     "NODE_ENV": "development"
   },
-  "delay": 500
+  "delay": 500,
+  "legacyWatch": true,
+  "polling": true,
+  "interval": 1000
 }
 

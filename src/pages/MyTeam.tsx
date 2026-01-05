@@ -6,25 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Users2, Mail, Phone, MapPin, Calendar, Crown, Star, Shield, Loader2, UserPlus, Edit, Eye } from 'lucide-react';
 import { getRoleDisplayName, ROLE_CATEGORIES } from '@/utils/roleUtils';
 import { useEffect, useState } from 'react';
-import { db } from '@/lib/database';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useNavigate } from 'react-router-dom';
+import { getTeamMembers, TeamMember } from '@/services/api/team-service';
+import { selectRecords } from '@/services/api/postgresql-service';
 
-interface TeamMember {
-  id: string;
-  user_id: string;
-  full_name: string;
-  email: string;
-  phone: string | null;
-  department: string | null;
-  position: string | null;
-  hire_date: string | null;
-  avatar_url: string | null;
-  is_active: boolean;
-  role: string;
-  location?: string;
-}
+// TeamMember interface is now imported from team-service
 
 const getRoleIcon = (role: string) => {
   if (ROLE_CATEGORIES.executive.includes(role as any)) return Crown;
@@ -46,87 +34,89 @@ export default function MyTeam() {
   const [loading, setLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<TeamMember | null>(null);
   const [showMemberDialog, setShowMemberDialog] = useState(false);
+  const [userDepartmentId, setUserDepartmentId] = useState<string | null>(null);
   
   useEffect(() => {
-    fetchTeamMembers();
-  }, [userRole, profile]);
+    if (user?.id) {
+      fetchUserDepartment();
+    }
+  }, [user?.id, profile?.agency_id]);
+
+  useEffect(() => {
+    if (user && userRole && profile) {
+      // Add a small delay to ensure department is fetched first
+      const timer = setTimeout(() => {
+        fetchTeamMembers();
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      // If user/profile not ready, stop loading
+      setLoading(false);
+    }
+  }, [user?.id, userRole, profile?.agency_id, userDepartmentId]);
+
+  // Fetch user's department ID from team_assignments
+  const fetchUserDepartment = async () => {
+    if (!user?.id) {
+      setUserDepartmentId(null);
+      return;
+    }
+
+    try {
+      const teamAssignments = await selectRecords('team_assignments', {
+        filters: [
+          { column: 'user_id', operator: 'eq', value: user.id },
+          { column: 'is_active', operator: 'eq', value: true }
+        ],
+        limit: 1
+      });
+
+      if (teamAssignments.length > 0 && teamAssignments[0].department_id) {
+        setUserDepartmentId(teamAssignments[0].department_id);
+      } else {
+        setUserDepartmentId(null);
+      }
+    } catch (error) {
+      console.error('Error fetching user department:', error);
+      setUserDepartmentId(null);
+    }
+  };
 
   const fetchTeamMembers = async () => {
+    if (!user?.id || !userRole) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       
-      // Fetch profiles
-      const { data: profilesData, error: profilesError } = await db
-        .from('profiles')
-        .select('*')
-        .eq('is_active', true)
-        .order('full_name');
-
-      if (profilesError) throw profilesError;
-
-      // Fetch user roles
-      const { data: rolesData, error: rolesError } = await db
-        .from('user_roles')
-        .select('user_id, role');
-
-      if (rolesError) throw rolesError;
-
-      // Create role map
-      const roleMap = new Map<string, string>();
-      rolesData?.forEach((r: any) => {
-        roleMap.set(r.user_id, r.role);
+      console.log('Fetching team members for:', {
+        userId: user.id,
+        userRole,
+        userDepartmentId,
+        userDepartmentName: profile?.department,
+        agencyId: profile?.agency_id,
+      });
+      
+      const members = await getTeamMembers({
+        userId: user.id,
+        userRole: userRole as any,
+        userDepartmentId: userDepartmentId || null,
+        userDepartmentName: profile?.department || null,
+        agencyId: profile?.agency_id || null,
       });
 
-      // Fetch employee details for location info
-      const { data: employeeData } = await db
-        .from('employee_details')
-        .select('user_id, work_location');
-
-      const locationMap = new Map<string, string>();
-      employeeData?.forEach((e: any) => {
-        if (e.work_location) {
-          locationMap.set(e.user_id, e.work_location);
-        }
-      });
-
-      // Transform profiles to team members
-      let members: TeamMember[] = (profilesData || []).map((p: any) => ({
-        id: p.id,
-        user_id: p.user_id,
-        full_name: p.full_name || 'Unknown User',
-        email: `${(p.full_name || 'user').toLowerCase().replace(/\s+/g, '.')}@company.com`,
-        phone: p.phone,
-        department: p.department,
-        position: p.position,
-        hire_date: p.hire_date,
-        avatar_url: p.avatar_url,
-        is_active: p.is_active,
-        role: roleMap.get(p.user_id) || 'employee',
-        location: locationMap.get(p.user_id) || null,
-      }));
-
-      // Filter based on user role hierarchy
-      if (userRole && !ROLE_CATEGORIES.executive.includes(userRole as any) && 
-          !ROLE_CATEGORIES.management.includes(userRole as any)) {
-        // Regular employees only see their department
-        if (profile?.department) {
-          members = members.filter(m => 
-            m.department === profile.department || m.user_id === user?.id
-          );
-        } else {
-          // If no department, show limited team
-          members = members.slice(0, 5);
-        }
-      }
-
+      console.log('Team members fetched:', members.length);
       setTeamMembers(members);
     } catch (error) {
       console.error('Error fetching team:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load team members',
+        description: 'Failed to load team members. Please try again.',
         variant: 'destructive',
       });
+      setTeamMembers([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -138,9 +128,15 @@ export default function MyTeam() {
 
   const getScopeDescription = (role: string) => {
     if (ROLE_CATEGORIES.executive.includes(role as any)) {
-      return 'Organization-wide team overview';
+      return 'All employees in your organization';
     } else if (ROLE_CATEGORIES.management.includes(role as any)) {
       return 'Your direct reports and managed teams';
+    } else if (role === 'department_head') {
+      return 'All members of your department';
+    } else if (role === 'team_lead') {
+      return 'Your direct reports and team members';
+    } else if (role === 'project_manager') {
+      return 'Your project team members';
     } else {
       return 'Your project collaborators and teammates';
     }

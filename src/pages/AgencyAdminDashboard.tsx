@@ -288,7 +288,7 @@ const AgencyAdminDashboard = () => {
   ];
 
   return (
-    <div className="relative w-full min-h-full bg-background antialiased overflow-hidden">
+    <div className="relative w-full min-h-full bg-background antialiased">
       {/* Background Effects - Subtle for dashboard - Contained within content */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none -z-10">
         <div className="relative w-full h-full">
@@ -299,17 +299,17 @@ const AgencyAdminDashboard = () => {
         </div>
       </div>
       
-      <div className="relative z-10 w-full space-y-6">
+      <div className="relative z-10 w-full space-y-8">
         {/* Header Section */}
         <section className="relative w-full">
           <div className="w-full">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-              <div>
+              <div className="min-w-0 flex-1">
                 <motion.h1
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6 }}
-                  className="text-2xl sm:text-3xl md:text-4xl font-display font-semibold text-foreground leading-[1.1] tracking-[-0.02em]"
+                  className="text-2xl sm:text-3xl md:text-4xl font-display font-semibold text-foreground leading-[1.1] tracking-[-0.02em] break-words"
                 >
                   Welcome back, {profile?.first_name || user?.email?.split('@')[0] || 'Admin'}
                 </motion.h1>
@@ -317,13 +317,13 @@ const AgencyAdminDashboard = () => {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.6, delay: 0.1 }}
-                  className="mt-2 text-sm sm:text-base text-muted-foreground"
+                  className="mt-2 text-sm sm:text-base text-muted-foreground break-words"
                 >
                   Here's what's happening with your agency today
                 </motion.p>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="text-xs text-muted-foreground hidden sm:block">
+              <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                <div className="text-xs text-muted-foreground hidden sm:block whitespace-nowrap">
                   Last updated: {lastRefresh.toLocaleTimeString()}
                 </div>
                 <Button
@@ -331,6 +331,7 @@ const AgencyAdminDashboard = () => {
                   variant="outline"
                   size="sm"
                   disabled={loading}
+                  className="whitespace-nowrap"
                 >
                   <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                   Refresh

@@ -30,14 +30,16 @@ export interface SystemMetrics {
 export interface AgencySummary {
   id: string;
   name: string;
-  domain: string;
-  subscription_plan: string;
-  max_users: number;
+  domain: string | null;
+  subscription_plan: string | null;
+  max_users: number | null;
   is_active: boolean;
   created_at: string;
-  user_count: number;
-  project_count: number;
-  invoice_count: number;
+  user_count?: number;
+  project_count?: number;
+  invoice_count?: number;
+  maintenance_mode?: boolean;
+  maintenance_message?: string | null;
 }
 
 export interface SystemMetricsResponse {
@@ -76,14 +78,16 @@ export const SystemMetricsSchema = z.object({
 export const AgencySummarySchema = z.object({
   id: z.string(),
   name: z.string(),
-  domain: z.string(),
-  subscription_plan: z.string(),
-  max_users: z.number(),
+  domain: z.union([z.string(), z.null()]),
+  subscription_plan: z.union([z.string(), z.null()]),
+  max_users: z.union([z.number(), z.null()]),
   is_active: z.boolean(),
   created_at: z.string(),
-  user_count: z.number(),
-  project_count: z.number(),
-  invoice_count: z.number(),
+  user_count: z.number().optional().default(0),
+  project_count: z.number().optional().default(0),
+  invoice_count: z.number().optional().default(0),
+  maintenance_mode: z.boolean().optional(),
+  maintenance_message: z.union([z.string(), z.null()]).optional(),
 });
 
 export const SystemMetricsResponseSchema = z.object({

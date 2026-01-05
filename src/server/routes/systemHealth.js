@@ -39,7 +39,7 @@ router.options('/', (req, res) => {
  * Get comprehensive system health metrics with high performance
  * Requires admin role
  */
-router.get('/', authenticate, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+router.get('/', authenticate, requireRole(['admin', 'cto', 'super_admin']), asyncHandler(async (req, res) => {
   try {
     // Set CORS headers explicitly
     const origin = req.headers.origin;
@@ -719,7 +719,7 @@ function parseRedisClients(clientsInfo) {
  * GET /api/system-health/cache-stats
  * Get detailed cache statistics
  */
-router.get('/cache-stats', authenticate, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+router.get('/cache-stats', authenticate, requireRole(['admin', 'cto', 'super_admin']), asyncHandler(async (req, res) => {
   try {
     const stats = await getStats();
     res.json({
@@ -738,7 +738,7 @@ router.get('/cache-stats', authenticate, requireRole(['admin', 'super_admin']), 
  * GET /api/system-health/trends
  * Get health trends over time
  */
-router.get('/trends', authenticate, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+router.get('/trends', authenticate, requireRole(['admin', 'cto', 'super_admin']), asyncHandler(async (req, res) => {
   try {
     const hours = parseInt(req.query.hours) || 24;
     const trends = await pool.query(`
@@ -763,7 +763,7 @@ router.get('/trends', authenticate, requireRole(['admin', 'super_admin']), async
  * GET /api/system-health/database/tables
  * Get detailed table statistics
  */
-router.get('/database/tables', authenticate, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+router.get('/database/tables', authenticate, requireRole(['admin', 'cto', 'super_admin']), asyncHandler(async (req, res) => {
   try {
     const tables = await pool.query(`
       SELECT 
@@ -800,7 +800,7 @@ router.get('/database/tables', authenticate, requireRole(['admin', 'super_admin'
  * GET /api/system-health/database/queries
  * Get slow queries and active queries
  */
-router.get('/database/queries', authenticate, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+router.get('/database/queries', authenticate, requireRole(['admin', 'cto', 'super_admin']), asyncHandler(async (req, res) => {
   try {
     const queries = await pool.query(`
       SELECT 
@@ -839,7 +839,7 @@ router.get('/database/queries', authenticate, requireRole(['admin', 'super_admin
  * GET /api/system-health/database/indexes
  * Get index usage statistics
  */
-router.get('/database/indexes', authenticate, requireRole(['admin', 'super_admin']), asyncHandler(async (req, res) => {
+router.get('/database/indexes', authenticate, requireRole(['admin', 'cto', 'super_admin']), asyncHandler(async (req, res) => {
   try {
     const indexes = await pool.query(`
       SELECT 

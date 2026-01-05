@@ -26,7 +26,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // CEO - Strategic oversight
   ceo: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/reports', title: 'Strategic Reports', icon: 'ChartLine', exists: true, category: 'reports' },
     { path: '/analytics', title: 'Analytics', icon: 'BarChart3', exists: true, category: 'reports' },
@@ -42,11 +42,21 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // CTO - Technology focus
   cto: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
-    { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/employee-performance', title: 'Team Performance', icon: 'TrendingUp', exists: true, category: 'hr' },
+    { path: '/projects', title: 'Technical Projects', icon: 'Building', exists: true, category: 'projects' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
-    { path: '/reports', title: 'Reports', icon: 'ChartLine', exists: true, category: 'reports' },
+    { path: '/system-health', title: 'System Health', icon: 'Activity', exists: true, category: 'system' },
+    { path: '/integrations', title: 'Integrations', icon: 'Plug', exists: true, category: 'automation' },
+    { path: '/integrations/settings', title: 'Integration Settings', icon: 'Cog', exists: true, category: 'settings' },
+    { path: '/workflows', title: 'Workflows', icon: 'Workflow', exists: true, category: 'workflows' },
+    { path: '/workflows/builder', title: 'Workflow Builder', icon: 'GitBranch', exists: true, category: 'workflows' },
+    { path: '/workflows/instances', title: 'Workflow Instances', icon: 'Activity', exists: true, category: 'workflows' },
+    { path: '/workflows/automation', title: 'Workflow Automation', icon: 'Zap', exists: true, category: 'automation' },
+    { path: '/workflows/settings', title: 'Workflow Settings', icon: 'Cog', exists: true, category: 'settings' },
+    { path: '/reports', title: 'Technical Reports', icon: 'ChartLine', exists: true, category: 'reports' },
     { path: '/analytics', title: 'Analytics', icon: 'BarChart3', exists: true, category: 'reports' },
+    { path: '/centralized-reports', title: 'Centralized Reports', icon: 'FileBarChart', exists: true, category: 'reports' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },
     { path: '/settings', title: 'Settings', icon: 'Settings', exists: true, category: 'settings' },
     { path: '/page-requests', title: 'Page Requests', icon: 'FileText', exists: true, category: 'settings' },
@@ -55,7 +65,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // CFO - Financial oversight
   cfo: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/financial-management', title: 'Financial Management', icon: 'Calculator', exists: true, category: 'finance' },
     { path: '/payroll', title: 'Payroll', icon: 'Calculator', exists: true, category: 'finance' },
@@ -75,7 +85,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // COO - Operations oversight
   coo: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/attendance', title: 'Attendance', icon: 'Clock', exists: true, category: 'hr' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
@@ -166,7 +176,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Operations Manager
   operations_manager: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
@@ -182,7 +192,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Department Head
   department_head: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
@@ -199,7 +209,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Team Lead
   team_lead: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
@@ -213,7 +223,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Project Manager
   project_manager: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Team Members', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/employee-performance', title: 'Employee Performance', icon: 'BarChart3', exists: true, category: 'hr' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
@@ -252,7 +262,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Finance Manager
   finance_manager: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/clients', title: 'Clients', icon: 'Building2', exists: true, category: 'management' },
     { path: '/payroll', title: 'Payroll', icon: 'Calculator', exists: true, category: 'finance' },
     { path: '/invoices', title: 'Invoices', icon: 'FileText', exists: true, category: 'finance' },
@@ -274,7 +284,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Sales Manager
   sales_manager: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/crm', title: 'CRM', icon: 'Users2', exists: true, category: 'management' },
     { path: '/clients', title: 'Clients', icon: 'Building2', exists: true, category: 'management' },
@@ -290,7 +300,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Marketing Manager
   marketing_manager: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/project-management', title: 'Project Management', icon: 'FolderKanban', exists: true, category: 'projects' },
     { path: '/crm', title: 'CRM', icon: 'Users2', exists: true, category: 'management' },
     { path: '/clients', title: 'Clients', icon: 'Building2', exists: true, category: 'management' },
@@ -306,7 +316,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Quality Assurance
   quality_assurance: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
     { path: '/reports', title: 'QA Reports', icon: 'ChartLine', exists: true, category: 'reports' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },
@@ -319,7 +329,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // IT Support
   it_support: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/reports', title: 'IT Reports', icon: 'ChartLine', exists: true, category: 'reports' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },
     { path: '/my-attendance', title: 'My Attendance', icon: 'Clock', exists: true, category: 'personal' },
@@ -331,7 +341,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Legal Counsel
   legal_counsel: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/clients', title: 'Clients', icon: 'Building2', exists: true, category: 'management' },
     { path: '/reports', title: 'Legal Reports', icon: 'ChartLine', exists: true, category: 'reports' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },
@@ -344,7 +354,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Business Analyst
   business_analyst: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
     { path: '/reports', title: 'Analytics Reports', icon: 'ChartLine', exists: true, category: 'reports' },
     { path: '/analytics', title: 'Analytics', icon: 'BarChart3', exists: true, category: 'reports' },
@@ -358,7 +368,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Customer Success
   customer_success: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'Employee Management', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/clients', title: 'Clients', icon: 'Building2', exists: true, category: 'management' },
     { path: '/projects', title: 'Projects', icon: 'Building', exists: true, category: 'projects' },
     { path: '/crm', title: 'CRM', icon: 'Users2', exists: true, category: 'management' },
@@ -373,7 +383,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Employee - General staff
   employee: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/employee-performance', title: 'My Performance', icon: 'BarChart3', exists: true, category: 'personal' },
     { path: '/my-projects', title: 'My Projects', icon: 'Briefcase', exists: true, category: 'projects' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },
@@ -387,7 +397,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Contractor
   contractor: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/employee-performance', title: 'My Performance', icon: 'BarChart3', exists: true, category: 'personal' },
     { path: '/my-projects', title: 'My Projects', icon: 'Briefcase', exists: true, category: 'projects' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },
@@ -399,7 +409,7 @@ export const ROLE_PAGES: Record<AppRole, PageConfig[]> = {
   // Intern
   intern: [
     { path: '/dashboard', title: 'Dashboard', icon: 'BarChart3', exists: true, category: 'dashboard' },
-    { path: '/employee-management', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
+    { path: '/my-team', title: 'My Team', icon: 'Users2', exists: true, category: 'management' },
     { path: '/employee-performance', title: 'My Performance', icon: 'BarChart3', exists: true, category: 'personal' },
     { path: '/my-projects', title: 'My Projects', icon: 'Briefcase', exists: true, category: 'projects' },
     { path: '/my-profile', title: 'My Profile', icon: 'User', exists: true, category: 'personal' },

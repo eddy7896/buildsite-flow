@@ -192,15 +192,15 @@ export function HolidayManagement() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 w-full max-w-full">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Holiday Management</h2>
-          <p className="text-muted-foreground">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-2xl font-bold tracking-tight break-words">Holiday Management</h2>
+          <p className="text-muted-foreground break-words">
             Manage company holidays and observances
           </p>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)}>
+        <Button onClick={() => setShowCreateDialog(true)} className="flex-shrink-0 whitespace-nowrap">
           <Plus className="mr-2 h-4 w-4" />
           Add Holiday
         </Button>

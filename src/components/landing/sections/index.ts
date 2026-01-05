@@ -1,5 +1,6 @@
 export { default as Navigation } from './Navigation';
 export { Hero } from './Hero';
+export { StickyNav } from './StickyNav';
 export { default as LogoCloud } from './LogoCloud';
 export { BentoFeatures } from './BentoFeatures';
 export { ProductShowcase } from './ProductShowcase';
