@@ -246,6 +246,7 @@ const CreateEmployee = () => {
           throw new Error(`A user with email "${companyEmail}" already exists. This email is already in use.`);
         }
       }
+      }
 
       // Generate unique employee ID automatically
       let employeeId = values.employeeId?.trim() || '';
