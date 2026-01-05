@@ -99,7 +99,7 @@ export const AgencyHeader = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { theme, resolvedTheme, setTheme } = useThemeSync();
+  const { theme, resolvedTheme, toggleTheme, mounted: themeMounted } = useThemeSync();
 
   // Debug: Log image URLs when they change (only in development)
   useEffect(() => {
@@ -244,18 +244,11 @@ export const AgencyHeader = () => {
   // Get current page title for display
   const currentPageTitle = breadcrumbs[breadcrumbs.length - 1]?.label || 'Dashboard';
 
-  // Theme toggle handler
-  const handleThemeToggle = () => {
-    const currentResolved = resolvedTheme || theme;
-    if (currentResolved === 'dark') {
-      setTheme('light');
-    } else {
-      setTheme('dark');
-    }
-  };
-
   // Determine if dark mode is active
-  const isDark = resolvedTheme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const isDark = themeMounted && (
+    resolvedTheme === 'dark' || 
+    (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  );
 
   // Mobile Layout: Clean, app-like header with clear hierarchy
   if (isMobile) {
@@ -419,8 +412,9 @@ export const AgencyHeader = () => {
                   variant="outline"
                   size="sm"
                   className="h-9 w-9 p-0 flex-shrink-0"
-                  onClick={handleThemeToggle}
+                  onClick={toggleTheme}
                   aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                  disabled={!themeMounted}
                 >
                   {isDark ? (
                     <Sun className="h-4 w-4" />
@@ -538,8 +532,9 @@ export const AgencyHeader = () => {
                 variant="ghost"
                 size="sm"
                 className="h-9 w-9 p-0 flex-shrink-0"
-                onClick={handleThemeToggle}
+                onClick={toggleTheme}
                 aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                disabled={!themeMounted}
               >
                 {isDark ? (
                   <Sun className="h-4 w-4" />

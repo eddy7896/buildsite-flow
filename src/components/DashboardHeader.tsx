@@ -109,7 +109,7 @@ export const DashboardHeader = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { theme, resolvedTheme, setTheme } = useThemeSync();
+  const { theme, resolvedTheme, toggleTheme, mounted: themeMounted } = useThemeSync();
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -224,17 +224,11 @@ export const DashboardHeader = () => {
       .join(' ');
   };
 
-  // Theme toggle handler
-  const handleThemeToggle = () => {
-    const currentResolved = resolvedTheme || theme;
-    if (currentResolved === 'dark') {
-      setTheme('light');
-    } else {
-      setTheme('dark');
-    }
-  };
-
-  const isDark = resolvedTheme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  // Determine if dark mode is active
+  const isDark = themeMounted && (
+    resolvedTheme === 'dark' || 
+    (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  );
 
   // Format time
   const formatTime = (date: Date) => {
@@ -465,8 +459,9 @@ export const DashboardHeader = () => {
                 variant="ghost"
                 size="icon"
                 className="h-9 w-9"
-                onClick={handleThemeToggle}
+                onClick={toggleTheme}
                 aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                disabled={!themeMounted}
               >
                 {isDark ? (
                   <Sun className="h-4 w-4" />

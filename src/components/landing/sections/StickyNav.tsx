@@ -98,15 +98,16 @@ export const StickyNav = () => {
         visibility: 'visible',
         opacity: 1,
         width: '100%',
-        paddingTop: '12px',
-        paddingBottom: '12px',
+        minHeight: '80px',
+        paddingTop: '48px',
+        paddingBottom: '0px',
         margin: 0,
         boxSizing: 'border-box',
         justifyContent: 'center',
         alignItems: 'center'
       }}
     >
-      <div className="flex items-center gap-1 sm:gap-2 bg-white/[0.05] backdrop-blur-md border border-white/[0.12] rounded-full p-1.5 sm:p-2 shadow-xl overflow-x-auto scrollbar-hide">
+      <div className="flex items-center justify-center gap-1 sm:gap-2 bg-white/[0.05] backdrop-blur-md border border-white/[0.12] rounded-full p-1.5 sm:p-2 shadow-xl overflow-x-auto scrollbar-hide">
             {navItems.map((item) => {
               const isActive = activeSection === item.href;
               return (

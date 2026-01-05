@@ -17,7 +17,7 @@ export default function Navigation() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const { scrollTo } = useSmoothScroll();
-  const { theme, resolvedTheme, setTheme } = useThemeSync();
+  const { theme, resolvedTheme, toggleTheme, mounted: themeMounted } = useThemeSync();
   
   // Wait for component to mount before checking theme
   useEffect(() => {
@@ -25,26 +25,10 @@ export default function Navigation() {
   }, []);
   
   // Determine if dark mode is active
-  const isDark = mounted && (
+  const isDark = mounted && themeMounted && (
     resolvedTheme === 'dark' || 
-    (resolvedTheme === undefined && theme === 'dark') ||
     (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   );
-  
-  // Theme toggle handler
-  const handleThemeToggle = () => {
-    if (!mounted) return;
-    
-    // Get current theme state
-    const currentTheme = resolvedTheme || theme || 'system';
-    
-    // Toggle between light and dark
-    if (currentTheme === 'dark' || (currentTheme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setTheme('light');
-    } else {
-      setTheme('dark');
-    }
-  };
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -94,10 +78,11 @@ export default function Navigation() {
           {/* Theme Toggle */}
           {mounted && (
             <button
-              onClick={handleThemeToggle}
+              onClick={toggleTheme}
               className="p-2 text-white/80 hover:text-white hover:bg-white/10 transition-colors duration-200 rounded-lg"
               aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
               type="button"
+              disabled={!themeMounted}
             >
               {isDark ? (
                 <Sun className="w-5 h-5" />
@@ -156,10 +141,11 @@ export default function Navigation() {
             {/* Theme Toggle - Mobile */}
             {mounted && (
               <button
-                onClick={handleThemeToggle}
+                onClick={toggleTheme}
                 className="flex items-center gap-2 w-full text-left py-3 text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300 rounded-lg px-2"
                 aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
                 type="button"
+                disabled={!themeMounted}
               >
                 {isDark ? (
                   <Sun className="w-5 h-5" />

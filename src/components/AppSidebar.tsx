@@ -187,20 +187,13 @@ export function AppSidebar() {
   const currentPath = location.pathname;
   const isMobile = useIsMobile();
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
-  const { theme, resolvedTheme, setTheme } = useThemeSync();
+  const { theme, resolvedTheme, toggleTheme, mounted: themeMounted } = useThemeSync();
   
   // Determine if dark mode is active
-  const isDark = resolvedTheme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  
-  // Theme toggle handler
-  const handleThemeToggle = () => {
-    const currentResolved = resolvedTheme || theme;
-    if (currentResolved === 'dark') {
-      setTheme('light');
-    } else {
-      setTheme('dark');
-    }
-  };
+  const isDark = themeMounted && (
+    resolvedTheme === 'dark' || 
+    (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+  );
   
   // Get accessible pages for agency (for non-super-admin users)
   // MUST be declared before any early returns to follow Rules of Hooks

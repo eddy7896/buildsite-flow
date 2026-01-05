@@ -374,7 +374,7 @@ export const BentoFeatures = () => {
   const ref = useRef(null);
   
   return (
-    <section id="features" ref={ref} className="relative py-24 lg:py-32 px-4 overflow-hidden">
+    <section id="features" ref={ref} className="relative pt-12 pb-24 lg:pt-12 lg:pb-32 px-4 overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.05),transparent_50%)]" />
       
       <div className="relative z-10 max-w-6xl mx-auto">

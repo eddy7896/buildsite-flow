@@ -20,7 +20,7 @@ export default function LogoCloud() {
   }, []);
 
   return (
-    <section className="py-16 border-y border-white/[0.06] overflow-hidden">
+    <section className="pt-16 pb-12 border-y border-white/[0.06] overflow-hidden">
       <Container>
         <FadeIn isVisible={mounted} delay={100}>
           <p className="text-center text-[13px] text-[#666] mb-8 tracking-[0.02em] uppercase">

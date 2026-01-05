@@ -63,6 +63,7 @@ const App = () => (
       defaultTheme="system" 
       enableSystem
       disableTransitionOnChange={false}
+      storageKey="theme-preference"
       // enableSystem allows the theme to respect user's OS preference
       // If OS is light mode -> website shows light mode
       // If OS is dark mode -> website shows dark mode
